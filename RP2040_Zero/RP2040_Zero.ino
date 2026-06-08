@@ -40,6 +40,8 @@ const uint8_t PREAMBLE_1  = 0x55;
 const uint8_t PREAMBLE_2  = 0xAA;
 const uint8_t PAYLOAD_LEN = 0x08;
 
+// ── Global display state (last valid mux pass per COM row) ──────────────────────────────────────
+uint16_t display_matrix[4] = {0, 0, 0, 0};
 bool buzzer_active = false;
 
 Adafruit_NeoPixel rgb_led(1, 16, NEO_GRB + NEO_KHZ800);
@@ -48,7 +50,6 @@ Adafruit_NeoPixel rgb_led(1, 16, NEO_GRB + NEO_KHZ800);
 uint8_t sequence_number = 0;
 int     heartbeat_count = 0;
 bool    led_active      = true;
-int     loopCounter = 0;
 
 // CRC-8 (Dallas/Maxim: X^8 + X^5 + X^4 + 1)
 uint8_t calculate_crc8(uint8_t *data, uint8_t len) {
@@ -78,47 +79,40 @@ void setup() {
 }
 
 void loop() {
-  // Use a static variable to keep track of the last time a packet was sent
   static unsigned long lastTxTime = 0;
   unsigned long currentTime = millis();
 
-  // 1. LCD CAPTURING (Runs continuously every loop iteration)
-  // Your 32ms protocol decoding logic sits here or right before transmission.
-  // Because the loop is non-blocking, it can process the LCD signals smoothly.
-  
-  // 2. TIMING CHECK: Only execute packet compilation and TX every 333ms
-  if (currentTime - lastTxTime >= 333) {
-    lastTxTime = currentTime; // Reset the interval anchor
+  // ── 1. Sample: overwrite per-COM row when that COM is active ──────
+  for (int c = 0; c < 4; c++) {
+    if (digitalRead(COM_PINS[c]) == HIGH) {
+      delayMicroseconds(1000);                  // settle to bit centre
 
-    uint16_t display_matrix[4] = {0, 0, 0, 0};
-
-    // ── ALL BITS ON / OFF TOGGLE ──
-    static bool all_bits_on = false;
-    
-    if (all_bits_on) {
-      display_matrix[0] = 0x7FFF; 
-      display_matrix[1] = 0x7FFF;
-      display_matrix[2] = 0x7FFF;
-      display_matrix[3] = 0x7FFF;
-      buzzer_active = !buzzer_active;
-    } else {
-      display_matrix[0] = 0x0000;
-      display_matrix[1] = 0x0000;
-      display_matrix[2] = 0x0000;
-      display_matrix[3] = 0x0000;
-      buzzer_active = false;
+      if (digitalRead(COM_PINS[c]) == HIGH) {   // still valid
+        uint16_t row_bits = 0;
+        for (int s = 0; s < 15; s++) {
+          if (digitalRead(SEG_PINS[s]) == HIGH)
+            row_bits |= (1 << s);
+        }
+        display_matrix[c] = row_bits;           // OVERWRITE, not OR
+      }
     }
+  }
 
-    // Toggle state logic (Locks perfectly to your 333ms intervals now)
-    if (loopCounter < 10 && all_bits_on)  loopCounter++;
-    if (loopCounter >= 10 && all_bits_on) { all_bits_on = !all_bits_on; loopCounter = 0; }
-    if (loopCounter < 3 && !all_bits_on)   loopCounter++;
-    if (loopCounter >= 3 && !all_bits_on)  { all_bits_on = !all_bits_on; loopCounter = 0; }
-    
-    // Pack buzzer state into bit 15 of COM0's high byte
-    if (buzzer_active) display_matrix[0] |= (1 << 15);
+  // Buzzer: last-seen wins
+  buzzer_active = digitalRead(BUZZER_PIN);
 
-    // Heartbeat LED On
+  // ── 2. TX every 333ms — no clear needed, next mux pass overwrites ─
+  if (currentTime - lastTxTime >= 333) {
+    lastTxTime = currentTime;
+
+    // Snapshot the matrix so buzzer bit doesn't pollute the live buffer
+    uint16_t tx_matrix[4];
+    memcpy(tx_matrix, display_matrix, sizeof(display_matrix));
+
+    // Pack buzzer into bit 15 of tx_matrix[0] only
+    if (buzzer_active) tx_matrix[0] |= (1 << 15);
+
+    // Heartbeat LED
     if (led_active) {
       rgb_led.setPixelColor(0, rgb_led.Color(0, 255, 0));
       rgb_led.show();
@@ -127,29 +121,27 @@ void loop() {
 
     // Build 13-byte robust packet
     uint8_t tx_packet[13];
+
     tx_packet[0] = PREAMBLE_1;
     tx_packet[1] = PREAMBLE_2;
     tx_packet[2] = PAYLOAD_LEN;
     tx_packet[3] = sequence_number++;
 
-    // Payload: unpack each COM row into 2 bytes (high byte first)
-    tx_packet[4]  = (display_matrix[0] >> 8) & 0xFF;
-    tx_packet[5]  =  display_matrix[0]       & 0xFF;
-    tx_packet[6]  = (display_matrix[1] >> 8) & 0xFF;
-    tx_packet[7]  =  display_matrix[1]       & 0xFF;
-    tx_packet[8]  = (display_matrix[2] >> 8) & 0xFF;
-    tx_packet[9]  =  display_matrix[2]       & 0xFF;
-    tx_packet[10] = (display_matrix[3] >> 8) & 0xFF;
-    tx_packet[11] =  display_matrix[3]       & 0xFF;
+    // Payload: use tx_matrix (has buzzer bit), NOT display_matrix
+    tx_packet[4]  = (tx_matrix[0] >> 8) & 0xFF; // COM0 high (+ buzzer in bit15)
+    tx_packet[5]  =  tx_matrix[0]       & 0xFF; // COM0 low
+    tx_packet[6]  = (tx_matrix[1] >> 8) & 0xFF; // COM1 high
+    tx_packet[7]  =  tx_matrix[1]       & 0xFF; // COM1 low
+    tx_packet[8]  = (tx_matrix[2] >> 8) & 0xFF; // COM2 high
+    tx_packet[9]  =  tx_matrix[2]       & 0xFF; // COM2 low
+    tx_packet[10] = (tx_matrix[3] >> 8) & 0xFF; // COM3 high
+    tx_packet[11] =  tx_matrix[3]       & 0xFF; // COM3 low
 
-    // CRC-8 over 10 bytes
+    // CRC-8 over 10 bytes (LEN + SEQ + 8 payload)
     tx_packet[12] = calculate_crc8(&tx_packet[2], 10);
 
-    // Blast instantly to HC-12 at 9600 baud (Takes ~13.5ms to push down the wire)
+    // Send data
     Serial1.write(tx_packet, 13);
-    Serial1.flush();
-
-    Serial.println("[SYSTEM] Sent Bits...");
 
     // Heartbeat LED off
     if (led_active) {
