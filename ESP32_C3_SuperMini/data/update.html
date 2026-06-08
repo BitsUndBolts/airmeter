@@ -1,0 +1,992 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OTA Update</title>
+  <style>
+    /*
+     * FLUID SCALING SYSTEM
+     * --------------------
+     * html font-size is set to ~1.8vw via JS on load & resize.
+     * Every size below uses em/rem so the whole UI scales
+     * proportionally with viewport width. No media queries needed.
+     */
+
+    :root {
+      --bg: #0a0c0e;
+      --panel: #111416;
+      --panel-2: #181c1f;
+      --border: #252a2e;
+      --border-bright: #2e3538;
+      --accent: #f5a623;
+      --accent-dim: rgba(245, 166, 35, 0.10);
+      --accent-glow: rgba(245, 166, 35, 0.22);
+      --green: #3ddc84;
+      --green-dim: rgba(61, 220, 132, 0.10);
+      --yellow: #f1c40f;
+      --red: #ff5555;
+      --red-dim: rgba(255, 85, 85, 0.10);
+      --blue: #4d9fff;
+      --blue-dim: rgba(77, 159, 255, 0.10);
+      --text: #e8ecef;
+      --text-2: #8a9199;
+      --text-3: #4a5158;
+      --mono: ui-monospace, SFMono-Regular, 'SF Pro Mono', Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+      --sans: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html { font-size: 10px; }
+
+    body {
+      font-family: var(--sans);
+      background: var(--bg);
+      color: var(--text);
+      margin: 0;
+      padding: 0;
+      min-height: 100dvh;
+      background-image:
+        linear-gradient(rgba(245, 166, 35, 0.02) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(245, 166, 35, 0.02) 1px, transparent 1px);
+      background-size: 3.2em 3.2em;
+    }
+
+    /* ── CARD ── */
+    .card {
+      width: 100%;
+      background: var(--panel);
+      border: 1px solid var(--border-bright);
+      border-radius: 0.4em;
+      overflow: hidden;
+    }
+
+    /* ── HEADER ── */
+    .card-header {
+      background: var(--panel-2);
+      border-bottom: 1px solid var(--border-bright);
+      padding: 1.4em 2em;
+      display: flex;
+      align-items: center;
+      gap: 1em;
+    }
+
+    .header-icon {
+      width: 2.8em;
+      height: 2.8em;
+      border-radius: 0.3em;
+      background: var(--accent-dim);
+      border: 1px solid var(--accent-glow);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      color: var(--accent);
+    }
+
+    .header-icon svg { width: 1.4em; height: 1.4em; }
+
+    .header-title {
+      font-family: var(--mono);
+      font-size: 1.2em;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-2);
+    }
+
+    /* Home button — pushed to the right */
+    .home-btn {
+      margin-left: auto;
+      width: 2.8em;
+      height: 2.8em;
+      border-radius: 0.3em;
+      background: none;
+      border: 1px solid var(--border-bright);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      color: var(--text-3);
+      text-decoration: none;
+      transition: color 0.15s, border-color 0.15s, background 0.15s;
+      flex-shrink: 0;
+    }
+
+    .home-btn:hover {
+      color: var(--text);
+      border-color: var(--text-2);
+      background: var(--panel);
+    }
+
+    .home-btn svg { width: 1.4em; height: 1.4em; }
+
+    /* ── SECTION LABEL ── */
+    .section-label {
+      font-family: var(--mono);
+      font-size: 0.9em;
+      font-weight: 600;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--text-3);
+      padding: 1.6em 2em 0.8em;
+    }
+
+    /* ── UPLOAD SECTION ── */
+    .upload-section {
+      padding: 0 1.2em 1.2em;
+      display: flex;
+      flex-direction: column;
+      gap: 0.8em;
+    }
+
+    /* ── DROP ZONE ── */
+    .dropzone {
+      position: relative;
+      border: 1px dashed var(--border-bright);
+      border-radius: 0.4em;
+      background: var(--panel-2);
+      padding: 2.8em 2em;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.8em;
+      cursor: pointer;
+      text-align: center;
+      transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+    }
+
+    .dropzone:hover,
+    .dropzone.drag-over {
+      border-color: var(--accent);
+      background: var(--accent-dim);
+      box-shadow: 0 0 0 3px var(--accent-glow);
+    }
+
+    /* while uploading, lock the drop zone */
+    .dropzone.locked {
+      pointer-events: none;
+      opacity: 0.4;
+    }
+
+    .dropzone input[type="file"] {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+      width: 100%;
+      height: 100%;
+    }
+
+    .drop-icon {
+      width: 4em;
+      height: 4em;
+      border-radius: 0.4em;
+      background: var(--panel);
+      border: 1px solid var(--border-bright);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: border-color 0.15s;
+      color: var(--text-2);
+    }
+
+    .dropzone:hover .drop-icon,
+    .dropzone.drag-over .drop-icon {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .drop-icon svg { width: 1.8em; height: 1.8em; }
+
+    .drop-label {
+      font-size: 1.3em;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .drop-hint {
+      font-family: var(--mono);
+      font-size: 1em;
+      color: var(--text-3);
+      line-height: 1.5;
+    }
+
+    /* ── FILE QUEUE ── */
+    .queue {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5em;
+    }
+
+    /* individual queue row */
+    .queue-row {
+      display: flex;
+      align-items: center;
+      gap: 0.8em;
+      padding: 1em 1.2em;
+      background: var(--panel-2);
+      border: 1px solid var(--border-bright);
+      border-radius: 0.4em;
+      transition: border-color 0.15s;
+      min-width: 0;
+    }
+
+    .queue-row.uploading {
+      border-color: var(--accent);
+    }
+
+    .queue-row.uploading.file-type {
+      border-color: var(--blue);
+    }
+
+    .queue-row.done {
+      border-color: rgba(61, 220, 132, 0.35);
+      opacity: 0.6;
+    }
+
+    .queue-row.failed {
+      border-color: rgba(255, 85, 85, 0.35);
+    }
+
+    /* file icon column */
+    .q-icon {
+      flex-shrink: 0;
+      color: var(--text-3);
+    }
+
+    .q-icon svg { width: 1.5em; height: 1.5em; }
+
+    /* name + status column */
+    .q-info {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0.2em;
+    }
+
+    .q-name {
+      font-family: var(--mono);
+      font-size: 1.15em;
+      color: var(--text);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .q-meta {
+      display: flex;
+      align-items: center;
+      gap: 0.7em;
+    }
+
+    .q-size {
+      font-family: var(--mono);
+      font-size: 1em;
+      color: var(--text-3);
+    }
+
+    /* inline type tag */
+    .q-tag {
+      font-family: var(--mono);
+      font-size: 0.9em;
+      font-weight: 600;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      padding: 0.15em 0.5em;
+      border-radius: 0.2em;
+      border: 1px solid transparent;
+    }
+
+    .q-tag.firmware {
+      color: var(--accent);
+      background: var(--accent-dim);
+      border-color: var(--accent-glow);
+    }
+
+    .q-tag.file {
+      color: var(--blue);
+      background: var(--blue-dim);
+      border-color: rgba(77,159,255,0.22);
+    }
+
+    /* per-row status label */
+    .q-status {
+      font-family: var(--mono);
+      font-size: 0.95em;
+      color: var(--text-3);
+    }
+
+    .queue-row.uploading  .q-status { color: var(--accent); }
+    .queue-row.uploading.file-type .q-status { color: var(--blue); }
+    .queue-row.done       .q-status { color: var(--green); }
+    .queue-row.failed     .q-status { color: var(--red); }
+
+    /* mini progress bar inside each row */
+    .q-progress-track {
+      display: none;
+      height: 0.3em;
+      background: var(--panel);
+      border-radius: 99em;
+      overflow: hidden;
+      margin-top: 0.3em;
+    }
+
+    .queue-row.uploading .q-progress-track { display: block; }
+
+    .q-progress-bar {
+      height: 100%;
+      width: 0%;
+      border-radius: 99em;
+      transition: width 0.15s ease;
+      background: var(--accent);
+    }
+
+    .queue-row.uploading.file-type .q-progress-bar { background: var(--blue); }
+
+    /* remove button */
+    .q-remove {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--text-3);
+      display: flex;
+      align-items: center;
+      padding: 0.2em;
+      transition: color 0.15s;
+      flex-shrink: 0;
+    }
+
+    .q-remove:hover { color: var(--red); }
+    .q-remove svg { width: 1.3em; height: 1.3em; }
+
+    /* ── NOTICES ── */
+    .notice {
+      display: none;
+      align-items: flex-start;
+      gap: 1em;
+      padding: 1.2em 1.4em;
+      border-radius: 0.4em;
+      font-size: 1.2em;
+      line-height: 1.5;
+    }
+
+    .notice.visible { display: flex; }
+    .notice svg { width: 1.4em; height: 1.4em; flex-shrink: 0; margin-top: 0.05em; }
+
+    .notice.warning {
+      background: var(--red-dim);
+      border: 1px solid rgba(255,85,85,0.25);
+      color: var(--red);
+    }
+
+    .notice.info {
+      background: var(--accent-dim);
+      border: 1px solid var(--accent-glow);
+      color: var(--accent);
+    }
+
+    .notice.success {
+      background: var(--green-dim);
+      border: 1px solid rgba(61,220,132,0.25);
+      color: var(--green);
+    }
+
+    .notice.error {
+      background: var(--red-dim);
+      border: 1px solid rgba(255,85,85,0.25);
+      color: var(--red);
+    }
+
+    /* ── OVERALL PROGRESS ── */
+    .overall-progress {
+      display: none;
+      flex-direction: column;
+      gap: 0.5em;
+    }
+
+    .overall-progress.visible { display: flex; }
+
+    .overall-header {
+      display: flex;
+      justify-content: space-between;
+      font-family: var(--mono);
+      font-size: 1.1em;
+      color: var(--text-2);
+    }
+
+    .overall-track {
+      height: 0.5em;
+      background: var(--panel-2);
+      border-radius: 99em;
+      overflow: hidden;
+      border: 1px solid var(--border);
+    }
+
+    .overall-bar {
+      height: 100%;
+      width: 0%;
+      border-radius: 99em;
+      transition: width 0.2s ease;
+      background: var(--accent);
+    }
+
+    /* ── UPLOAD BUTTON ── */
+    .upload-btn {
+      width: 100%;
+      padding: 1.1em;
+      border: none;
+      border-radius: 0.4em;
+      font-family: var(--sans);
+      font-size: 1.3em;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      cursor: pointer;
+      transition: opacity 0.2s, box-shadow 0.15s, transform 0.1s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.6em;
+      background: var(--accent);
+      color: #0a0c0e;
+    }
+
+    .upload-btn:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+    }
+
+    .upload-btn:not(:disabled):hover {
+      box-shadow: 0 0 0 3px var(--accent-glow);
+    }
+
+    .upload-btn:not(:disabled):active { transform: scale(0.995); }
+    .upload-btn svg { width: 1.4em; height: 1.4em; flex-shrink: 0; }
+
+    /* ── DIVIDER ── */
+    .divider {
+      height: 1px;
+      background: var(--border);
+      margin: 0.6em 0;
+    }
+
+    /* ── FOOTER ── */
+    .card-footer {
+      background: var(--panel-2);
+      border-top: 1px solid var(--border);
+      padding: 1em 2em;
+    }
+
+    .footer-kv {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1em 1.6em;
+    }
+
+    .footer-item {
+      display: flex;
+      flex-direction: column;
+      gap: 0.15em;
+    }
+
+    .footer-key {
+      font-family: var(--mono);
+      font-size: 0.9em;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-3);
+    }
+
+    .footer-val {
+      font-family: var(--mono);
+      font-size: 1.1em;
+      color: var(--text-2);
+    }
+
+    /* ── REBOOT COUNTDOWN ── */
+    .reboot-row {
+      display: none;
+      justify-content: center;
+      font-family: var(--mono);
+      font-size: 1.1em;
+      color: var(--text-3);
+      padding: 0.4em 0;
+    }
+
+    .reboot-row.visible { display: flex; }
+    .reboot-row span { color: var(--accent); font-weight: 600; margin: 0 0.3em; }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+  <div class="card">
+
+    <!-- ── HEADER ── -->
+    <div class="card-header">
+      <div class="header-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+          <path d="M2 17l10 5 10-5"/>
+          <path d="M2 12l10 5 10-5"/>
+        </svg>
+      </div>
+      <span class="header-title">OTA Update</span>
+
+      <!-- Home button -->
+      <a class="home-btn" href="/" title="Home">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 12 L12 3 L21 12" />
+          <path d="M5 10 L5 21 L19 21 L19 10" />
+          <path d="M9 21 L9 15 L15 15 L15 21" />
+        </svg>
+      </a>
+    </div>
+
+    <!-- ── UPLOAD AREA ── -->
+    <div class="section-label">Upload Files</div>
+
+    <div class="upload-section">
+
+      <!-- Drop zone -->
+      <div class="dropzone" id="dropzone">
+        <input type="file" id="fileInput" accept="*/*" multiple>
+        <div class="drop-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/>
+            <line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
+        </div>
+        <div class="drop-label">Drop files here or click to browse</div>
+        <div class="drop-hint">.bin → firmware OTA &nbsp;·&nbsp; any other file → Storage</div>
+      </div>
+
+      <!-- File queue -->
+      <div class="queue" id="queue"></div>
+
+      <!-- Firmware-in-queue notice -->
+      <div class="notice info" id="firmwareNotice">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+        </svg>
+        <span>Firmware file detected. It will be flashed last. The device will reboot after a successful flash.</span>
+      </div>
+
+      <!-- Space warning -->
+      <div class="notice warning" id="spaceWarning">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+          <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+        </svg>
+        <span id="spaceWarningText"></span>
+      </div>
+
+      <!-- Overall progress (shown during upload run) -->
+      <div class="overall-progress" id="overallProgress">
+        <div class="overall-header">
+          <span id="overallLabel">Uploading…</span>
+          <span id="overallCounter">0 / 0</span>
+        </div>
+        <div class="overall-track">
+          <div class="overall-bar" id="overallBar"></div>
+        </div>
+      </div>
+
+      <!-- Upload button -->
+      <button class="upload-btn" id="uploadBtn" disabled>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="17 8 12 3 7 8"/>
+          <line x1="12" y1="3" x2="12" y2="15"/>
+        </svg>
+        <span id="uploadBtnLabel">Select files to upload</span>
+      </button>
+
+      <!-- Final status -->
+      <div class="notice" id="statusMsg">
+        <svg id="statusIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></svg>
+        <span id="statusText"></span>
+      </div>
+
+      <!-- Reboot countdown -->
+      <div class="reboot-row" id="rebootRow">
+        Reconnect in <span id="rebootSec">10</span>s…
+      </div>
+
+    </div><!-- /upload-section -->
+
+    <div class="divider"></div>
+
+    <!-- ── FOOTER ── -->
+    <div class="card-footer">
+      <div class="footer-kv">
+        <div class="footer-item">
+          <span class="footer-key">Storage Free</span>
+          <span class="footer-val" id="footer-free">—</span>
+        </div>
+        <div class="footer-item">
+          <span class="footer-key">Storage Total</span>
+          <span class="footer-val" id="footer-total">—</span>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /card -->
+
+  <script>
+    /* ── FLUID SCALE ENGINE ─────────────────────────────────────────────── */
+    const SCALE_FACTOR = 0.018;
+    const MIN_PX = 7;
+    const MAX_PX = 22;
+
+    function applyScale() {
+      const fs = Math.min(MAX_PX, Math.max(MIN_PX, window.innerWidth * SCALE_FACTOR));
+      document.documentElement.style.fontSize = fs + 'px';
+    }
+
+    applyScale();
+    window.addEventListener('resize', applyScale);
+
+    /* ── CONFIG ─────────────────────────────────────────────────────────── */
+    const FIRMWARE_ENDPOINT = '/ota/firmware';
+    const FILE_ENDPOINT     = '/ota/file';
+    const SYSTEM_ENDPOINT   = '/api/system';
+    const MAX_FILE_MB       = 1;
+
+    /* ── STATE ──────────────────────────────────────────────────────────── */
+    // Each entry: { id, file, isFirmware, status: 'pending'|'uploading'|'done'|'failed' }
+    let queue          = [];
+    let nextId         = 0;
+    let freeSpaceBytes = null;
+    let isUploading    = false;
+
+    /* ── DOM ────────────────────────────────────────────────────────────── */
+    const $ = id => document.getElementById(id);
+
+    const dropzone       = $('dropzone');
+    const fileInput      = $('fileInput');
+    const queueEl        = $('queue');
+    const firmwareNotice = $('firmwareNotice');
+    const spaceWarning   = $('spaceWarning');
+    const spaceWarningTxt= $('spaceWarningText');
+    const overallProgress= $('overallProgress');
+    const overallBar     = $('overallBar');
+    const overallLabel   = $('overallLabel');
+    const overallCounter = $('overallCounter');
+    const uploadBtn      = $('uploadBtn');
+    const uploadBtnLbl   = $('uploadBtnLabel');
+    const statusMsg      = $('statusMsg');
+    const statusIcon     = $('statusIcon');
+    const statusText     = $('statusText');
+    const rebootRow      = $('rebootRow');
+    const rebootSec      = $('rebootSec');
+
+    /* ── HELPERS ────────────────────────────────────────────────────────── */
+    function fmtBytes(b) {
+      if (b >= 1048576) return (b / 1048576).toFixed(1) + ' MB';
+      if (b >= 1024)    return (b / 1024).toFixed(0) + ' KB';
+      return b + ' B';
+    }
+
+    function isFirmwareFile(file) {
+      return file.name.toLowerCase().endsWith('.bin');
+    }
+
+    /* ── QUEUE MANAGEMENT ───────────────────────────────────────────────── */
+    function addFiles(files) {
+      for (const file of files) {
+        // Deduplicate by name
+        if (queue.some(e => e.file.name === file.name)) continue;
+        queue.push({ id: nextId++, file, isFirmware: isFirmwareFile(file), status: 'pending' });
+      }
+      renderQueue();
+      updateUI();
+    }
+
+    function removeEntry(id) {
+      queue = queue.filter(e => e.id !== id);
+      renderQueue();
+      updateUI();
+    }
+
+    function renderQueue() {
+      queueEl.innerHTML = '';
+
+      for (const entry of queue) {
+        const row = document.createElement('div');
+        row.className = 'queue-row' +
+          (entry.isFirmware ? '' : ' file-type') +
+          (entry.status === 'uploading' ? ' uploading' : '') +
+          (entry.status === 'done'      ? ' done'      : '') +
+          (entry.status === 'failed'    ? ' failed'    : '');
+        row.id = 'qrow-' + entry.id;
+
+        const statusLabels = {
+          pending:   'queued',
+          uploading: entry.isFirmware ? 'flashing…' : 'uploading…',
+          done:      '✓ done',
+          failed:    '✗ failed',
+        };
+
+        row.innerHTML = `
+          <div class="q-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/>
+              <polyline points="13 2 13 9 20 9"/>
+            </svg>
+          </div>
+          <div class="q-info">
+            <span class="q-name" title="${entry.file.name}">${entry.file.name}</span>
+            <div class="q-meta">
+              <span class="q-size">${fmtBytes(entry.file.size)}</span>
+              <span class="q-tag ${entry.isFirmware ? 'firmware' : 'file'}">${entry.isFirmware ? 'Firmware' : 'File'}</span>
+              <span class="q-status">${statusLabels[entry.status]}</span>
+            </div>
+            <div class="q-progress-track">
+              <div class="q-progress-bar" id="qbar-${entry.id}"></div>
+            </div>
+          </div>
+          ${entry.status === 'pending'
+            ? `<button class="q-remove" data-id="${entry.id}" title="Remove">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+               </button>`
+            : ''}
+        `;
+
+        queueEl.appendChild(row);
+      }
+
+      // Attach remove handlers
+      queueEl.querySelectorAll('.q-remove').forEach(btn => {
+        btn.addEventListener('click', () => removeEntry(Number(btn.dataset.id)));
+      });
+    }
+
+    /* ── UI STATE SYNC ──────────────────────────────────────────────────── */
+    function updateUI() {
+      const hasPending  = queue.some(e => e.status === 'pending');
+      const hasFirmware = queue.some(e => e.isFirmware);
+
+      // Firmware notice
+      firmwareNotice.classList.toggle('visible', hasFirmware && hasPending);
+
+      // Space warning: sum of all pending non-firmware files
+      const pendingFileBytes = queue
+        .filter(e => !e.isFirmware && e.status === 'pending')
+        .reduce((sum, e) => sum + e.file.size, 0);
+
+      let warnBlocks = false;
+      if (pendingFileBytes > freeSpaceBytes) {
+        const reason = `only ${fmtBytes(freeSpaceBytes)} free`;
+        spaceWarningTxt.textContent =
+          `Files total ${fmtBytes(pendingFileBytes)} — ${reason}.`;
+        spaceWarning.classList.add('visible');
+        warnBlocks = true;
+      } else {
+        spaceWarning.classList.remove('visible');
+      }
+
+      // Upload button
+      const canUpload = hasPending && !isUploading && !warnBlocks;
+      uploadBtn.disabled = !canUpload;
+
+      if (isUploading) {
+        uploadBtnLbl.textContent = 'Uploading…';
+      } else if (!queue.length) {
+        uploadBtnLbl.textContent = 'Select files to upload';
+      } else {
+        const pendingCount = queue.filter(e => e.status === 'pending').length;
+        const label = pendingCount === 1
+          ? (hasFirmware && pendingCount === 1 ? 'Flash Firmware' : 'Upload 1 File')
+          : `Upload ${pendingCount} Files${hasFirmware ? ' + Flash Firmware' : ''}`;
+        uploadBtnLbl.textContent = label;
+      }
+    }
+
+    /* ── UPLOAD QUEUE RUNNER ────────────────────────────────────────────── */
+    async function runUploadQueue() {
+      if (isUploading) return;
+      isUploading = true;
+
+      // Reset global status
+      statusMsg.className = 'notice';
+      rebootRow.classList.remove('visible');
+
+      // Sort: non-firmware first, firmware last
+      const pending = queue
+        .filter(e => e.status === 'pending')
+        .sort((a, b) => a.isFirmware - b.isFirmware);
+
+      const total    = pending.length;
+      let   done     = 0;
+      let   hadError = false;
+
+      overallProgress.classList.add('visible');
+      overallBar.style.width = '0%';
+      overallCounter.textContent = `0 / ${total}`;
+      overallLabel.textContent = 'Starting…';
+
+      dropzone.classList.add('locked');
+      updateUI();
+
+      for (const entry of pending) {
+        // Mark row as uploading
+        entry.status = 'uploading';
+        renderQueue();
+        overallLabel.textContent = entry.isFirmware
+          ? `Flashing firmware (${done + 1} / ${total})…`
+          : `Uploading "${entry.file.name}" (${done + 1} / ${total})…`;
+
+        const ok = await uploadOne(entry);
+
+        entry.status = ok ? 'done' : 'failed';
+        if (!ok) hadError = true;
+
+        done++;
+        overallCounter.textContent = `${done} / ${total}`;
+        overallBar.style.width = Math.round((done / total) * 100) + '%';
+
+        renderQueue();
+
+        // Stop on failure (don't flash firmware if a file failed, for safety)
+        if (!ok) break;
+      }
+
+      isUploading = false;
+      dropzone.classList.remove('locked');
+
+      const firmwareDone = queue.some(e => e.isFirmware && e.status === 'done');
+
+      if (hadError) {
+        overallLabel.textContent = 'Stopped due to error.';
+        showStatus('error', 'Upload stopped. Check the failed file and try again.');
+      } else if (firmwareDone) {
+        overallLabel.textContent = 'Firmware flashed. Rebooting…';
+        showStatus('success', 'All files uploaded. Firmware flashed — device is rebooting.');
+        startRebootCountdown(10);
+      } else {
+        overallLabel.textContent = `Done — ${done} file${done !== 1 ? 's' : ''} uploaded.`;
+        showStatus('success', `${done} file${done !== 1 ? 's' : ''} successfully written to Storage.`);
+        // Clear done entries, keep failed ones
+        queue = queue.filter(e => e.status !== 'done');
+        renderQueue();
+        fetchSystemInfo();
+      }
+
+      updateUI();
+    }
+
+    /* Upload a single entry — returns true on success */
+    function uploadOne(entry) {
+      return new Promise((resolve) => {
+        const endpoint = entry.isFirmware ? FIRMWARE_ENDPOINT : FILE_ENDPOINT;
+        const formData = new FormData();
+
+        if (entry.isFirmware) {
+          formData.append('firmware', entry.file, entry.file.name);
+        } else {
+          formData.append('path', '/' + entry.file.name);
+          formData.append('file', entry.file, entry.file.name);
+        }
+
+        const xhr = new XMLHttpRequest();
+        const barEl = () => $('qbar-' + entry.id);
+
+        xhr.upload.addEventListener('progress', e => {
+          if (!e.lengthComputable) return;
+          const pct = Math.round((e.loaded / e.total) * 100);
+          const bar = barEl();
+          if (bar) bar.style.width = pct + '%';
+        });
+
+        xhr.addEventListener('load', () => {
+          const bar = barEl();
+          if (bar) bar.style.width = '100%';
+          resolve(xhr.status === 200);
+        });
+
+        xhr.addEventListener('error', () => resolve(false));
+        xhr.addEventListener('abort', () => resolve(false));
+
+        xhr.open('POST', endpoint);
+        xhr.send(formData);
+      });
+    }
+
+    /* ── STATUS / COUNTDOWN ─────────────────────────────────────────────── */
+    function showStatus(type, text) {
+      const icons = {
+        success: '<polyline points="20 6 9 17 4 12"/>',
+        error:   '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
+      };
+      statusMsg.className = 'notice visible ' + type;
+      statusIcon.innerHTML = icons[type] || '';
+      statusText.textContent = text;
+    }
+
+    function startRebootCountdown(secs) {
+      rebootRow.classList.add('visible');
+      rebootSec.textContent = secs;
+      const iv = setInterval(() => {
+        secs--;
+        rebootSec.textContent = secs;
+        if (secs <= 0) clearInterval(iv);
+      }, 1000);
+    }
+
+    /* ── FETCH SYSTEM INFO ──────────────────────────────────────────────── */
+    function fetchSystemInfo() {
+      fetch(SYSTEM_ENDPOINT)
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+          if (!data) return;
+          const free  = data?.littlefs_free  ?? null;
+          const total = data?.littlefs_total ?? null;
+          if (free  !== null) { freeSpaceBytes = free; $('footer-free').textContent  = fmtBytes(free);  }
+          if (total !== null) { $('footer-total').textContent = fmtBytes(total); }
+          updateUI(); // re-check space warnings with fresh data
+        })
+        .catch((err) => { console.log(err); });
+    }
+
+    /* ── EVENTS ─────────────────────────────────────────────────────────── */
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files.length) addFiles(fileInput.files);
+      fileInput.value = ''; // reset so same file can be re-added after removal
+    });
+
+    dropzone.addEventListener('dragover', e => {
+      e.preventDefault();
+      if (!isUploading) dropzone.classList.add('drag-over');
+    });
+
+    dropzone.addEventListener('dragleave', () => {
+      dropzone.classList.remove('drag-over');
+    });
+
+    dropzone.addEventListener('drop', e => {
+      e.preventDefault();
+      dropzone.classList.remove('drag-over');
+      if (!isUploading && e.dataTransfer?.files?.length) addFiles(e.dataTransfer.files);
+    });
+
+    uploadBtn.addEventListener('click', runUploadQueue);
+
+    /* ── INIT ────────────────────────────────────────────────────────────── */
+    fetchSystemInfo();
+  </script>
+
+</body>
+</html>

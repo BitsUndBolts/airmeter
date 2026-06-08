@@ -1,0 +1,1258 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AirMeter Dashboard</title>
+  <style>
+    /*
+     * FLUID SCALING SYSTEM
+     * --------------------
+     * html font-size is set to ~1.8vw via JS on load & resize.
+     * Every size below uses em/rem so the whole UI scales
+     * proportionally with viewport width. No media queries needed.
+     *
+     * Base design reference: 400px wide → 1rem ≈ 7.2px (1.8vw)
+     * At 800px wide:  1rem = 14.4px  (everything doubles)
+     * At 1200px wide: 1rem = 21.6px  (everything triples)
+     *
+     * Hard min/max clamps are applied in JS (min: 7px, max: 22px)
+     * so it stays legible at very small or very large sizes.
+     */
+
+    :root {
+      --bg: #0a0c0e;
+      --panel: #111416;
+      --panel-2: #181c1f;
+      --border: #252a2e;
+      --border-bright: #2e3538;
+      --accent: #f5a623;
+      --accent-dim: rgba(245, 166, 35, 0.10);
+      --accent-glow: rgba(245, 166, 35, 0.22);
+      --green: #3ddc84;
+      --green-dim: rgba(61, 220, 132, 0.10);
+      --yellow: #f1c40f;
+      --red: #ff5555;
+      --red-dim: rgba(255, 85, 85, 0.10);
+      --blue: #4d9fff;
+      --blue-dim: rgba(77, 159, 255, 0.10);
+      --text: #e8ecef;
+      --text-2: #8a9199;
+      --text-3: #4a5158;
+      --mono: ui-monospace, SFMono-Regular, 'SF Pro Mono', Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+      --sans: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    /* Root font-size is driven by JS → sets the em scale anchor */
+    html {
+      font-size: 10px;
+      /* fallback; overridden immediately by JS */
+    }
+
+    body {
+      font-family: var(--sans);
+      background: var(--bg);
+      color: var(--text);
+      /* Top-left, no centering, fill viewport */
+      margin: 0;
+      padding: 0;
+      min-height: 100dvh;
+      background-image:
+        linear-gradient(rgba(245, 166, 35, 0.02) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(245, 166, 35, 0.02) 1px, transparent 1px);
+      background-size: 3.2em 3.2em;
+    }
+
+    /* ── CARD (fills full width) ── */
+    .card {
+      width: 100%;
+      background: var(--panel);
+      border: 1px solid var(--border-bright);
+      border-radius: 0.4em;
+      overflow: hidden;
+    }
+
+    /* ── HEADER ── */
+    .card-header {
+      background: var(--panel-2);
+      border-bottom: 1px solid var(--border-bright);
+      padding: 1.4em 2em;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .device-badge {
+      display: flex;
+      align-items: center;
+      gap: 1em;
+    }
+
+    .status-dot {
+      width: 0.8em;
+      height: 0.8em;
+      border-radius: 50%;
+      background: var(--dot-color);
+      /* Combined intense glow: sharp inner glow + soft wide outer glow */
+      box-shadow:
+        0 0 4px var(--dot-color),
+        0 0 12px var(--dot-color),
+        0 0 20px var(--dot-color);
+      animation: pulse-dot 2.5s ease-in-out infinite;
+      flex-shrink: 0;
+      transition: background 0.3s ease, box-shadow 0.3s ease;
+      /* Smooth color transitions */
+    }
+
+    .status-dot.green {
+      --dot-color: var(--green);
+    }
+
+    .status-dot.yellow {
+      --dot-color: var(--yellow);
+    }
+
+    .status-dot.red {
+      --dot-color: var(--red);
+    }
+
+    @keyframes pulse-dot {
+
+      0%,
+      100% {
+        transform: scale(1);
+        /* Vibrant peak glow */
+        box-shadow:
+          0 0 4px var(--dot-color),
+          0 0 12px var(--dot-color),
+          0 0 24px var(--dot-color);
+      }
+
+      50% {
+        transform: scale(0.92);
+        /* Dimmed low glow (keeps the dot visible without dying out completely) */
+        box-shadow:
+          0 0 2px var(--dot-color),
+          0 0 6px var(--dot-color),
+          0 0 10px var(--dot-color);
+      }
+    }
+
+    .device-name {
+      font-family: var(--mono);
+      font-size: 1.2em;
+      font-weight: 600;
+      color: var(--text-2);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 0.8em;
+    }
+
+    .header-tag {
+      font-family: var(--mono);
+      font-size: 1em;
+      letter-spacing: 0.07em;
+      color: var(--text-3);
+    }
+
+    .version-pill {
+      font-family: var(--mono);
+      font-size: 1em;
+      font-weight: 600;
+      color: var(--accent);
+      background: var(--accent-dim);
+      border: 1px solid var(--accent-glow);
+      border-radius: 0.3em;
+      padding: 0.2em 0.7em;
+      letter-spacing: 0.06em;
+    }
+
+    /* ── HERO ── */
+    .hero {
+      padding: 1.6em;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 1.6em;
+    }
+
+    .logo-box {
+      height: 6em;
+      border-radius: 0.4em;
+      background: var(--panel-2);
+      border: 1px solid var(--border-bright);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .logo-box img {
+      width: 5.4em;
+      height: 5.4em;
+      object-fit: contain;
+      border-radius: 0.2em;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+
+    .logo-box img.loaded {
+      opacity: 1;
+    }
+
+    .logo-box::before {
+      content: '';
+      position: absolute;
+      width: 1.4em;
+      height: 1.4em;
+      border: 2px solid var(--border-bright);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    .logo-box:has(img.loaded)::before {
+      display: none;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .logo-fallback {
+      font-family: var(--mono);
+      font-size: 1.6em;
+      font-weight: 600;
+      color: var(--accent);
+      letter-spacing: -0.02em;
+    }
+
+    .hero-label {
+      font-family: var(--mono);
+      font-size: 1em;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--text-3);
+      margin-bottom: 0.3em;
+    }
+
+    .hero-title {
+      font-family: var(--sans);
+      font-size: 1.8em;
+      font-weight: 600;
+      color: var(--text);
+      letter-spacing: -0.01em;
+      margin-bottom: 0.22em;
+    }
+
+    .hero-sub {
+      font-size: 1.2em;
+      color: var(--text-2);
+      line-height: 1.4;
+    }
+
+    /* ── SECTION LABEL ── */
+    .section-label {
+      font-family: var(--mono);
+      font-size: 0.9em;
+      font-weight: 600;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--text-3);
+      padding: 1.6em 2em 0.8em;
+    }
+
+    /* ── NAV CARDS ── */
+    .nav-section {
+      padding: 0 1.2em;
+    }
+
+    .nav-card {
+      display: flex;
+      align-items: center;
+      gap: 1.4em;
+      padding: 1.4em;
+      background: var(--panel-2);
+      border: 1px solid var(--border-bright);
+      border-radius: 0.4em;
+      text-decoration: none;
+      color: inherit;
+      margin-bottom: 0.8em;
+      transition: border-color 0.15s, background 0.15s;
+      cursor: pointer;
+      width: 100%;
+      text-align: left;
+    }
+
+    .nav-card.meter:hover {
+      border-color: var(--accent);
+    }
+
+    .nav-card.update:hover {
+      border-color: var(--blue);
+    }
+
+    .nav-card:active {
+      transform: scale(0.995);
+    }
+
+    .nav-icon {
+      width: 3.6em;
+      height: 3.6em;
+      border-radius: 0.3em;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    /* Scale SVG icons with the em system */
+    .nav-icon svg {
+      width: 1.8em;
+      height: 1.8em;
+    }
+
+    .nav-icon-accent {
+      background: var(--accent-dim);
+      border: 1px solid var(--accent-glow);
+      color: var(--accent);
+    }
+
+    .nav-icon-blue {
+      background: var(--blue-dim);
+      border: 1px solid rgba(77, 159, 255, 0.2);
+      color: var(--blue);
+    }
+
+    .nav-text {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .nav-title {
+      font-size: 1.4em;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 0.15em;
+    }
+
+    .nav-desc {
+      font-size: 1.2em;
+      color: var(--text-2);
+      line-height: 1.4;
+    }
+
+    .nav-arrow {
+      color: var(--text-3);
+      transition: transform 0.15s, color 0.15s;
+      flex-shrink: 0;
+      width: 1.6em;
+      height: 1.6em;
+    }
+
+    .nav-card.meter:hover .nav-arrow {
+      transform: translateX(0.2em);
+      color: var(--accent);
+    }
+
+    .nav-card.update:hover .nav-arrow {
+      transform: translateX(0.2em);
+      color: var(--blue);
+    }
+
+    .nav-badge {
+      font-family: var(--mono);
+      font-size: 0.9em;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 0.2em 0.6em;
+      border-radius: 0.2em;
+      flex-shrink: 0;
+    }
+
+    .badge-soon {
+      background: rgba(74, 81, 88, 0.5);
+      color: var(--text-3);
+      border: 1px solid var(--border);
+    }
+
+    /* ── DIVIDER ── */
+    .divider {
+      height: 1px;
+      background: var(--border);
+      margin: 0.6em 0;
+    }
+
+    /* ── CONTROLS ── */
+    .controls-section {
+      padding: 0 1.2em 0.8em;
+    }
+
+    .control-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1.2em 1.4em;
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: 0.4em;
+      gap: 1.2em;
+      margin-bottom: 0.8em;
+    }
+
+    .control-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .control-title {
+      font-size: 1.3em;
+      font-weight: 600;
+      color: var(--text-2);
+      margin-bottom: 0.15em;
+    }
+
+    .control-desc {
+      font-size: 1.1em;
+      color: var(--text-3);
+      line-height: 1.4;
+    }
+
+    .btn-outline {
+      width: 7em;
+      font-family: var(--mono);
+      font-size: 1.1em;
+      font-weight: 600;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      border-radius: 0.3em;
+      padding: 0.7em 1.2em;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.15s, border-color 0.15s;
+      flex-shrink: 0;
+    }
+
+    .btn-outline.danger {
+      color: var(--red);
+      background: var(--red-dim);
+      border: 1px solid rgba(255, 85, 85, 0.25);
+    }
+
+    .btn-outline.warning {
+      color: var(--accent);
+      background: var(--accent-dim);
+      border: 1px solid var(--accent-glow);
+    }
+
+    .btn-outline.danger:hover {
+      background: rgba(255, 85, 85, 0.18);
+      border-color: rgba(255, 85, 85, 0.45);
+    }
+
+    .btn-outline.warning:hover {
+      background: var(--accent-glow);
+      border-color: var(--accent);
+    }
+
+    /* ── FOOTER ── */
+    .card-footer {
+      background: var(--panel-2);
+      border-top: 1px solid var(--border);
+      padding: 1em 2em;
+    }
+
+    .footer-kv {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1em 1.6em;
+    }
+
+    .footer-item {
+      display: flex;
+      flex-direction: column;
+      gap: 0.15em;
+    }
+
+    .footer-key {
+      font-family: var(--mono);
+      font-size: 0.9em;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-3);
+    }
+
+    .footer-val {
+      font-family: var(--mono);
+      font-size: 1.1em;
+      color: var(--text-2);
+    }
+
+    .card-footer a,
+    .card-footer a:visited,
+    .card-footer a:active {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    .card-footer a:hover {
+      text-decoration: underline;
+    }
+
+    /* ── MODAL ── */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.75);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+      padding: 2em;
+    }
+
+    .modal-overlay.visible {
+      display: flex;
+    }
+
+    .modal {
+      background: var(--panel);
+      border: 1px solid var(--border-bright);
+      border-radius: 0.4em;
+      width: 100%;
+      max-width: 34em;
+      overflow: hidden;
+      box-shadow: 0 2.4em 6.4em rgba(0, 0, 0, 0.7);
+      animation: modal-in 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275) both;
+    }
+
+    @keyframes modal-in {
+      from {
+        transform: scale(0.93);
+        opacity: 0
+      }
+
+      to {
+        transform: scale(1);
+        opacity: 1
+      }
+    }
+
+    .modal-header {
+      background: var(--panel-2);
+      border-bottom: 1px solid var(--border-bright);
+      padding: 1.4em 1.6em;
+      display: flex;
+      align-items: center;
+      gap: 1em;
+    }
+
+    .modal-icon {
+      width: 2.8em;
+      height: 2.8em;
+      border-radius: 0.3em;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .modal-icon.danger {
+      background: var(--red-dim);
+      border: 1px solid rgba(255, 85, 85, 0.25);
+      color: var(--red);
+    }
+
+    .modal-icon.warning {
+      background: var(--accent-dim);
+      border: 1px solid var(--accent-glow);
+      color: var(--accent);
+    }
+
+    .modal-icon svg {
+      width: 1.4em;
+      height: 1.4em;
+    }
+
+    .modal-title {
+      font-family: var(--mono);
+      font-size: 1.2em;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .modal-title.danger {
+      color: var(--red);
+    }
+
+    .modal-title.warning {
+      color: var(--accent);
+    }
+
+    .modal-body {
+      padding: 1.8em 1.6em;
+    }
+
+    .modal-body p {
+      font-size: 1.3em;
+      color: var(--text-2);
+      line-height: 1.6;
+      margin-bottom: 1.6em;
+    }
+
+    .modal-body strong {
+      color: var(--text);
+      font-weight: 600;
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 0.8em;
+    }
+
+    .btn-cancel {
+      flex: 1;
+      font-family: var(--mono);
+      font-size: 1.2em;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--text-2);
+      background: var(--panel-2);
+      border: 1px solid var(--border-bright);
+      border-radius: 0.3em;
+      padding: 1em;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .btn-cancel:hover {
+      background: var(--border);
+    }
+
+    .btn-confirm {
+      flex: 1;
+      font-family: var(--mono);
+      font-size: 1.2em;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: #0a0c0e;
+      background: var(--red);
+      border: none;
+      border-radius: 0.3em;
+      padding: 1em;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+
+    .btn-confirm.danger {
+      color: var(--bg);
+      background: var(--red);
+    }
+
+    .btn-confirm.warning {
+      color: var(--bg);
+      background: var(--accent);
+    }
+
+    .btn-confirm:hover {
+      opacity: 0.88;
+    }
+
+    /* ── RESET STEPS ── */
+    .reset-steps {
+      display: flex;
+      flex-direction: column;
+      gap: 1em;
+    }
+
+    .reset-step {
+      display: flex;
+      gap: 1.2em;
+      align-items: flex-start;
+    }
+
+    .reset-step-num {
+      font-family: var(--mono);
+      font-size: 1em;
+      font-weight: 600;
+      color: var(--accent);
+      background: var(--accent-dim);
+      border: 1px solid var(--accent-glow);
+      border-radius: 0.2em;
+      width: 2em;
+      height: 2em;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      margin-top: 0.1em;
+    }
+
+    .reset-step-text {
+      font-size: 1.3em;
+      color: var(--text-2);
+      line-height: 1.5;
+    }
+
+    .reset-step-text strong {
+      color: var(--text);
+    }
+
+    .reset-step-text a {
+      color: var(--accent);
+      font-family: var(--mono);
+      font-size: 0.92em;
+      text-decoration: none;
+    }
+
+    .reset-step-text a:hover {
+      text-decoration: underline;
+    }
+
+    .spinner-inline {
+      display: inline-block;
+      width: 1.4em;
+      height: 1.4em;
+      border: 0.2em solid var(--border-bright);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      vertical-align: middle;
+      margin-right: 0.6em;
+    }
+
+    .spinner-inline.danger {
+      border-top-color: var(--red);
+    }
+
+    .spinner-inline.warning {
+      border-top-color: var(--accent);
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg)
+      }
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    /* Signal bars — heights in em so they scale */
+    .signal-bars {
+      display: inline-flex;
+      /* Fix: Keeps it inline next to text */
+      align-items: flex-end;
+      gap: 0.2em;
+      vertical-align: -0.1em;
+      /* Fix: Aligns the bottom of the bars with the text baseline */
+    }
+
+    .signal-bars span {
+      display: block;
+      width: 0.35em;
+      background: var(--text-3);
+      border-radius: 0.1em;
+      transition: background 0.2s;
+    }
+
+    /* Color applied when a bar is active/lit */
+    .signal-bars span.lit {
+      background: var(--text);
+    }
+
+    .signal-bars span:nth-child(1) {
+      height: 0.25em;
+    }
+
+    .signal-bars span:nth-child(2) {
+      height: 0.5em;
+    }
+
+    .signal-bars span:nth-child(3) {
+      height: 0.75em;
+    }
+
+    .signal-bars span:nth-child(4) {
+      height: 1em;
+    }
+
+    .storage-wrapper {
+      display: inline-flex;
+      align-items: center;
+    }
+
+    .storage-text {
+      position: relative;
+      z-index: 2;
+      font-size: 0.9em;
+      font-weight: 400;
+      color: var(--text);
+      pointer-events: none;
+      white-space: nowrap;
+      -webkit-text-stroke: 3px var(--panel);
+      paint-order: stroke fill;
+    }
+
+    .storage-bar-track {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 7em;
+      height: 1.15em;
+      background-color: var(--text-3);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .storage-progress-fill {
+      position: absolute;
+      top: 0;
+      left: 0;
+      height: 100%;
+      background-color: var(--accent);
+      width: 0%;
+      transition: width 0.3s ease-in-out;
+      z-index: 1;
+    }
+  </style>
+</head>
+
+<body>
+
+  <main class="card">
+
+    <!-- ── HEADER ── -->
+    <div class="card-header">
+      <div class="device-badge">
+        <div class="status-dot"></div>
+        <span class="device-name">AirMeter · Dashboard</span>
+      </div>
+      <div class="header-right">
+        <span class="header-tag">FIRMWARE</span>
+        <span class="version-pill"><span id="firmware_version"><span class="spinner-inline warning"
+              style="margin:0"></span></span></span>
+      </div>
+    </div>
+
+    <!-- ── HERO ── -->
+    <div class="hero">
+      <div class="logo-box">
+        <img src="aneng_an870.webp" alt="Multimeter"
+          onload="this.classList.add('loaded')"
+          onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+        <span class="logo-fallback" style="display:none">AN</span>
+      </div>
+      <div class="hero-info">
+        <div class="hero-label">Device</div>
+        <div class="hero-title">ANENG AN870</div>
+        <div class="hero-sub">Web server active &amp; reachable on local network</div>
+      </div>
+    </div>
+
+    <!-- ── NAVIGATION ── -->
+    <div class="section-label">Navigation</div>
+    <div class="nav-section">
+
+      <a href="/meter" class="nav-card meter">
+        <div class="nav-icon nav-icon-accent">
+          <svg viewBox="0 0 18 18" fill="none">
+            <rect x="1.5" y="3.5" width="15" height="11" rx="1.5" stroke="currentColor" stroke-width="1.3" />
+            <path d="M5 10.5L7.5 8L9.5 10L12.5 6.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"
+              stroke-linejoin="round" />
+            <circle cx="13.5" cy="10.5" r="1" fill="currentColor" />
+          </svg>
+        </div>
+        <div class="nav-text">
+          <div class="nav-title">Multimeter</div>
+          <div class="nav-desc">Live readings, measurements &amp; display</div>
+        </div>
+        <svg class="nav-arrow" viewBox="0 0 16 16" fill="none">
+          <path d="M6 3l5 5-5 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+            stroke-linejoin="round" />
+        </svg>
+      </a>
+
+      <a href="/update" class="nav-card update">
+        <div class="nav-icon nav-icon-blue">
+          <svg viewBox="0 0 18 18" fill="none">
+            <path d="M9 2v9M6 8l3 3 3-3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"
+              stroke-linejoin="round" />
+            <path d="M3 13v1.5A1.5 1.5 0 004.5 16h9A1.5 1.5 0 0015 14.5V13" stroke="currentColor" stroke-width="1.3"
+              stroke-linecap="round" />
+          </svg>
+        </div>
+        <div class="nav-text">
+          <div class="nav-title">OTA Updates</div>
+          <div class="nav-desc">Firmware and UI change/update</div>
+        </div>
+        <svg class="nav-arrow" viewBox="0 0 16 16" fill="none">
+          <path d="M6 3l5 5-5 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+            stroke-linejoin="round" />
+        </svg>
+      </a>
+
+    </div>
+
+    <!-- ── DIVIDER ── -->
+    <div class="divider" style="margin: 0.8em 0 0;"></div>
+
+    <!-- ── CONTROLS ── -->
+    <div class="section-label">Device Controls</div>
+
+    <div class="controls-section">
+
+      <div class="control-row">
+        <div class="control-info">
+          <div class="control-title">Restart</div>
+          <div class="control-desc">Reboot the device - all settings are kept</div>
+        </div>
+        <button class="btn-outline warning" onclick="openRestartModal()">Restart</button>
+      </div>
+
+      <div class="control-row">
+        <div class="control-info">
+          <div class="control-title">Reset Wi-Fi</div>
+          <div class="control-desc">Erase saved network &amp; reboot into setup mode</div>
+        </div>
+        <button class="btn-outline danger" onclick="openResetModal()">Reset</button>
+      </div>
+
+    </div>
+
+    <!-- ── FOOTER ── -->
+    <div class="card-footer">
+      <div class="footer-kv">
+        <div class="footer-item">
+          <span class="footer-key">Host</span>
+          <span class="footer-val"><a href="http://airmeter.local/">airmeter.local</a></span>
+        </div>
+        <div class="footer-item">
+          <span class="footer-key">IP Address</span>
+          <span class="footer-val"><a id="ip_address" href=""></a></span>
+        </div>
+        <div class="footer-item">
+          <span class="footer-key">SSID</span>
+          <span class="footer-val"><span id="ssid"></span> <span id="wifi-bars" class="signal-bars"></span></span>
+        </div>
+        <div class="footer-item">
+          <span class="footer-key">Module</span>
+          <span class="footer-val">ESP32</span>
+        </div>
+        <div class="footer-item">
+          <span class="footer-key">Radio</span>
+          <span class="footer-val">HC-12</span>
+        </div>
+        <div class="footer-item">
+          <span class="footer-key">Memory</span>
+          <span class="footer-val"><span id="free_memory"></span></span>
+        </div>
+
+        <div class="footer-item">
+          <span class="footer-key">Storage</span>
+          <span class="footer-val storage-wrapper" title="Loading layout...">
+            <span class="storage-bar-track">
+              <span id="storage-progress" class="storage-progress-fill"></span>
+              <span id="storage_text" class="storage-text">Loading...</span>
+            </span>
+          </span>
+        </div>
+
+      </div>
+    </div>
+
+  </main>
+
+  <!-- ── RESET MODAL ── -->
+  <div class="modal-overlay" id="modal-overlay">
+    <div class="modal" id="modal-box">
+
+      <!-- STEP 1: Confirm -->
+      <div id="step-confirm">
+        <div class="modal-header">
+          <div class="modal-icon danger">
+            <svg viewBox="0 0 14 14" fill="none">
+              <path d="M7 2v5M7 10v.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+              <circle cx="7" cy="7" r="6" stroke="currentColor" stroke-width="1.2" />
+            </svg>
+          </div>
+          <span class="modal-title danger">Confirm Wi-Fi Reset</span>
+        </div>
+        <div class="modal-body">
+          <p>This will <strong>erase the saved network credentials</strong> and reboot the device into setup
+            mode. You will need to configure a new network connection.</p>
+          <div class="modal-actions">
+            <button class="btn-cancel" onclick="closeResetModal()">Cancel</button>
+            <button class="btn-confirm danger" onclick="executeReset()">Reset</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- STEP 2: Progress + Instructions -->
+      <div id="step-resetting" class="hidden">
+        <div class="modal-header">
+          <div class="modal-icon">
+            <span class="spinner-inline danger" style="margin:0"></span>
+          </div>
+          <span class="modal-title danger">Wiping Credentials...</span>
+        </div>
+        <div class="modal-body">
+          <p>Device is rebooting. Follow these steps to reconnect:</p>
+          <div class="reset-steps">
+            <div class="reset-step">
+              <div class="reset-step-num">1</div>
+              <div class="reset-step-text">Open Wi-Fi settings on your phone or computer.</div>
+            </div>
+            <div class="reset-step">
+              <div class="reset-step-num">2</div>
+              <div class="reset-step-text">Connect to hotspot: <strong>AirMeter-Setup</strong></div>
+            </div>
+            <div class="reset-step">
+              <div class="reset-step-num">3</div>
+              <div class="reset-step-text">Visit <a href="http://airmeter.local">airmeter.local</a> to run setup again.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── RESTART MODAL ── -->
+  <div class="modal-overlay" id="restart-modal-overlay">
+    <div class="modal" id="restart-modal-box">
+
+      <!-- STEP 1: Confirm -->
+      <div id="restart-step-confirm">
+        <div class="modal-header">
+          <div class="modal-icon warning">
+            <svg viewBox="0 0 14 14" fill="none">
+              <path d="M11 7A4 4 0 1 1 7 3M7 1v3l2-1.5L7 1" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <span class="modal-title warning">Restart Device</span>
+        </div>
+        <div class="modal-body">
+          <p>The device will restart. Your network credentials and settings are <strong>kept intact</strong>.</p>
+          <div class="modal-actions">
+            <button class="btn-cancel" onclick="closeRestartModal()">Cancel</button>
+            <button class="btn-confirm warning" onclick="executeRestart()">Restart</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- STEP 2: Restarting -->
+      <div id="restart-step-restarting" class="hidden">
+        <div class="modal-header">
+          <div class="modal-icon">
+            <span class="spinner-inline warning" style="margin:0"></span>
+          </div>
+          <span class="modal-title warning">Restarting...</span>
+        </div>
+        <div class="modal-body">
+          <p>The device is restarting. Please wait...</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+
+  <script>
+    /* ── FLUID SCALE ENGINE ──────────────────────────────────────────────
+     *
+     * Converts viewport width → a root font-size in px.
+     * All CSS uses em/rem, so everything scales together.
+     *
+     * Formula:  fontSize = viewportWidth * SCALE_FACTOR
+     * Clamped between MIN_PX and MAX_PX to prevent extremes.
+     *
+     * Tune SCALE_FACTOR to taste:
+     *   0.018 → at 400px wide, 1rem = 7.2px  (matches the original design)
+     *   0.020 → slightly larger at any given width
+     *
+     * ─────────────────────────────────────────────────────────────────── */
+    const SCALE_FACTOR = 0.018;   // vw fraction → rem
+    const MIN_PX = 7;       // never smaller than this
+    const MAX_PX = 22;      // never larger than this
+
+    function applyScale() {
+      const fs = Math.min(MAX_PX, Math.max(MIN_PX, window.innerWidth * SCALE_FACTOR));
+      document.documentElement.style.fontSize = fs + 'px';
+    }
+
+    applyScale(); // run immediately (before paint)
+    window.addEventListener('resize', applyScale);
+
+    /* ── APP LOGIC ────────────────────────────────────────────────────── */
+    const $ = id => document.getElementById(id);
+
+    function openResetModal() {
+      $('modal-overlay').classList.add('visible');
+    }
+
+    function closeResetModal() {
+      $('modal-overlay').classList.remove('visible');
+      setTimeout(() => {
+        $('step-confirm').classList.remove('hidden');
+        $('step-resetting').classList.add('hidden');
+      }, 200);
+    }
+
+    function executeReset() {
+      $('step-confirm').classList.add('hidden');
+      $('step-resetting').classList.remove('hidden');
+      fetch('/api/factory-reset', { method: 'POST' })
+        .then(res => res.json())
+        .catch(() => console.log('Device connection severed. System rebooting.'));
+    }
+
+    function openRestartModal() {
+      document.getElementById('restart-step-confirm').classList.remove('hidden');
+      document.getElementById('restart-step-restarting').classList.add('hidden');
+      document.getElementById('restart-modal-overlay').classList.add('visible');
+    }
+
+    function closeRestartModal() {
+      document.getElementById('restart-modal-overlay').classList.remove('visible');
+    }
+
+    async function executeRestart() {
+      document.getElementById('restart-step-confirm').classList.add('hidden');
+      document.getElementById('restart-step-restarting').classList.remove('hidden');
+
+      try {
+        await fetch('/api/restart', { method: 'POST' });
+      } catch (_) {
+        // Expected — device drops connection during restart
+      }
+
+      setTimeout(() => closeRestartModal(), 6000);
+    }
+
+    function getSignalBars(rssi) {
+      if (rssi >= -55) return 4;
+      if (rssi >= -67) return 3;
+      if (rssi >= -78) return 2;
+      return 1;
+    }
+
+    function getSystemData() {
+      fetch('/api/system', { method: 'GET' })
+        .then(res => res.json())
+        .then(data => {
+          // Safely update simple text elements
+          if ($('firmware_version').innerText !== `v${data.firmware}`) {
+            $('firmware_version').innerText = `v${data.firmware}`;
+          }
+          if ($('ip_address').innerText !== data.ipAddress) {
+            $('ip_address').innerText = data.ipAddress;
+            $('ip_address').href = `http://${data.ipAddress}/`;
+          }
+          if ($('ssid').innerText !== data.ssid) {
+            $('ssid').innerText = data.ssid;
+          }
+
+          // WiFi Signal Bars - Avoid rewriting HTML if bars match
+          const bars = getSignalBars(data.rssi);
+          const wifiContainer = document.getElementById('wifi-bars');
+          const currentLitCount = wifiContainer.querySelectorAll('.lit').length;
+
+          // Only rebuild HTML if the signal strength actually changed
+          if (currentLitCount !== bars || wifiContainer.children.length === 0) {
+            wifiContainer.innerHTML = [1, 2, 3, 4]
+              .map(n => `<span class="${n <= bars ? 'lit' : ''}"></span>`)
+              .join('');
+          }
+
+          // StatusDot - FIXED: Changed statusDot to statusDot
+          const last_seen = data.last_seen;
+          const statusDot = document.querySelector('.status-dot');
+
+          if (statusDot) {
+            statusDot.classList.remove('green', 'yellow', 'red');
+            if (last_seen === -1) {
+              statusDot.classList.add('red');
+            } else if (last_seen <= 5) {
+              statusDot.classList.add('green');
+            } else if (last_seen <= 10) {
+              statusDot.classList.add('yellow');
+            } else {
+              statusDot.classList.add('red');
+            }
+          }
+
+          // Memory
+          if (data && data.memory) {
+            const memoryKB = Math.floor(parseInt(data.memory) / 1024);
+            $('free_memory').innerText = `${memoryKB} KB`;
+          } else {
+            $('free_memory').innerText = 'Unavailable';
+          }
+
+          // Storage
+          if (data.littlefs_total && data.littlefs_total > 0) {
+              const total = data.littlefs_total;
+              const free = data.littlefs_free;
+              const used = total - free;
+              const usedPercent = ((used / total) * 100).toFixed(1);
+
+              // Format helper
+              const formatBytes = (bytes) => {
+                if (bytes >= 1048576) return (bytes / 1048576).toFixed(1) + ' MB';
+                if (bytes >= 1024) return (bytes / 1024).toFixed(0) + ' KB';
+                return bytes + ' B';
+              };
+
+              // 1. Set the main prominent text (e.g., "1.0 MB free")
+              document.getElementById('storage_text').textContent = `${formatBytes(free)} free`;
+
+              // 2. Set the graphical bar width percentage
+              document.getElementById('storage-progress').style.width = `${usedPercent}%`;
+
+              // 3. Inject the clean detailed breakdown into the hover hint tooltip
+              const tooltipText = `${formatBytes(used)} / ${formatBytes(total)} (${usedPercent}% used)`;
+              document.querySelector('.storage-wrapper').setAttribute('title', tooltipText);
+              
+            } else {
+              document.getElementById('storage_text').textContent = "Offline";
+              document.getElementById('storage-progress').style.width = "0%";
+              document.querySelector('.storage-wrapper').setAttribute('title', "LittleFS Unmounted");
+            }
+
+        })
+        .catch((err) => console.log('Could not read system data.', err))
+        .finally(() => {
+          // Schedule the NEXT check exactly 1 second after this one finishes
+          setTimeout(getSystemData, 1000);
+        });
+    }
+
+    // Kick off the loop initially
+    getSystemData();
+  </script>
+
+</body>
+
+</html>

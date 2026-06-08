@@ -1,0 +1,928 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AirMeter Provisioning Wizard</title>
+  <style>
+    :root {
+      --bg:           #0a0c0e;
+      --panel:        #111416;
+      --panel-2:      #181c1f;
+      --border:       #252a2e;
+      --border-bright:#2e3538;
+      --accent:       #f5a623;
+      --accent-dim:   rgba(245,166,35,0.12);
+      --accent-glow:  rgba(245,166,35,0.25);
+      --green:        #3ddc84;
+      --green-dim:    rgba(61,220,132,0.12);
+      --red:          #ff5555;
+      --red-dim:      rgba(255,85,85,0.12);
+      --text:         #e8ecef;
+      --text-2:       #8a9199;
+      --text-3:       #4a5158;
+      --mono: ui-monospace, SFMono-Regular, 'SF Pro Mono', Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+      --sans: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html {
+      font-size: 10px; /* overridden immediately by JS */
+    }
+
+    body {
+      font-family: var(--sans);
+      background: var(--bg);
+      color: var(--text);
+      margin: 0;
+      padding: 0;
+      min-height: 100dvh;
+      background-image:
+        linear-gradient(rgba(245,166,35,0.02) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(245,166,35,0.02) 1px, transparent 1px);
+      background-size: 3.2em 3.2em;
+    }
+
+    /* ── CARD ── */
+    .card {
+      width: 100%;
+      background: var(--panel);
+      border: 1px solid var(--border-bright);
+      border-radius: 0.4em;
+      overflow: hidden;
+    }
+
+    /* ── HEADER BAR ── */
+    .card-header {
+      background: var(--panel-2);
+      border-bottom: 1px solid var(--border-bright);
+      padding: 1.2em 2em;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .device-badge {
+      display: flex;
+      align-items: center;
+      gap: 1em;
+    }
+
+    .status-dot {
+      width: 0.8em;
+      height: 0.8em;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 0.8em var(--green);
+      animation: pulse-dot 2s ease-in-out infinite;
+      flex-shrink: 0;
+    }
+
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.4; }
+    }
+
+    .device-name {
+      font-family: var(--mono);
+      font-size: 1.2em;
+      font-weight: 600;
+      color: var(--text-2);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .header-meta {
+      font-family: var(--mono);
+      font-size: 1em;
+      color: var(--text-3);
+      letter-spacing: 0.05em;
+    }
+
+    /* ── BODY ── */
+    .card-body {
+      padding: 2.4em 2em;
+    }
+
+    /* ── SCREEN TITLES ── */
+    .screen-title {
+      font-family: var(--mono);
+      font-size: 1em;
+      font-weight: 600;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 0.6em;
+    }
+
+    h1 {
+      font-family: var(--sans);
+      font-size: 2em;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 2em;
+      letter-spacing: -0.015em;
+    }
+
+    /* ── SECTION ROW ── */
+    .row {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      margin-bottom: 1.4em;
+    }
+
+    .row h1 { margin-bottom: 0; }
+
+    /* ── SCAN BUTTON ── */
+    .btn-scan {
+      font-family: var(--mono);
+      font-size: 1.1em;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      color: var(--accent);
+      background: var(--accent-dim);
+      border: 1px solid rgba(245,166,35,0.25);
+      border-radius: 0.3em;
+      padding: 0.5em 1em;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .btn-scan:hover {
+      background: rgba(245,166,35,0.2);
+      border-color: rgba(245,166,35,0.45);
+    }
+
+    .btn-scan:disabled {
+      color: var(--text-3);
+      background: transparent;
+      border-color: var(--border);
+      cursor: not-allowed;
+    }
+
+    /* ── NETWORK LIST ── */
+    .list-box {
+      border: 1px solid var(--border-bright);
+      border-radius: 0.3em;
+      max-height: 26em;
+      overflow-y: auto;
+      margin-bottom: 2em;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border-bright) transparent;
+    }
+
+    .list-box::-webkit-scrollbar        { width: 0.4em; }
+    .list-box::-webkit-scrollbar-track  { background: transparent; }
+    .list-box::-webkit-scrollbar-thumb  { background: var(--border-bright); border-radius: 0.2em; }
+
+    .net-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1.3em 1.6em;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      transition: background 0.1s;
+      position: relative;
+    }
+
+    .net-item:last-child  { border-bottom: none; }
+    .net-item:hover       { background: rgba(255,255,255,0.03); }
+
+    .net-item.selected {
+      background: var(--accent-dim);
+      border-color: rgba(245,166,35,0.2);
+    }
+
+    .net-item.selected::before {
+      content: '';
+      position: absolute;
+      left: 0; top: 0; bottom: 0;
+      width: 0.2em;
+      background: var(--accent);
+    }
+
+    .net-ssid {
+      font-size: 1.4em;
+      font-weight: 500;
+      color: var(--text);
+    }
+
+    .net-item.selected .net-ssid { color: var(--accent); }
+
+    /* Signal bars — heights in em so they scale */
+    .signal-bars {
+      display: flex;
+      align-items: flex-end;
+      gap: 0.2em;
+      height: 1.6em;
+    }
+
+    .signal-bars span {
+      display: block;
+      width: 0.4em;
+      background: var(--border-bright);
+      border-radius: 0.1em;
+      transition: background 0.2s;
+    }
+
+    .signal-bars span:nth-child(1) { height: 0.4em; }
+    .signal-bars span:nth-child(2) { height: 0.8em; }
+    .signal-bars span:nth-child(3) { height: 1.2em; }
+    .signal-bars span:nth-child(4) { height: 1.6em; }
+
+    .net-item.selected .signal-bars span.lit     { background: var(--accent); }
+    .net-item:not(.selected) .signal-bars span.lit { background: var(--text-2); }
+
+    /* ── PRIMARY BUTTON ── */
+    .btn {
+      display: block;
+      width: 100%;
+      padding: 1.3em;
+      border-radius: 0.3em;
+      font-family: var(--sans);
+      font-size: 1.4em;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      text-align: center;
+      box-sizing: border-box;
+      text-decoration: none;
+      letter-spacing: 0.01em;
+      transition: opacity 0.15s, transform 0.1s, box-shadow 0.15s;
+    }
+
+    .btn:active:not(:disabled) { transform: scale(0.99); }
+
+    .btn-primary { background: var(--accent); color: #0a0c0e; }
+
+    .btn-primary:hover:not(:disabled) {
+      box-shadow: 0 0 2em var(--accent-glow);
+    }
+
+    .btn-primary:disabled {
+      background: var(--panel-2);
+      color: var(--text-3);
+      cursor: not-allowed;
+      border: 1px solid var(--border);
+    }
+
+    /* ── BACK BUTTON ── */
+    .btn-back {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.6em;
+      font-family: var(--mono);
+      font-size: 1.1em;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-2);
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 0;
+      margin-bottom: 2em;
+      transition: color 0.15s;
+    }
+
+    .btn-back:hover { color: var(--accent); }
+
+    .btn-back svg {
+      width: 1.4em;
+      height: 1.4em;
+      transition: transform 0.15s;
+    }
+
+    .btn-back:hover svg { transform: translateX(-0.2em); }
+
+    /* ── NETWORK BANNER ── */
+    .banner {
+      background: var(--panel-2);
+      border: 1px solid var(--border-bright);
+      border-radius: 0.3em;
+      padding: 1.2em 1.4em;
+      margin-bottom: 1.8em;
+      display: flex;
+      align-items: center;
+      gap: 1em;
+    }
+
+    .banner svg {
+      width: 2.4em;
+      height: 2.4em;
+      flex-shrink: 0;
+    }
+
+    .banner-ssid {
+      font-family: var(--mono);
+      font-size: 1.3em;
+      font-weight: 600;
+      color: var(--accent);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* ── PASSWORD INPUT ── */
+    .input-wrap {
+      position: relative;
+      margin-bottom: 1.6em;
+    }
+
+    .input-wrap input {
+      width: 100%;
+      padding: 1.3em 4.4em 1.3em 1.4em;
+      background: var(--panel-2);
+      border: 1px solid var(--border-bright);
+      border-radius: 0.3em;
+      font-family: var(--mono);
+      font-size: 1.4em;
+      color: var(--text);
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+
+    .input-wrap input::placeholder { color: var(--text-3); }
+
+    .input-wrap input:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 0.3em var(--accent-dim);
+    }
+
+    .input-wrap input:focus + .input-label { color: var(--accent); }
+
+    .input-label {
+      position: absolute;
+      top: -0.8em;
+      left: 1em;
+      font-family: var(--mono);
+      font-size: 1em;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-3);
+      background: var(--panel-2);
+      padding: 0 0.4em;
+      transition: color 0.15s;
+    }
+
+    .eye-btn {
+      position: absolute;
+      right: 1.2em;
+      top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--text-3);
+      padding: 0.4em;
+      display: flex;
+      align-items: center;
+      transition: color 0.15s;
+    }
+
+    .eye-btn:hover { color: var(--text-2); }
+
+    .eye-btn svg {
+      width: 1.6em;
+      height: 1.6em;
+    }
+
+    /* ── ERROR ── */
+    .error {
+      font-family: var(--mono);
+      font-size: 1.2em;
+      color: var(--red);
+      background: var(--red-dim);
+      border: 1px solid rgba(255,85,85,0.2);
+      border-radius: 0.3em;
+      padding: 1em 1.2em;
+      margin-bottom: 1.6em;
+      display: none;
+    }
+
+    .error.visible { display: block; }
+
+    /* ── LOADING ── */
+    .loading-area {
+      display: none;
+      align-items: center;
+      gap: 1.2em;
+      padding: 1.2em 1.4em;
+      background: var(--panel-2);
+      border: 1px solid var(--border-bright);
+      border-radius: 0.3em;
+      margin-bottom: 1.6em;
+    }
+
+    .loading-area.visible { display: flex; }
+
+    .spinner {
+      width: 1.8em;
+      height: 1.8em;
+      border: 0.2em solid var(--border-bright);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      flex-shrink: 0;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .loading-text {
+      font-family: var(--mono);
+      font-size: 1.2em;
+      color: var(--text-2);
+      letter-spacing: 0.05em;
+    }
+
+    /* ── SUCCESS SCREEN ── */
+    .success-icon {
+      width: 5.6em;
+      height: 5.6em;
+      border-radius: 50%;
+      background: var(--green-dim);
+      border: 1px solid rgba(61,220,132,0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 1.6em;
+      box-shadow: 0 0 2.4em rgba(61,220,132,0.15);
+      animation: pop-in 0.4s cubic-bezier(0.175,0.885,0.32,1.275) both;
+    }
+
+    .success-icon svg {
+      width: 2.4em;
+      height: 2.4em;
+    }
+
+    @keyframes pop-in {
+      from { transform: scale(0.5); opacity: 0; }
+      to   { transform: scale(1);   opacity: 1; }
+    }
+
+    .success-title {
+      font-family: var(--mono);
+      font-size: 1.4em;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--green);
+      text-align: center;
+      margin-bottom: 0.8em;
+    }
+
+    .success-sub {
+      font-size: 1.3em;
+      color: var(--text-2);
+      text-align: center;
+      line-height: 1.55;
+      margin-bottom: 2.2em;
+    }
+
+    .steps-box {
+      background: var(--panel-2);
+      border: 1px solid var(--border-bright);
+      border-radius: 0.3em;
+      padding: 1.6em;
+      margin-bottom: 2em;
+    }
+
+    .steps-title {
+      font-family: var(--mono);
+      font-size: 1em;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--text-3);
+      margin-bottom: 1.2em;
+    }
+
+    .step-row {
+      display: flex;
+      gap: 1.2em;
+      align-items: flex-start;
+      padding: 0.8em 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .step-row:last-child { border-bottom: none; padding-bottom: 0; }
+
+    .step-num {
+      font-family: var(--mono);
+      font-size: 1em;
+      font-weight: 600;
+      color: var(--accent);
+      background: var(--accent-dim);
+      border: 1px solid rgba(245,166,35,0.2);
+      border-radius: 0.2em;
+      width: 2em;
+      height: 2em;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .step-text {
+      font-size: 1.3em;
+      color: var(--text-2);
+      line-height: 1.5;
+      padding-top: 0.15em;
+    }
+
+    .step-text strong { color: var(--text); font-weight: 600; }
+
+    .step-text a {
+      color: var(--accent);
+      text-decoration: none;
+      font-family: var(--mono);
+      font-size: 0.92em;
+    }
+
+    .step-text a:hover { text-decoration: underline; }
+
+    .migration-warning {
+      display: none;
+      background: var(--red-dim);
+      border: 1px solid rgba(255,85,85,0.2);
+      border-radius: 0.3em;
+      padding: 1.2em 1.4em;
+      margin-bottom: 1.6em;
+    }
+
+    .migration-warning.visible { display: block; }
+
+    .migration-warning p {
+      font-family: var(--mono);
+      font-size: 1.1em;
+      color: var(--red);
+      line-height: 1.5;
+      letter-spacing: 0.02em;
+    }
+
+    .migration-warning strong { color: var(--red); }
+
+    .btn-success { background: var(--green); color: #0a0c0e; }
+
+    .btn-success:hover:not(:disabled) {
+      box-shadow: 0 0 2em rgba(61,220,132,0.3);
+    }
+
+    /* ── DIVIDER ── */
+    .divider {
+      height: 1px;
+      background: var(--border);
+      margin: 2em 0;
+    }
+
+    /* ── HIDDEN ── */
+    .hidden { display: none !important; }
+
+    /* ── EMPTY / LOADING STATE ── */
+    .list-placeholder {
+      padding: 3.2em 2em;
+      text-align: center;
+      font-family: var(--mono);
+      font-size: 1.2em;
+      color: var(--text-3);
+      letter-spacing: 0.05em;
+    }
+
+    .list-placeholder .scan-spinner {
+      width: 2em;
+      height: 2em;
+      border: 0.2em solid var(--border-bright);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      margin: 0 auto 1em;
+    }
+
+    /* Hide Edge/IE password reveal buttons */
+    input[type="password"]::-ms-reveal { display: none; }
+    input[type="password"]::-ms-clear  { display: none; }
+  </style>
+</head>
+
+<body>
+
+  <main class="card">
+
+    <!-- ── HEADER ── -->
+    <div class="card-header">
+      <div class="device-badge">
+        <div class="status-dot"></div>
+        <span class="device-name">AirMeter · Provisioning</span>
+      </div>
+      <span class="header-meta">SETUP MODE</span>
+    </div>
+
+    <!-- ── SCREEN 1: NETWORK SELECTION ── -->
+    <section id="scr-list" class="card-body">
+      <div class="row">
+        <div>
+          <div class="screen-title">Step 1 of 2</div>
+          <h1>Select Network</h1>
+        </div>
+        <button class="btn-scan" id="btn-scan" onclick="fetchNetworks()">Rescan</button>
+      </div>
+      <div class="list-box" id="net-list">
+        <div class="list-placeholder">
+          <div class="scan-spinner"></div>
+          Scanning for networks...
+        </div>
+      </div>
+      <button class="btn btn-primary" id="btn-next" disabled onclick="showScreen('scr-pass')">
+        Continue
+      </button>
+    </section>
+
+    <!-- ── SCREEN 2: PASSWORD ENTRY ── -->
+    <section id="scr-pass" class="hidden card-body">
+      <button class="btn-back" onclick="showScreen('scr-list')">
+        <svg viewBox="0 0 14 14" fill="none">
+          <path d="M9 2L4 7L9 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        Back
+      </button>
+      <div class="screen-title">Step 2 of 2</div>
+      <h1>Enter Password</h1>
+
+      <div class="input-wrap">
+        <span class="input-label">Network</span>
+        <div class="banner">
+          <svg viewBox="0 0 14 14" fill="none">
+            <g stroke="#4a5158" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M2 5.5C3.4 4.1 5.15 3.3 7 3.3C8.85 3.3 10.6 4.1 12 5.5"/>
+              <path d="M3.7 7.1C4.7 6.1 5.8 5.6 7 5.6C8.2 5.6 9.3 6.1 10.3 7.1"/>
+              <path d="M5.1 8.8C5.7 8.2 6.3 7.9 7 7.9C7.7 7.9 8.3 8.2 8.9 8.8"/>
+              <circle cx="7" cy="10.6" r="0.9" fill="#4a5158" stroke="none"/>
+            </g>
+          </svg>
+          <span class="banner-ssid" id="target-ssid"></span>
+        </div>
+      </div>
+
+      <div class="input-wrap">
+        <input type="password" id="wifi-pass" placeholder="Enter Wi-Fi password" autocomplete="current-password">
+        <span class="input-label">Password</span>
+        <button class="eye-btn" id="eye-btn" onclick="togglePassword()" type="button" tabindex="-1">
+          <svg id="eye-icon" viewBox="0 0 16 16" fill="none">
+            <path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z" stroke="currentColor" stroke-width="1.2"/>
+            <circle cx="8" cy="8" r="2" stroke="currentColor" stroke-width="1.2"/>
+          </svg>
+        </button>
+      </div>
+
+      <div id="error-msg" class="error"></div>
+      <div id="loading-area" class="loading-area">
+        <div class="spinner"></div>
+        <span class="loading-text">Verifying credentials...</span>
+      </div>
+
+      <button class="btn btn-primary" id="btn-submit" onclick="submitCredentials()">Connect to Network</button>
+    </section>
+
+    <!-- ── SCREEN 3: SUCCESS ── -->
+    <section id="scr-done" class="hidden card-body">
+      <div class="success-icon">
+        <svg viewBox="0 0 24 24" fill="none">
+          <path d="M5 13l4 4L19 7" stroke="#3ddc84" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <div class="success-title">Setup Complete</div>
+      <p class="success-sub">Device is joining your network.<br>This takes 15–30 seconds.</p>
+
+      <div class="steps-box">
+        <div class="steps-title">Next Steps</div>
+        <div class="step-row">
+          <div class="step-num">1</div>
+          <div class="step-text">Device will disconnect from this hotspot.</div>
+        </div>
+        <div class="step-row">
+          <div class="step-num">2</div>
+          <div class="step-text">Reconnect your device to: <strong id="lbl-target-ssid"></strong></div>
+        </div>
+        <div class="step-row">
+          <div class="step-num">3</div>
+          <div class="step-text">Access your multimeter at <a href="http://airmeter.local">airmeter.local</a></div>
+        </div>
+      </div>
+
+      <div id="migration-warning" class="migration-warning">
+        <p>
+          <strong>⚠ Still searching...</strong><br>
+          Ensure you are connected to <strong id="lbl-warning-ssid"></strong>.
+        </p>
+      </div>
+
+      <button id="btn-migrate" class="btn btn-primary" disabled>Initializing...</button>
+    </section>
+
+  </main>
+
+
+  <script>
+    /* ── FLUID SCALE ENGINE ──────────────────────────────────────────────
+     * Same system as index.html — tune SCALE_FACTOR to taste.
+     * At 400px wide  → 1rem = 7.2px  (matches original design feel)
+     * At 800px wide  → 1rem = 14.4px (everything doubles)
+     * At 1200px wide → 1rem = 21.6px (everything triples, capped at MAX_PX)
+     * ─────────────────────────────────────────────────────────────────── */
+    const SCALE_FACTOR = 0.018;
+    const MIN_PX       = 7;
+    const MAX_PX       = 22;
+
+    function applyScale() {
+      const fs = Math.min(MAX_PX, Math.max(MIN_PX, window.innerWidth * SCALE_FACTOR));
+      document.documentElement.style.fontSize = fs + 'px';
+    }
+
+    applyScale();
+    window.addEventListener('resize', applyScale);
+
+    /* ── APP LOGIC ────────────────────────────────────────────────────── */
+    let selectedSSID = "";
+    const $ = id => document.getElementById(id);
+
+    function showScreen(screenId) {
+      ['scr-list', 'scr-pass', 'scr-done'].forEach(id => $(id).classList.add('hidden'));
+      $(screenId).classList.remove('hidden');
+      if (screenId === 'scr-pass') {
+        $('target-ssid').innerText = selectedSSID;
+        const err = $('error-msg');
+        err.innerText = "";
+        err.classList.remove('visible');
+        $('wifi-pass').value = "";
+        $('wifi-pass').focus();
+      }
+    }
+
+    function togglePassword() {
+      const input = $('wifi-pass');
+      const icon  = $('eye-icon');
+      if (input.type === 'password') {
+        input.type = 'text';
+        icon.innerHTML = `<path d="M2 2l12 12M6.5 6.6A3 3 0 0010.4 10.4M4.2 4.3C2.8 5.4 1.8 6.8 1 8c1.5 2.5 4.2 5 7 5 1.2 0 2.3-.4 3.3-1M7 4.1C7.3 4 7.7 4 8 4c2.8 0 5.5 2.5 7 5-.5.8-1.1 1.6-1.8 2.3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" fill="none"/>`;
+      } else {
+        input.type = 'password';
+        icon.innerHTML = `<path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z" stroke="currentColor" stroke-width="1.2"/><circle cx="8" cy="8" r="2" stroke="currentColor" stroke-width="1.2"/>`;
+      }
+    }
+
+    function getSignalBars(rssi) {
+      if (rssi >= -55) return 4;
+      if (rssi >= -67) return 3;
+      if (rssi >= -78) return 2;
+      return 1;
+    }
+
+    function fetchNetworks() {
+      const btn  = $('btn-scan');
+      const list = $('net-list');
+      btn.disabled = true;
+      btn.innerText = "Scanning...";
+      list.innerHTML = `<div class="list-placeholder"><div class="scan-spinner"></div>Scanning for networks...</div>`;
+
+      (function doPoll() {
+        fetch('/api/scan')
+          .then(res => res.json())
+          .then(data => {
+            if (data.status === "scanning") { setTimeout(doPoll, 1000); return; }
+            btn.disabled = false;
+            btn.innerText = "Rescan";
+
+            if (!data.length) {
+              list.innerHTML = `<div class="list-placeholder">No networks detected.</div>`;
+              return;
+            }
+
+            list.innerHTML = "";
+            data.forEach(item => {
+              const bars     = getSignalBars(item.rssi);
+              const barsHTML = [1,2,3,4].map(n => `<span class="${n <= bars ? 'lit' : ''}"></span>`).join('');
+              const div = document.createElement('div');
+              div.className = 'net-item';
+              div.innerHTML  = `<span class="net-ssid">${item.ssid}</span><div class="signal-bars">${barsHTML}</div>`;
+              div.onclick = () => {
+                document.querySelectorAll('.net-item').forEach(el => el.classList.remove('selected'));
+                div.classList.add('selected');
+                selectedSSID = item.ssid;
+                $('btn-next').disabled = false;
+              };
+              list.appendChild(div);
+            });
+          })
+          .catch(() => {
+            btn.disabled = false;
+            btn.innerText = "Rescan";
+            list.innerHTML = `<div class="list-placeholder" style="color:var(--red)">Scan failed. Check module.</div>`;
+          });
+      })();
+    }
+
+    function obfuscate(str, key) {
+      return [...str].map((c, i) =>
+        (c.charCodeAt(0) ^ key.charCodeAt(i % key.length))
+          .toString(16).padStart(2, '0')  // each byte as 2 hex chars
+      ).join('');
+    }
+
+    function submitCredentials() {
+      const pass = $('wifi-pass').value;
+      const err  = $('error-msg');
+      const load = $('loading-area');
+      const btn  = $('btn-submit');
+
+      err.innerText = "";
+      err.classList.remove('visible');
+      load.classList.add('visible');
+      btn.disabled = true;
+
+      const fd = new FormData();
+      fd.append('ssid', selectedSSID);
+      fd.append('pass', obfuscate(pass, 'bitsundbolts'));
+
+      fetch('/save', { method: 'POST', body: fd })
+        .then(res => res.json())
+        .then(data => {
+          if (data.status === "checking") pollConnectionStatus();
+          else resetFormState("Form submission rejected by module core.");
+        })
+        .catch(() => resetFormState("Network tracking timeout or connection error."));
+
+      function pollConnectionStatus() {
+        fetch('/api/status')
+          .then(res => res.json())
+          .then(data => {
+            if (data.status === "still_checking") {
+              setTimeout(pollConnectionStatus, 1000);
+            } else if (data.status === "success") {
+              load.classList.remove('visible');
+              $('lbl-target-ssid').innerText = selectedSSID;
+              $('lbl-warning-ssid').innerText = selectedSSID;
+              showScreen('scr-done');
+              startMigrationSequence();
+            } else {
+              resetFormState("Authentication failed: incorrect password.");
+            }
+          })
+          .catch(() => setTimeout(pollConnectionStatus, 1500));
+      }
+
+      function resetFormState(msg) {
+        load.classList.remove('visible');
+        btn.disabled = false;
+        err.innerText = msg;
+        err.classList.add('visible');
+      }
+    }
+
+    function startMigrationSequence() {
+      const btn = $('btn-migrate');
+      let countdown = 5;
+      let elapsed   = 0;
+
+      const migrationInterval = setInterval(() => {
+        countdown--;
+        if (countdown > 0) {
+          btn.innerText = `Initializing module (${countdown}s)...`;
+        } else {
+          clearInterval(migrationInterval);
+          btn.innerText = "Searching on local network...";
+          pollHomeNetwork();
+        }
+      }, 1000);
+
+      function pollHomeNetwork() {
+        elapsed++;
+        fetch('http://airmeter.local', { method: 'GET', mode: 'cors', credentials: 'omit' })
+          .then(res => {
+            if (!res.ok) throw 0;
+            $('migration-warning').classList.remove('visible');
+            btn.disabled = false;
+            btn.className = 'btn btn-success';
+            btn.innerText = "Open Dashboard →";
+            btn.onclick = () => window.location.href = "http://airmeter.local";
+          })
+          .catch(() => {
+            if (elapsed >= 20) $('migration-warning').classList.add('visible');
+            setTimeout(pollHomeNetwork, 1500);
+          });
+      }
+    }
+
+    fetchNetworks();
+  </script>
+</body>
+</html>

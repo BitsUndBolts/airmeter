@@ -1,0 +1,33 @@
+// Explicitly mapping to your ESP32-C3 SuperMini outer pins
+const int COM_PROBE = 5; // Labeled '5' (GPIO5) on the top-right header
+const int SEG_PROBE = 6; // Labeled '6' (GPIO6) right below it
+
+int loopCounter = 0;
+bool ledState = false;
+const int ONBOARD_LED = 8; // GPIO8 is the built-in blue LED on the C3 SuperMini
+
+void setup() {
+  pinMode(COM_PROBE, OUTPUT);
+  pinMode(SEG_PROBE, OUTPUT);
+  pinMode(ONBOARD_LED, OUTPUT);
+}
+
+void loop() {
+  // Phase 1: 3.3V differential across the display glass
+  digitalWrite(COM_PROBE, HIGH);
+  digitalWrite(SEG_PROBE, LOW);
+  delay(2); // 2ms timing matching your AN870 scope capture
+
+  // Phase 2: Complete inversion to prevent DC screen burn
+  digitalWrite(COM_PROBE, LOW);
+  digitalWrite(SEG_PROBE, HIGH);
+  delay(2); 
+
+  // Heartbeat LED tracker (toggles every 1 second)
+  loopCounter++;
+  if (loopCounter >= 250) {
+    ledState = !ledState;
+    digitalWrite(ONBOARD_LED, ledState);
+    loopCounter = 0;
+  }
+}

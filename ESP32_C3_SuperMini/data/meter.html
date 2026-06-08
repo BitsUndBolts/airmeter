@@ -1,0 +1,915 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AN870 Dashboard</title>
+    <style>
+        @font-face {
+            font-family: 'MultimeterFont';
+            src: url('./DejaVuSans.woff2') format('woff2');
+        }
+
+        :root {
+            --lcd-font: 'MultimeterFont';
+            --zoom-level: 1;
+            --lcd-bg: #000;
+            --lcd-on: #000;
+            --lcd-off: #000;
+            --lcd-border: #000;
+            --themes-bg: #000;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            transform: scale(var(--zoom-level));
+            transform-origin: top left;
+            width: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: var(--lcd-bg);
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        polygon {
+            fill: var(--lcd-off);
+            transition: fill 0.12s ease-in-out;
+        }
+
+        polygon.on {
+            fill: var(--lcd-on);
+        }
+
+        .wrap {
+            font-family: var(--lcd-font);
+            display: inline-block;
+            /* shrink-wrap to content, no centering */
+            margin: 0;
+            padding: 0;
+        }
+
+        .screen {
+            background: var(--lcd-bg);
+            border: 3px solid var(--lcd-border);
+            border-radius: 4px;
+            padding: 4px 14px 12px 14px;
+            display: inline-block;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.2s ease-in-out, visibility 0.2s ease-in-out;
+        }
+
+        .screen.visible {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .top-bar {
+            display: flex;
+            margin-bottom: 10px;
+        }
+
+        /* .sym and .bsym share identical rules — merged */
+        .sym,
+        .bsym {
+            color: var(--lcd-off);
+            transition: color 0.12s ease-in-out;
+            user-select: none
+        }
+
+        .sym.on,
+        .bsym.on {
+            color: var(--lcd-on)
+        }
+
+        .main-row {
+            display: flex;
+            align-items: flex-end
+        }
+
+        .left-col {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            padding: 6px 6px 0 0;
+            height: 120px
+        }
+
+        .left-sym {
+            font-size: 20px;
+            position: relative;
+            color: var(--lcd-off);
+            user-select: none;
+            line-height: 1.15;
+            transition: color 0.12s ease-in-out;
+        }
+
+        .left-sym.on {
+            color: var(--lcd-on)
+        }
+
+        .control_sym {
+            cursor: pointer;
+        }
+
+        .control_sym:hover {
+            opacity: 0.65
+        }
+
+        .battery {
+            margin: 34px 0 0 6px;
+            width: 19px;
+            height: 28px;
+            border: 2.5px solid var(--lcd-off);
+            border-radius: 2px;
+            position: relative;
+            transition: border-color 0.12s ease-in-out;
+        }
+
+        .battery::after {
+            content: '';
+            position: absolute;
+            right: 50%;
+            top: -3px;
+            left: 4px;
+            transform: translateY(-50%);
+            width: 7px;
+            height: 4px;
+            background: var(--lcd-off);
+            border-radius: 1px 1px 0 0;
+            transition: background 0.12s ease-in-out;
+        }
+
+        .battery-fill {
+            position: absolute;
+            left: 2px;
+            top: 16px;
+            right: 2px;
+            bottom: 2px;
+            background: var(--lcd-off);
+            transition: background 0.12s ease-in-out;
+            display: flex;
+            align-items: center;
+            justify-content: center
+        }
+
+        .battery-plus {
+            left: 3px;
+            top: -1px;
+            position: relative;
+            font-size: 11px;
+            color: var(--lcd-off);
+            line-height: 1;
+            transition: color 0.12s ease-in-out;
+            cursor: default;
+            user-select: none;
+        }
+
+        .battery.on .battery-plus {
+            color: var(--lcd-on)
+        }
+
+        .battery.on {
+            border-color: var(--lcd-on)
+        }
+
+        .battery.on::after {
+            background: var(--lcd-on)
+        }
+
+        .battery.on .battery-fill {
+            background: var(--lcd-on)
+        }
+
+        /* neg bar */
+        .neg-bar {
+            position: absolute;
+            width: 30px;
+            height: 10px;
+            background: var(--lcd-off);
+            border-radius: 1px;
+            transition: background 0.12s ease-in-out;
+            margin-right: 3px;
+            margin-bottom: 54px
+        }
+
+        .neg-bar.on {
+            background: var(--lcd-on)
+        }
+
+        /* decimal point */
+        .dp-wrap {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-end;
+            margin: 0 6px
+        }
+
+        .dp {
+            position: relative;
+            left: -2px;
+            top: 5px;
+            width: 8px;
+            height: 12px;
+            background: var(--lcd-off);
+            transition: background 0.12s ease-in-out;
+        }
+
+        .dp.on {
+            background: var(--lcd-on)
+        }
+
+        .range-lbl {
+            font-size: 10px;
+            color: var(--lcd-off);
+            white-space: nowrap;
+            transition: color 0.12s ease-in-out;
+            position: absolute;
+            margin: 0 4px -17px 0;
+            cursor: default;
+            user-select: none;
+        }
+
+        .range-lbl.on {
+            color: var(--lcd-on)
+        }
+
+        .bottom-bar {
+            display: flex;
+            margin-top: 24px;
+        }
+
+        .theme-overlay {
+            display: grid;
+            grid-template-rows: 0fr;
+            overflow: visible;
+            /* NOT hidden — lets dropdown escape */
+            color: var(--lcd-on);
+            transition: grid-template-rows 0.3s ease-in-out 0.2s;
+        }
+
+        .overlay-content {
+            min-height: 0;
+            display: flex;
+            align-items: center;
+            margin-bottom: 6px;
+            opacity: 0;
+            transition: opacity 0.2s ease-in-out 0s;
+            border-bottom: 1px solid var(--lcd-on);
+        }
+
+        /* --- THE HOVER TRIGGERS --- */
+
+        .screen:hover .theme-overlay {
+            grid-template-rows: 1fr;
+            transition: grid-template-rows 0.3s ease-in-out 0s;
+        }
+
+
+        .screen:hover .overlay-content {
+            opacity: 1;
+            transition: opacity 0.25s ease-in-out 0.2s;
+        }
+
+        .custom-select {
+            position: relative;
+            font-family: var(--lcd-font);
+            font-size: 11px;
+            margin: 0 10px;
+            min-width: 140px;
+            user-select: none;
+        }
+
+        .cs-selected {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 2px 6px;
+            border: 1px solid var(--lcd-on);
+            border-radius: 3px;
+            background: var(--lcd-bg);
+            color: var(--lcd-on);
+            cursor: pointer;
+        }
+
+        .cs-arrow {
+            margin-left: 6px;
+            transition: transform 0.15s ease-in-out;
+        }
+
+        .custom-select.open .cs-arrow {
+            transform: rotate(180deg);
+        }
+
+        .cs-options {
+            display: none;
+            position: absolute;
+            top: calc(100% + 3px);
+            left: 0;
+            width: 100%;
+            border: 1px solid var(--lcd-on);
+            border-radius: 3px;
+            background: var(--themes-bg);
+            color: var(--lcd-on);
+            z-index: 9999;
+            max-height: 180px;
+            overflow-y: auto;
+            --sb-size: 6px;
+        }
+
+        .custom-select.open .cs-options {
+            display: block;
+        }
+
+        .cs-option {
+            padding: 4px 6px;
+            cursor: pointer;
+        }
+
+        .cs-option:hover,
+        .cs-option.selected {
+            background: var(--lcd-on);
+            color: var(--themes-bg);
+        }
+
+        .cs-options::-webkit-scrollbar {
+            width: var(--sb-size);
+        }
+
+        .cs-options::-webkit-scrollbar-track {
+            background: var(--lcd-off);
+            border-radius: 0 3px 3px 0;
+        }
+
+        .cs-options::-webkit-scrollbar-thumb {
+            background: var(--lcd-on);
+            border-radius: 3px;
+        }
+
+        .pl-8  { padding-left:  8px }
+        .pl-10 { padding-left: 10px }
+        .pl-15 { padding-left: 15px }
+        .pl-17 { padding-left: 17px }
+        .pl-34 { padding-left: 34px }
+        .ml-n12 { margin-left: -12px }
+        .mu-sym { position:relative; left:-14px; top:3px }
+        .s-one-wrap { display:inline-flex; align-items:center }
+        .s-one-svg  { cursor:pointer; margin-right:2px }
+        .digit-svg  { cursor:default }
+        .sqout-sym  { display:inline-flex; align-items:center }
+        .sqout-svg  { vertical-align:middle; overflow:visible }
+        .topbar-svg { vertical-align:middle; transform:translateY(-2px) }
+        .ml-auto    { margin-left: auto }
+        .rms-pad    { padding: 0 4px }
+
+        .wave-path {
+            opacity: 0.2;
+        }
+
+        .is-beeping .wave-path {
+            opacity: 1;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="wrap">
+        <div class="screen" id="screen">
+
+            <!-- THEME Selector -->
+            <div class="theme-overlay">
+                <div class="overlay-content">
+                    <span>THEME</span>
+                    <div class="custom-select" id="theme-select" tabindex="0">
+                        <div class="cs-selected" onclick="toggleDropdown()">
+                            <span id="cs-label">Classic</span>
+                            <span class="cs-arrow">▾</span>
+                        </div>
+                        <div class="cs-options" id="cs-options">
+                            <!-- filled by JS -->
+                        </div>
+                    </div>
+
+                    <span class="sym on control_sym" id="zoomOut" onclick="zoomOut()" title="Zoom Out">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2.5" stroke-linecap="round">
+                            <line x1="5" y1="12" x2="19" y2="12" />
+                        </svg>
+                    </span>
+
+                    <span class="sym on control_sym" id="resetZoom" onclick="resetZoom()" title="Reset Zoom">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="11" cy="11" r="6" />
+                            <line x1="16" y1="16" x2="22" y2="22" />
+                        </svg>
+                    </span>
+
+                    <span class="sym on control_sym" id="zoomIn" onclick="zoomIn()" title="Zoom In">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2.5" stroke-linecap="round">
+                            <line x1="12" y1="5" x2="12" y2="19" />
+                            <line x1="5" y1="12" x2="19" y2="12" />
+                        </svg>
+                    </span>
+
+                    <span class="sym on control_sym ml-auto" id="home" onclick="window.location.href='/'" title="Home">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M3 12 L12 3 L21 12" />
+                            <path d="M5 10 L5 21 L19 21 L19 10" />
+                            <path d="M9 21 L9 15 L15 15 L15 21" />
+                        </svg>
+                    </span>
+
+                </div>
+            </div>
+
+            <!-- TOP BAR -->
+            <div class="top-bar">
+                <span class="sym" id="s-apo">APO</span>
+                <span class="sym pl-8" id="s-hold">HOLD</span>
+                <span class="sym pl-8" id="s-rel">REL</span>
+                <span class="sym pl-8" id="s-max">MAX</span>
+                <span class="sym" id="s-min">MIN</span>
+
+                <span class="sym pl-8" id="s-diode">
+                    <svg width="28" height="15" viewBox="0 0 28 15" class="topbar-svg">
+                        <line x1="0" y1="7.5" x2="28" y2="7.5" stroke="currentColor" stroke-width="2" />
+                        <path d="M 7 1 L 7 14 L 17 7.5 Z" fill="currentColor" />
+                        <line x1="22" y1="1" x2="22" y2="14" stroke="currentColor" stroke-width="2" />
+                    </svg>
+                </span>
+
+                <span class="sym pl-8 is-beeping" id="s-buzzer">
+                    <svg width="26" height="18" viewBox="0 0 26 18" class="topbar-svg">
+                        <!-- Buzzer Body -->
+                        <path d="M2,5.5 L2,12.5 L5,12.5 L9.5,16 L9.5,2 L5,5.5 Z" fill="currentColor" />
+                        
+                        <!-- Sound Waves -->
+                        <path id="wave-inner" class="wave-path" d="M12.5,6 Q15,9 12.5,12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+                        <path id="wave-mid"   class="wave-path" d="M16,4 Q20,9 16,14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+                        <path id="wave-outer" class="wave-path" d="M20,2.5 Q25.5,9 20,15.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+                    </svg>
+                </span>
+
+                <span class="sym pl-8" id="s-pct">%</span>
+                <span class="sym pl-8" id="s-mega">M</span>
+                <span class="sym" id="s-kilo">k</span>
+                <span class="sym" id="s-ohm">Ω</span>
+                <span class="sym" id="s-hz">Hz</span>
+            </div>
+
+            <!-- MAIN ROW -->
+            <div class="main-row">
+
+                <!-- Left: DC/AC/battery -->
+                <div class="left-col">
+                    <span class="left-sym" id="s-dc">DC</span>
+                    <span class="left-sym" id="s-ac">AC</span>
+                    <div class="battery" id="s-bat">
+                        <div class="battery-plus">+</div>
+                        <div class="battery-fill"></div>
+                    </div>
+                </div>
+
+                <!-- Negative sign -->
+                <div class="neg-bar" id="s-neg"></div>
+
+                <!-- Leading "1": two vertical bars as SVG paths -->
+                <span class="sym s-one-wrap" id="s-one">
+                    <svg width="22" height="118" viewBox="0 0 22 118" class="s-one-svg">
+
+                        <!-- top-right vertical (segment B) -->
+                        <path id="s1sb" d="M10,13 L13,1 L14,1 L16,2 L18,4 L21,9 L22,14 L22,52 L16,58 L10,52 Z" fill="currentColor" />
+
+                        <!-- bottom-right vertical (segment C) -->
+                        <path id="s1sc" d="M10,66 L16,60 L22,66 L22,82 L22,104 L21,109 L18,114 L16,116 L14,117 L13,117 L10,104 Z" fill="currentColor" />
+                    </svg>
+                </span>
+
+                <!-- DP1 -->
+                <div class="dp-wrap">
+                    <div class="dp" id="dp1"></div>
+                    <div class="range-lbl" id="rl1">2</div>
+                </div>
+
+                <!-- Digit 1 -->
+                <svg id="digit1" width="62" height="118" viewBox="0 0 62 118" class="digit-svg">
+
+                    <!-- sa top horizontal (Top-Left Corner) -->
+                    <polygon id="d1sa" points="0,9 1,7 4,4 8,2 14,1 51,1 48,13 12,13" />
+
+                    <!-- sf top-left vertical -->
+                    <polygon id="d1sf" points="0,11 12,15 12,52 6,58 0,52" />
+
+                    <!-- sb top-right vertical (Top-Right Corner) -->
+                    <polygon id="d1sb" points="50,13 53,1 54,1 56,2 58,4 61,9 62,14 62,52 56,58 50,52" />
+
+                    <!-- sg middle horizontal -->
+                    <polygon id="d1sg" points="8,59 14,53 48,53 54,59 48,65 14,65" />
+
+                    <!-- se bottom-left vertical -->
+                    <polygon id="d1se" points="0,66 6,60 12,66 12,103 0,106" />
+
+                    <!-- sc bottom-right vertical (Bottom-Right Corner) -->
+                    <polygon id="d1sc" points="50,66 56,60 62,66 62,82 62,104 61,109 58,114 56,116 54,117 53,117 50,104" />
+
+                    <!-- sd bottom horizontal (Bottom-Left Corner) -->
+                    <polygon id="d1sd" points="0,108 12,105 48,105 51,117 14,117 8,116 4,114 1,111" />
+                </svg>
+
+
+                <!-- DP2 -->
+                <div class="dp-wrap">
+                    <div class="dp" id="dp2"></div>
+                    <div class="range-lbl" id="rl2">20</div>
+                </div>
+
+                <!-- Digit 2 -->
+                <svg id="digit2" width="62" height="118" viewBox="0 0 62 118" class="digit-svg">
+                    <polygon id="d2sa" points="0,9 1,7 4,4 8,2 14,1 51,1 48,13 12,13" />
+                    <polygon id="d2sf" points="0,11 12,15 12,52 6,58 0,52" />
+                    <polygon id="d2sb" points="50,13 53,1 54,1 56,2 58,4 61,9 62,14 62,52 56,58 50,52" />
+                    <polygon id="d2sg" points="8,59 14,53 48,53 54,59 48,65 14,65" />
+                    <polygon id="d2se" points="0,66 6,60 12,66 12,103 0,106" />
+                    <polygon id="d2sc" points="50,66 56,60 62,66 62,82 62,104 61,109 58,114 56,116 54,117 53,117 50,104" />
+                    <polygon id="d2sd" points="0,108 12,105 48,105 51,117 14,117 8,116 4,114 1,111" />
+                </svg>
+
+                <!-- DP3 -->
+                <div class="dp-wrap">
+                    <div class="dp" id="dp3"></div>
+                    <div class="range-lbl" id="rl3">200</div>
+                </div>
+
+                <!-- Digit 3 -->
+                <svg id="digit3" width="62" height="118" viewBox="0 0 62 118" class="digit-svg">
+                    <polygon id="d3sa" points="0,9 1,7 4,4 8,2 14,1 51,1 48,13 12,13" />
+                    <polygon id="d3sf" points="0,11 12,15 12,52 6,58 0,52" />
+                    <polygon id="d3sb" points="50,13 53,1 54,1 56,2 58,4 61,9 62,14 62,52 56,58 50,52" />
+                    <polygon id="d3sg" points="8,59 14,53 48,53 54,59 48,65 14,65" />
+                    <polygon id="d3se" points="0,66 6,60 12,66 12,103 0,106" />
+                    <polygon id="d3sc" points="50,66 56,60 62,66 62,82 62,104 61,109 58,114 56,116 54,117 53,117 50,104" />
+                    <polygon id="d3sd" points="0,108 12,105 48,105 51,117 14,117 8,116 4,114 1,111" />
+                </svg>
+
+                <!-- DP4 -->
+                <div class="dp-wrap">
+                    <div class="dp" id="dp4"></div>
+                    <div class="range-lbl" id="rl4">2000</div>
+                </div>
+
+                <!-- Digit 4 -->
+                <svg id="digit4" width="62" height="118" viewBox="0 0 62 118" class="digit-svg">
+                    <polygon id="d4sa" points="0,9 1,7 4,4 8,2 14,1 51,1 48,13 12,13" />
+                    <polygon id="d4sf" points="0,11 12,15 12,52 6,58 0,52" />
+                    <polygon id="d4sb" points="50,13 53,1 54,1 56,2 58,4 61,9 62,14 62,52 56,58 50,52" />
+                    <polygon id="d4sg" points="8,59 14,53 48,53 54,59 48,65 14,65" />
+                    <polygon id="d4se" points="0,66 6,60 12,66 12,103 0,106" />
+                    <polygon id="d4sc" points="50,66 56,60 62,66 62,82 62,104 61,109 58,114 56,116 54,117 53,117 50,104" />
+                    <polygon id="d4sd" points="0,108 12,105 48,105 51,117 14,117 8,116 4,114 1,111" />
+                </svg>
+
+            </div><!-- end main-row -->
+
+            <!-- BOTTOM BAR -->
+            <div class="bottom-bar">
+                <span class="bsym" id="s-truerms"><span>TRUE</span><span class="rms-pad">RMS</span></span>
+
+                <span class="bsym pl-15 sqout-sym" id="s-sqout">
+                    <svg width="36" height="16" viewBox="3 0 36 16" class="sqout-svg">
+                        <polyline points="1,15 5,15 5,2 13,2 13,15 21,15 21,2 29,2 29,15 33,15" fill="none"
+                            stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" />
+
+                        <text x="32" y="7" font-size="7" fill="currentColor">OUT</text>
+                    </svg>
+                </span>
+                <span class="bsym pl-34" id="s-auto">AUTO</span>
+                <span class="bsym pl-34" id="s-degc">°C</span>
+                <span class="bsym" id="s-degf">°F</span>
+                <span class="bsym pl-17" id="s-nano">n</span>
+
+                <span class="bsym" id="s-milli">m</span>
+                <span class="bsym mu-sym" id="s-mu">µ</span>
+
+                <span class="bsym ml-n12" id="s-farad">F</span>
+                <span class="bsym" id="s-volt">V</span>
+                <span class="bsym" id="s-amp">A</span>
+            </div>
+
+        </div><!-- end screen -->
+    </div>
+
+    <script>
+        const DEFAULT_THEME = "Classic";
+        const $ = id => document.getElementById(id);
+        const THEMES = {
+            "Classic": { bg: "#c8d8c0", on: "#1a1a1a", off: "#c0d0b7", border: "#030303" },
+            "Monotone": { bg: "#c8c8c0", on: "#101010", off: "#bcbcb4", border: "#050505" },
+            "Blue Wave": { bg: "#0a1a3a", on: "#d0e8ff", off: "#0e2248", border: "#06101f" },
+            "Sport": { bg: "#1c1c1c", on: "#d4e84a", off: "#252520", border: "#090909" },
+            "Amber": { bg: "#1a0e00", on: "#ffb000", off: "#2a1a00", border: "#0d0700" },
+            "Amber Warm": { bg: "#1f1200", on: "#e8900a", off: "#2c1c04", border: "#0f0900" },
+            "Emerald": { bg: "#041209", on: "#4dcc6a", off: "#071a0c", border: "#020804" },
+            "Phosphor White": { bg: "#0d0d0d", on: "#e8e8e0", off: "#1a1a18", border: "#060606" },
+            "Red Alert": { bg: "#1a0000", on: "#ff3333", off: "#280505", border: "#0a0000" },
+            "Neon Cyan": { bg: "#001a1a", on: "#00ffe0", off: "#002626", border: "#000d0d" },
+            "Paper & Ink": { bg: "#f0ece0", on: "#1a1610", off: "#e4e0d4", border: "#c8c4b8" },
+            "Purple Haze": { bg: "#120020", on: "#cc88ff", off: "#1c0030", border: "#080010" },
+            "Deep Sea": { bg: "#020d1a", on: "#00bfff", off: "#051a30", border: "#01060d" },
+            "Outrun": { bg: "#14001a", on: "#ff007f", off: "#280033", border: "#0a000d" },
+            "Terminal": { bg: "#051105", on: "#18e318", off: "#0b240b", border: "#020802" },
+            "Glacier": { bg: "#10161a", on: "#a3c2c2", off: "#1a242a", border: "#080b0d" },
+            "Glass Dark": { bg: "transparent", on: "#1a1a1a", off: "#8080801A", border: "transparent", themes_bg: "#f4f5f6" },
+            "Glass Bright": { bg: "transparent", on: "#e6f2ff", off: "#3a4d661A", border: "transparent", themes_bg: "#0d1117" }
+        };
+
+        let currentTheme = "Classic";
+        const ZOOM_LEVELS = [25, 50, 75, 100, 125, 150, 175, 200, 250, 300, 400, 500];
+        let currentZoomIndex = ZOOM_LEVELS.indexOf(100);
+
+        function updateZoom() {
+            const pct = ZOOM_LEVELS[currentZoomIndex];
+            document.documentElement.style.setProperty('--zoom-level', pct / 100);
+        }
+
+        function zoomIn()    { if (currentZoomIndex < ZOOM_LEVELS.length - 1) { currentZoomIndex++; updateZoom(); saveSettings() } }
+        function zoomOut()   { if (currentZoomIndex > 0)                      { currentZoomIndex--; updateZoom(); saveSettings() } }
+        function resetZoom() { currentZoomIndex = ZOOM_LEVELS.indexOf(100);     updateZoom(); saveSettings() }
+
+        // Build caches once, after DOM is ready
+        const SYM  = {};
+        const DP   = {};
+        const RL   = {};
+        const SEG  = {};
+
+        ['milli','ohm','buzzer','hold','rel','apo','auto','farad','hz','max','diode',
+        'neg','dc','ac','bat','one','truerms','sqout','pct','mega','kilo','degc',
+        'degf','nano','mu','volt','amp','min'].forEach(id => {
+            SYM[id] = $('s-' + id);
+        });
+
+        [1, 2, 3, 4].forEach(n => {
+            DP[n] = $('dp' + n);
+            RL[n] = $('rl' + n);
+        });
+
+        ['a','b','c','d','e','f','g'].forEach(seg => {
+            [1, 2, 3, 4].forEach(d => {
+                SEG[`${d}${seg}`] = $(`d${d}s${seg}`);
+            });
+        });
+
+        // Updated helpers — now just object lookups
+        function symbol(id, on)          { SYM[id]?.classList.toggle('on', on) }
+        function decimalPoint(n, on)     { DP[n]?.classList.toggle('on', on); RL[n]?.classList.toggle('on', on) }
+        function segment(dNum, name, on) { SEG[`${dNum}${name}`]?.classList.toggle('on', on) }
+
+        function buzzer(on) {
+            const buzzerContainer = $('s-buzzer');
+            
+            if (on) {
+                // Kill the old 500ms cycle class
+                buzzerContainer.classList.remove('is-beeping');
+                
+                // Force the browser to reset the animation track instantly
+                void buzzerContainer.offsetWidth; 
+                
+                // Fire the 450ms staggered ripple
+                buzzerContainer.classList.add('is-beeping');
+            } else {
+                // If the beep stops, ensure it drops back to the default static layout
+                buzzerContainer.classList.remove('is-beeping');
+            }
+        }
+
+        const displayPipeline = [
+            // =========================================================================
+            // COM0 BLOCK: Bits 00 to 14
+            // =========================================================================
+            /* Bit 00 (COM0, SEG0)  */ { run: (bit) => symbol("milli", bit === "1") },
+            /* Bit 01 (COM0, SEG1)  */ { run: (bit) => symbol("ohm", bit === "1") },
+            /* Bit 02 (COM0, SEG2)  */ { run: (bit) => symbol("buzzer", bit === "1") },
+            /* Bit 03 (COM0, SEG3)  */ { run: (bit) => symbol("hold", bit === "1") },
+            /* Bit 04 (COM0, SEG4)  */ { run: (bit) => segment(4, "b", bit === "1") },
+            /* Bit 05 (COM0, SEG5)  */ { run: (bit) => segment(4, "a", bit === "1") },
+            /* Bit 06 (COM0, SEG6)  */ { run: (bit) => segment(3, "b", bit === "1") },
+            /* Bit 07 (COM0, SEG7)  */ { run: (bit) => segment(3, "a", bit === "1") },
+            /* Bit 08 (COM0, SEG8)  */ { run: (bit) => segment(2, "b", bit === "1") },
+            /* Bit 09 (COM0, SEG9)  */ { run: (bit) => segment(2, "a", bit === "1") },
+            /* Bit 10 (COM0, SEG10) */ { run: (bit) => segment(1, "b", bit === "1") },
+            /* Bit 11 (COM0, SEG11) */ { run: (bit) => segment(1, "a", bit === "1") },
+            /* Bit 12 (COM0, SEG12) */ { run: (bit) => symbol("rel", bit === "1") },
+            /* Bit 13 (COM0, SEG13) */ { run: (bit) => symbol("apo", bit === "1") },
+            /* Bit 14 (COM0, SEG14) */ { run: (bit) => symbol("auto", bit === "1") },
+
+            // =========================================================================
+            // COM1 BLOCK: Bits 15 to 29
+            // =========================================================================
+            /* Bit 15 (COM1, SEG0)  */ { run: (bit) => symbol("farad", bit === "1") },
+            /* Bit 16 (COM1, SEG1)  */ { run: (bit) => symbol("hz", bit === "1") },
+            /* Bit 17 (COM1, SEG2)  */ { run: (bit) => symbol("max", bit === "1") },
+            /* Bit 18 (COM1, SEG3)  */ { run: (bit) => symbol("diode", bit === "1") },
+            /* Bit 19 (COM1, SEG4)  */ { run: (bit) => segment(4, "g", bit === "1") },
+            /* Bit 20 (COM1, SEG5)  */ { run: (bit) => segment(4, "f", bit === "1") },
+            /* Bit 21 (COM1, SEG6)  */ { run: (bit) => segment(3, "g", bit === "1") },
+            /* Bit 22 (COM1, SEG7)  */ { run: (bit) => segment(3, "f", bit === "1") },
+            /* Bit 23 (COM1, SEG8)  */ { run: (bit) => segment(2, "g", bit === "1") },
+            /* Bit 24 (COM1, SEG9)  */ { run: (bit) => segment(2, "f", bit === "1") },
+            /* Bit 25 (COM1, SEG10) */ { run: (bit) => segment(1, "g", bit === "1") },
+            /* Bit 26 (COM1, SEG11) */ { run: (bit) => segment(1, "f", bit === "1") },
+            /* Bit 27 (COM1, SEG12) */ null, // Clean No-Op placeholder for unmapped hardware line
+            /* Bit 28 (COM1, SEG13) */ { run: (bit) => symbol("neg", bit === "1") },
+            /* Bit 29 (COM1, SEG14) */ { run: (bit) => symbol("dc", bit === "1") },
+
+            // =========================================================================
+            // COM2 BLOCK: Bits 30 to 44
+            // =========================================================================
+            /* Bit 30 (COM2, SEG0)  */ { run: (bit) => symbol("volt", bit === "1") },
+            /* Bit 31 (COM2, SEG1)  */ { run: (bit) => symbol("nano", bit === "1") },
+            /* Bit 32 (COM2, SEG2)  */ { run: (bit) => symbol("mega", bit === "1") },
+            /* Bit 33 (COM2, SEG3)  */ { run: (bit) => symbol("degc", bit === "1") },
+            /* Bit 34 (COM2, SEG4)  */ { run: (bit) => segment(4, "c", bit === "1") },
+            /* Bit 35 (COM2, SEG5)  */ { run: (bit) => segment(4, "e", bit === "1") },
+            /* Bit 36 (COM2, SEG6)  */ { run: (bit) => segment(3, "c", bit === "1") },
+            /* Bit 37 (COM2, SEG7)  */ { run: (bit) => segment(3, "e", bit === "1") },
+            /* Bit 38 (COM2, SEG8)  */ { run: (bit) => segment(2, "c", bit === "1") },
+            /* Bit 39 (COM2, SEG9)  */ { run: (bit) => segment(2, "e", bit === "1") },
+            /* Bit 40 (COM2, SEG10) */ { run: (bit) => segment(1, "c", bit === "1") },
+            /* Bit 41 (COM2, SEG11) */ { run: (bit) => segment(1, "e", bit === "1") },
+            /* Bit 42 (COM2, SEG12) */ { run: (bit) => decimalPoint(1, bit === "1") }, // DP-2 layout (ID dp1)
+            /* Bit 43 (COM2, SEG13) */ { run: (bit) => symbol("one", bit === "1") }, // Fixed Left Half-Digit
+            /* Bit 44 (COM2, SEG14) */ { run: (bit) => symbol("min", bit === "1") },
+
+            // =========================================================================
+            // COM3 BLOCK: Bits 45 to 59
+            // =========================================================================
+            /* Bit 45 (COM3, SEG0)  */ { run: (bit) => symbol("amp", bit === "1") },
+            /* Bit 46 (COM3, SEG1)  */ { run: (bit) => symbol("mu", bit === "1") },
+            /* Bit 47 (COM3, SEG2)  */ { run: (bit) => symbol("kilo", bit === "1") },
+            /* Bit 48 (COM3, SEG3)  */ { run: (bit) => symbol("degf", bit === "1") },
+            /* Bit 49 (COM3, SEG4)  */ { run: (bit) => symbol("pct", bit === "1") },
+            /* Bit 50 (COM3, SEG5)  */ { run: (bit) => segment(4, "d", bit === "1") },
+            /* Bit 51 (COM3, SEG6)  */ { run: (bit) => decimalPoint(4, bit === "1") }, // DP-2000 layout (ID dp4)
+            /* Bit 52 (COM3, SEG7)  */ { run: (bit) => segment(3, "d", bit === "1") },
+            /* Bit 53 (COM3, SEG8)  */ { run: (bit) => decimalPoint(3, bit === "1") }, // DP-200 layout (ID dp3)
+            /* Bit 54 (COM3, SEG9)  */ { run: (bit) => segment(2, "d", bit === "1") },
+            /* Bit 55 (COM3, SEG10) */ { run: (bit) => decimalPoint(2, bit === "1") }, // DP-20 layout (ID dp2)
+            /* Bit 56 (COM3, SEG11) */ { run: (bit) => segment(1, "d", bit === "1") },
+            /* Bit 57 (COM3, SEG12) */ { run: (bit) => symbol("sqout", bit === "1") },
+            /* Bit 58 (COM3, SEG13) */ { run: (bit) => symbol("bat", bit === "1") },
+            /* Bit 59 (COM3, SEG14) */ {
+                run: (bit) => {
+                    const isTrue = bit === "1";
+                    symbol("ac", isTrue);
+                    symbol("truerms", isTrue);
+                }
+            } // Fires both interdependent symbols simultaneously
+        ];
+
+
+        function updateMultimeterDisplay(bitString) {
+            for (let i = 0; i < bitString.length; i++) {
+                const cfg = displayPipeline[i];
+                if (cfg) cfg.run(bitString[i]);
+            }
+        }
+
+        function applyTheme(name) {
+            const t = THEMES[name];
+            if (!t) return;
+            const r = document.documentElement;
+            r.style.setProperty('--lcd-bg', t.bg);
+            r.style.setProperty('--lcd-on', t.on);
+            r.style.setProperty('--lcd-off', t.off);
+            r.style.setProperty('--lcd-border', t.border);
+
+            r.style.setProperty('--themes-bg', t.themes_bg ?? t.bg);
+            currentTheme = name;
+
+            $('cs-label').textContent = name;
+            document.querySelectorAll('.cs-option').forEach(o =>
+                o.classList.toggle('selected', o.textContent === name)
+            );
+        }
+
+        const themeSelect = $('theme-select');
+        themeSelect.addEventListener('keydown', e => {
+            const options = Object.keys(THEMES).sort();
+            const current = $('cs-label').textContent;
+            let idx = options.indexOf(current);
+
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                pickTheme(options[Math.min(idx + 1, options.length - 1)]);
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                pickTheme(options[Math.max(idx - 1, 0)]);
+            } else if (e.key === 'Enter' || e.key === ' ') {
+                toggleDropdown();
+            } else if (e.key === 'Escape') {
+                themeSelect.classList.remove('open');
+            }
+        });
+
+        const optContainer = $('cs-options');
+        Object.keys(THEMES).sort().forEach(name => {
+            const div = document.createElement('div');
+            div.className = 'cs-option' + (name === DEFAULT_THEME ? ' selected' : '');
+            div.textContent = name;
+            div.onclick = () => pickTheme(name);
+            optContainer.appendChild(div);
+        });
+
+        function toggleDropdown() { themeSelect.classList.toggle('open') }
+        function pickTheme(name) {
+            applyTheme(name);
+            saveSettings();
+            themeSelect.classList.remove('open');
+        }
+        document.addEventListener('click', e => {
+            if (!themeSelect.contains(e.target)) themeSelect.classList.remove('open');
+        });
+
+        // Load settings
+        function loadSettings() {
+            fetch('/api/settings', { method: 'GET' })
+                .then(res => res.json())
+                .then(data => {
+                    const theme = (data.theme in THEMES) ? data.theme : 'Classic';
+                    const zoomIndex = data.zoomIndex ?? ZOOM_LEVELS.indexOf(100);
+
+                    currentZoomIndex = zoomIndex;
+                    updateZoom();
+                    applyTheme(theme);
+
+                    $('screen').classList.add('visible');
+                })
+                .catch(() => console.log('Could not read settings.'));
+        }
+
+        function saveSettings() {
+            fetch('/api/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ theme: currentTheme, zoomIndex: currentZoomIndex })
+            })
+            .then(r => r.json())
+            .then(d => { if (d.status === 'success') console.log('Settings saved to ESP32 Flash!') })
+            .catch(e => console.error('Error saving settings:', e));
+        }
+
+        if (window.location.protocol !== 'file:') {
+            loadSettings();
+        } else {
+            applyTheme(DEFAULT_THEME);
+            $('screen').classList.add('visible');
+            currentZoomIndex = 9;
+            updateZoom();
+            const t = THEMES[DEFAULT_THEME];
+            if (t) document.documentElement.style.setProperty('--lcd-off', t.on);
+        }
+
+        if ('EventSource' in window) {
+            const source = new EventSource('/events');
+
+            // 1. Your working custom event listener
+            source.addEventListener('multimeter-update', function (e) {
+                try {
+                    const data = JSON.parse(e.data);
+
+                    updateMultimeterDisplay(data.lcd);
+                    buzzer(data.buzzer === 1);
+                } catch (err) {
+                    console.error("Failed to parse event data:", err);
+                }
+            }, false);
+
+            // 2. Critical addition: Error handling (detects disconnects)
+            source.addEventListener('error', function (e) {
+                if (source.readyState === EventSource.CLOSED) {
+                    console.error("Connection was closed by the server.");
+                } else if (source.readyState === EventSource.CONNECTING) {
+                    console.warn("Connection lost. Browser is attempting to reconnect...");
+                }
+            }, false);
+
+            // 3. Optional: Clean up connection when user leaves the page
+            window.addEventListener('beforeunload', () => source.close());
+
+        } else {
+            console.error("Browser lacks Server-Sent Events capabilities.");
+        }
+
+    </script>
+</body>
+
+</html>
