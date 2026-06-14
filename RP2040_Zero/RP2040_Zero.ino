@@ -41,14 +41,15 @@
 //   the new rate index (1 flash = 1fps, 2 flashes = 3fps, etc.).
 //
 // Transmission Protocol:
-//   [ 0x55 ][ 0xAA ]          — 2-byte preamble
-//   [ 0x08 ]                  — payload length (8 bytes)
+//   [ 0x55 ][ 0xAA ]          — 2-byte preamble (sync marker)
+//   [ 0x09 ]                  — payload length (9 bytes); acts as implicit format tag
 //   [ SEQ  ]                  — rolling sequence number (0x00–0xFF)
+//   [ META ]                  — bits 7-5: fps index (0-7), bits 4-0: meter ID (0-31)
 //   [ COM0_HI ][ COM0_LO ]    — 15 SEG bits for COM0 row (bit15 = buzzer)
 //   [ COM1_HI ][ COM1_LO ]    — 15 SEG bits for COM1 row
 //   [ COM2_HI ][ COM2_LO ]    — 15 SEG bits for COM2 row
 //   [ COM3_HI ][ COM3_LO ]    — 15 SEG bits for COM3 row
-//   [ CRC8  ]                 — CRC-8 (Dallas/Maxim) over bytes 2–11
+//   [ CRC8  ]                 — CRC-8 (Dallas/Maxim) over bytes 2-12 (LEN through COM3_LO)
 //
 // Hardware:
 //   MCU         : RP2040 Zero
@@ -116,11 +117,30 @@ const int HC12_TX_PIN = 12;    // GP12 → HC-12 TXD
 const int HC12_RX_PIN = 17;    // GP17 → HC-12 RXD (unused)
 const int HC12_BAUD   = 9600;
 
-// Packet framing. Total packet size = 13 bytes.
-// [ PREAMBLE×2 ][ LEN ][ SEQ ][ PAYLOAD×8 ][ CRC8 ]
+// Packet framing. Total packet size = 14 bytes.
+// [ PREAMBLE×2 ][ LEN ][ SEQ ][ META ][ PAYLOAD×8 ][ CRC8 ]
 const uint8_t PREAMBLE_1  = 0x55;
 const uint8_t PREAMBLE_2  = 0xAA;
-const uint8_t PAYLOAD_LEN = 0x08;  // 8 payload bytes (4 COM rows × 2 bytes each)
+const uint8_t PAYLOAD_LEN = 0x09;  // 9 payload bytes: 1 META + 4 COM rows × 2 bytes
+
+// Meter identity — set this once per physical unit before flashing.
+//
+// Each RP2040 installation should be assigned a unique ID so the receiver can
+// distinguish packets from multiple meters even when they are the same model.
+// This value is a compile-time constant: it is the flasher's responsibility to
+// assign a unique ID per unit. The receiver maps ID to a display name and
+// protocol decoder; the firmware itself does not need to know the meter model.
+//
+// Valid range: 0-31 (5 bits). Values above 31 are truncated by the packing macro.
+const uint8_t METER_ID = 0;
+
+// Build the META byte from the current fps index and METER_ID.
+// Bit layout:  [ F2 F1 F0 | M4 M3 M2 M1 M0 ]
+//               bits 7-5     bits 4-0
+// fps index occupies the three most-significant bits (0-7, matching FRAME_RATE_COUNT).
+// Meter ID occupies the five least-significant bits (0-31).
+#define MAKE_META_BYTE(fps_idx) \
+  ((uint8_t)(((fps_idx) & 0x07) << 5) | ((METER_ID) & 0x1F))
 
 // COM line settle delay in microseconds. After a COM pin is detected HIGH,
 // sampling is delayed to reach the centre of the active window (~2ms wide)
@@ -163,6 +183,12 @@ const unsigned long BUZZER_HOLD_MS = 80;
 const unsigned long FRAME_INTERVALS[] = { 1000, 500, 333, 200, 100 };
 const int           FRAME_RATE_COUNT  = 5;
 const int           FRAME_RATE_DEFAULT_INDEX = 2;   // 3 fps
+
+// Compile-time guard: the META byte allocates 3 bits for the fps index, giving
+// a maximum of 8 positions (0-7). Adding more than 8 entries to FRAME_INTERVALS
+// without widening the field would silently corrupt the transmitted index.
+static_assert(FRAME_RATE_COUNT <= 8,
+  "FRAME_RATE_COUNT exceeds 8 — fps index field in META byte is only 3 bits wide");
 
 // EEPROM address where the selected frame rate index is stored.
 // A single byte is sufficient (values 0–5).
@@ -508,27 +534,32 @@ void loop() {
       heartbeat_count++;
     }
 
-    // Build 13-byte packet
-    uint8_t tx_packet[13];
+    // Build 14-byte packet
+    uint8_t tx_packet[14];
 
     tx_packet[0]  = PREAMBLE_1;                        // Sync byte 1
     tx_packet[1]  = PREAMBLE_2;                        // Sync byte 2
-    tx_packet[2]  = PAYLOAD_LEN;                       // Payload length
+    tx_packet[2]  = PAYLOAD_LEN;                       // Payload length (0x09)
     tx_packet[3]  = sequence_number++;                 // Rolling sequence number
 
-    tx_packet[4]  = (tx_matrix[0] >> 8) & 0xFF;       // COM0 high byte (bit15 = buzzer)
-    tx_packet[5]  =  tx_matrix[0]       & 0xFF;        // COM0 low byte
-    tx_packet[6]  = (tx_matrix[1] >> 8) & 0xFF;        // COM1 high byte
-    tx_packet[7]  =  tx_matrix[1]       & 0xFF;        // COM1 low byte
-    tx_packet[8]  = (tx_matrix[2] >> 8) & 0xFF;        // COM2 high byte
-    tx_packet[9]  =  tx_matrix[2]       & 0xFF;        // COM2 low byte
-    tx_packet[10] = (tx_matrix[3] >> 8) & 0xFF;        // COM3 high byte
-    tx_packet[11] =  tx_matrix[3]       & 0xFF;        // COM3 low byte
+    // META byte: upper 3 bits = current fps index, lower 5 bits = meter ID.
+    // Lets the receiver display the active frame rate and route packets from
+    // multiple meters to separate UI panels without any extra protocol overhead.
+    tx_packet[4]  = MAKE_META_BYTE(frameRateIndex);    // [F2 F1 F0 | M4 M3 M2 M1 M0]
 
-    // CRC-8 over 10 bytes: LEN + SEQ + 8 payload bytes (indices 2–11)
-    tx_packet[12] = calculate_crc8(&tx_packet[2], 10);
+    tx_packet[5]  = (tx_matrix[0] >> 8) & 0xFF;       // COM0 high byte (bit15 = buzzer)
+    tx_packet[6]  =  tx_matrix[0]       & 0xFF;        // COM0 low byte
+    tx_packet[7]  = (tx_matrix[1] >> 8) & 0xFF;        // COM1 high byte
+    tx_packet[8]  =  tx_matrix[1]       & 0xFF;        // COM1 low byte
+    tx_packet[9]  = (tx_matrix[2] >> 8) & 0xFF;        // COM2 high byte
+    tx_packet[10] =  tx_matrix[2]       & 0xFF;        // COM2 low byte
+    tx_packet[11] = (tx_matrix[3] >> 8) & 0xFF;        // COM3 high byte
+    tx_packet[12] =  tx_matrix[3]       & 0xFF;        // COM3 low byte
 
-    Serial1.write(tx_packet, 13);
+    // CRC-8 over 11 bytes: LEN + SEQ + META + 8 COM bytes (indices 2-12)
+    tx_packet[13] = calculate_crc8(&tx_packet[2], 11);
+
+    Serial1.write(tx_packet, 14);
 
     // Turn off heartbeat LED after transmission; disable permanently after limit
     if (led_active) {
