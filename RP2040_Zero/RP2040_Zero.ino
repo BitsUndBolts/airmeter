@@ -127,6 +127,26 @@ const uint8_t PAYLOAD_LEN = 0x08;  // 8 payload bytes (4 COM rows × 2 bytes eac
 // before reading SEG lines. This avoids sampling during signal edges.
 const unsigned int COM_SETTLE_US = 1000;
 
+// Buzzer latch hold duration in milliseconds.
+//
+// The DTM0660 drives the buzzer as an AC tone (not a static DC HIGH), so the
+// LMV339 output toggles rapidly between HIGH and LOW at the buzzer frequency.
+// A single digitalRead() per loop iteration will frequently land on a LOW,
+// causing the reported buzzer state to flicker even when the buzzer is truly on.
+//
+// To fix this, any HIGH sample sets a latch and arms a hold timer. The latch
+// stays asserted until BUZZER_HOLD_MS milliseconds have elapsed with no further
+// HIGH samples. This makes one real detection hold the active state across many
+// subsequent LOW samples, while still clearing promptly when the buzzer stops.
+//
+// Tune this value to be:
+//   — longer  than one buzzer PWM cycle  (typically ~0.5–1ms at ~1–2kHz)
+//   — shorter than your fastest TX interval (currently 100ms at 10fps)
+//
+// 80ms is a safe default: it bridges any LOW gaps in the buzzer waveform
+// without smearing the OFF→ON transition into the next transmission window.
+const unsigned long BUZZER_HOLD_MS = 80;
+
 
 // =============================================================================
 // SECTION 3 — FRAME RATE CONFIGURATION
@@ -177,8 +197,14 @@ const unsigned long SLEEP_TIMEOUT_MS = 10000;
 // so a missed COM cycle retains the previous valid state for that row.
 uint16_t display_matrix[4] = { 0, 0, 0, 0 };
 
-// Last-seen buzzer state. Updated every loop iteration.
-bool buzzer_active = false;
+// Buzzer latch state.
+//
+// buzzer_active      — the latched output used at TX time. Set to true on any
+//                      HIGH sample; cleared only after BUZZER_HOLD_MS of silence.
+// buzzerLatchTime    — timestamp (millis) of the most recent HIGH buzzer sample.
+//                      The latch expires when (now - buzzerLatchTime) > BUZZER_HOLD_MS.
+bool          buzzer_active   = false;
+unsigned long buzzerLatchTime = 0;
 
 
 // =============================================================================
@@ -201,6 +227,13 @@ bool systemSleeping = false;
 // Rolling sequence number incremented with each transmitted packet (0x00–0xFF).
 // Allows the receiver to detect dropped or out-of-order packets.
 uint8_t sequence_number = 0;
+
+// BOOT button debounce state.
+// lastButtonState tracks the raw GPIO level from the previous loop iteration.
+// A press is only registered on the HIGH→LOW falling edge (button pulled LOW
+// when pressed), preventing cycleFrameRate() from firing repeatedly while
+// the button is held down.
+bool lastButtonState = false;
 
 // Heartbeat LED state. Counts transmitted packets and disables the LED
 // after LED_HEARTBEAT transmissions to save power.
@@ -302,28 +335,50 @@ void setup() {
   lastActivityTime = millis();
 }
 
-// This macro forces the function to compile into internal RAM, not Flash
+// Read the RP2040 Zero onboard BOOT button.
+//
+// The BOOT button on the RP2040 Zero shares the QSPI chip-select (SS) pin with
+// the external Flash memory. Under normal operation, the RP2040 drives that pin
+// as the SPI CS line. To read it as a GPIO we must briefly relinquish control,
+// sample the level, then restore Flash operation — all while preventing any
+// firmware code from executing from Flash during the window (which would cause
+// a bus fault because CS is tristated).
+//
+// The __no_inline_not_in_flash_func macro ensures the entire function body is
+// compiled into SRAM rather than Flash, satisfying that constraint.
+//
+// Returns true if the button is currently pressed (pin reads LOW), false if not.
 bool __no_inline_not_in_flash_func(get_boot_button)() {
-    // 1. Disable all interrupts to prevent flash reads during the check
+    // Step 1 — Disable all interrupts.
+    //   Any interrupt that triggers a Flash read while CS is tristated would
+    //   hang the bus. Interrupts must be off for the entire sampling window.
     uint32_t flags = save_and_disable_interrupts();
 
-    // 2. Set the QSPI chip select line to High-Impedance (Hi-Z)
+    // Step 2 — Override QSPI CS output enable to Hi-Z (GPIO_OVERRIDE_LOW = output off).
+    //   This releases the CS line so the onboard pull-up and button can set its level.
+    //   The OEOVER field controls whether the pad drives its output; LOW means disabled.
     hw_write_masked(&ioqspi_hw->io[1].ctrl, 
                     GPIO_OVERRIDE_LOW << IO_QSPI_GPIO_QSPI_SS_CTRL_OEOVER_LSB, 
                     IO_QSPI_GPIO_QSPI_SS_CTRL_OEOVER_BITS);
 
-    // 3. Give the hardware a tiny moment to stabilize
+    // Step 3 — Short stabilisation delay.
+    //   Allows the pin voltage to settle after the driver is disabled before we read.
+    //   Implemented as a volatile spin-loop so the compiler cannot optimise it away.
     for (volatile int i = 0; i < 1000; ++i);
 
-    // 4. Read the High-IO register (Button pulls the pin LOW when pressed)
+    // Step 4 — Sample the QSPI CS pin via the GPIO_HI_IN register.
+    //   GPIO_HI_IN reflects the raw pad state for pins that are not in the normal
+    //   GPIO bank (QSPI pins live here). Bit 1 corresponds to QSPI_SS (CS).
+    //   The button pulls the line LOW when pressed, so we invert the reading.
     bool button_state = !(sio_hw->gpio_hi_in & (1u << 1));
 
-    // 5. Restore normal Chip Select functionality so Flash works again
+    // Step 5 — Restore normal QSPI CS output drive (GPIO_OVERRIDE_NORMAL).
+    //   The RP2040 resumes control of the CS line; Flash reads are safe again.
     hw_write_masked(&ioqspi_hw->io[1].ctrl, 
                     GPIO_OVERRIDE_NORMAL << IO_QSPI_GPIO_QSPI_SS_CTRL_OEOVER_LSB, 
                     IO_QSPI_GPIO_QSPI_SS_CTRL_OEOVER_BITS);
 
-    // 6. Re-enable interrupts
+    // Step 6 — Re-enable interrupts. Normal firmware execution resumes.
     restore_interrupts(flags);
 
     return button_state;
@@ -373,18 +428,46 @@ void loop() {
     }
   }
 
-  // Sample buzzer line — last seen state is used at TX time
-  buzzer_active = digitalRead(BUZZER_PIN);
+  // ---------------------------------------------------------------------------
+  // Buzzer latch — sticky HIGH with configurable hold-off timer
+  //
+  // The DTM0660 drives the buzzer as an AC tone, so the LMV339 output toggles
+  // between HIGH and LOW at the buzzer frequency (~1–2kHz). The loop runs at
+  // roughly 250–1000 iterations/second, so a plain digitalRead() will frequently
+  // land on a LOW half-cycle even when the buzzer is genuinely active.
+  //
+  // Instead of using the raw pin level, we maintain a latch:
+  //   • Any HIGH sample sets buzzer_active = true and stamps buzzerLatchTime.
+  //   • The latch is only cleared once BUZZER_HOLD_MS have elapsed since the
+  //     last HIGH sample, ensuring brief LOW samples between buzzer pulses do
+  //     not extinguish the active indication prematurely.
+  // ---------------------------------------------------------------------------
+  if (digitalRead(BUZZER_PIN) == HIGH) {
+    buzzer_active   = true;
+    buzzerLatchTime = currentTime;              // Arm / refresh the hold timer
+  } else if (buzzer_active &&
+             (currentTime - buzzerLatchTime >= BUZZER_HOLD_MS)) {
+    buzzer_active = false;                     // Hold expired — buzzer is truly off
+  }
 
   // ---------------------------------------------------------------------------
   // PHASE 2: BOOT button handling
   //
-  // Detect a clean button press using edge detection and debouncing.
-  // On a confirmed press, advance to the next frame rate and confirm
-  // with an LED flash sequence. The new rate is saved to EEPROM immediately.
+  // get_boot_button() returns true for every loop iteration while the button
+  // is held. Without edge detection, a single press would call cycleFrameRate()
+  // hundreds of times before the finger lifts.
+  //
+  // We use a simple rising-edge detector: compare the current reading against
+  // lastButtonState and act only on the false→true transition (button just
+  // pressed). lastButtonState is then updated unconditionally so subsequent
+  // loop iterations while the button is held see no new edge.
   // ---------------------------------------------------------------------------
-  if (get_boot_button()) {
-    cycleFrameRate();
+  {
+    bool currentButtonState = get_boot_button();
+    if (currentButtonState && !lastButtonState) {
+      cycleFrameRate();                        // Fire once per physical press
+    }
+    lastButtonState = currentButtonState;      // Track state for next iteration
   }
 
   // ---------------------------------------------------------------------------
