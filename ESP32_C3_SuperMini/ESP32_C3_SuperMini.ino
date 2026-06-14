@@ -66,8 +66,8 @@ HardwareSerial HC12(1); // UART1
 
 #define PREAMBLE_1   0x55
 #define PREAMBLE_2   0xAA
-#define PAYLOAD_LEN  0x08
-#define PACKET_SIZE  13   // 2 preamble + 1 len + 1 seq + 8 payload + 1 crc
+#define PAYLOAD_LEN  0x09
+#define PACKET_SIZE  14   // 2 preamble + 1 len + 1 seq + 1 META + 8 payload + 1 crc
 
 // =============================================================================
 // NETWORK & SERVER OBJECTS
@@ -122,7 +122,7 @@ enum RxState : uint8_t {
 };
 
 static RxState  rx_state       = WAIT_PREAMBLE_1;
-static uint8_t  rx_payload[8];
+static uint8_t  rx_payload[9];
 static uint8_t  rx_seq         = 0;
 static uint8_t  rx_len         = 0;
 static uint8_t  rx_payload_idx = 0;
@@ -161,17 +161,24 @@ uint8_t calculate_crc8(const uint8_t* data, uint8_t len) {
 
 // =============================================================================
 // PACKET DECODER
-// Unpacks 8 payload bytes into:
+// Unpacks 9 payload bytes into:
+//   - 8-bit FPS and METER_ID
 //   - 60-bit LCD string  (COM0[15] + COM1[15] + COM2[15] + COM3[15])
 //   - buzzer flag        (bit 15 of COM0)
 // Broadcasts result immediately over SSE.
 // =============================================================================
 
 void decodePacket(const uint8_t* payload) {
-  // Reconstruct the four 16-bit COM rows
+  // Extract META fields from byte 0
+  const uint8_t meta_byte = payload[0];
+  const uint8_t fps_index = (meta_byte >> 5) & 0x07;
+  const uint8_t meter_id  = meta_byte & 0x1F;
+
+  // Reconstruct the four 16-bit COM rows (skipping payload[0])
   uint16_t com[4];
   for (int c = 0; c < 4; c++) {
-    com[c] = ((uint16_t)payload[c * 2] << 8) | payload[c * 2 + 1];
+    int base_idx = 1 + (c * 2); // Shift past the META byte
+    com[c] = ((uint16_t)payload[base_idx] << 8) | payload[base_idx + 1];
   }
 
   // Extract buzzer from bit 15 of COM0 BEFORE masking
@@ -182,7 +189,7 @@ void decodePacket(const uint8_t* payload) {
   com[0] &= 0x7FFF;
 
   // Build 60-character bit string: COM0[bit0..14] + COM1 + COM2 + COM3
-  char bitString[61]; // 60 chars + null terminator — avoids String heap churn
+  char bitString[61]; 
   bitString[60] = '\0';
   for (int c = 0; c < 4; c++) {
     for (int s = 0; s < 15; s++) {
@@ -190,14 +197,15 @@ void decodePacket(const uint8_t* payload) {
     }
   }
 
-  // Broadcast over SSE — stack-allocated buffer, no heap String
-  char jsonPayload[82];
+  // Broadcast over SSE — increased JSON buffer sizing to 120 bytes safely 
+  // to account for added "fps" and "meterId" keys
+  char jsonPayload[120];
   snprintf(jsonPayload, sizeof(jsonPayload),
-           "{\"lcd\":\"%s\",\"buzzer\":%d}", bitString, buzzer_status);
+           "{\"lcd\":\"%s\",\"buzzer\":%d,\"fps\":%u,\"meterId\":%u}", 
+           bitString, buzzer_status, fps_index, meter_id);
   events.send(jsonPayload, "multimeter-update");
 
   // Debug: visual 64-bit block with buzzer on COM0
-  // Each row: [buzzer/0 bit] [space] [SEG14..SEG0]
   String visual;
   visual.reserve(72);
   for (int c = 0; c < 4; c++) {
@@ -209,8 +217,8 @@ void decodePacket(const uint8_t* payload) {
     if (c < 3) visual += '\n';
   }
 
-  Serial.printf("[HC12] Packet #%lu | SEQ:%u | Buzzer:%d\n%s\n",
-                rx_packet_count, rx_seq, buzzer_status, visual.c_str());
+  Serial.printf("[HC12] Packet #%lu | SEQ:%u | Meter ID:%u | FPS Idx:%u | Buzzer:%d\n%s\n",
+                rx_packet_count, rx_seq, meter_id, fps_index, buzzer_status, visual.c_str());
 }
 
 // =============================================================================
@@ -262,13 +270,13 @@ void processHC12() {
         break;
 
       case WAIT_CRC: {
-        // CRC covers LEN + SEQ + PAYLOAD (10 bytes)
-        uint8_t crc_input[10];
+        // CRC covers LEN + SEQ + PAYLOAD (11 bytes)
+        uint8_t crc_input[11];
         crc_input[0] = rx_len;
         crc_input[1] = rx_seq;
-        memcpy(&crc_input[2], rx_payload, 8);
+        memcpy(&crc_input[2], rx_payload, rx_len);
 
-        const uint8_t expected_crc = calculate_crc8(crc_input, 10);
+        const uint8_t expected_crc = calculate_crc8(crc_input, 11);
 
         if (b == expected_crc) {
           rx_packet_count++;
