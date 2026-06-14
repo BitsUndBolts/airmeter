@@ -874,7 +874,7 @@
         showStatus('error', 'Upload stopped. Check the failed file and try again.');
       } else if (firmwareDone) {
         overallLabel.textContent = 'Firmware flashed. Rebooting…';
-        showStatus('success', 'All files uploaded. Firmware flashed — device is rebooting.');
+        showStatus('success', 'All files uploaded. Firmware flashed --- device is rebooting…');
         startRebootCountdown(10);
       } else {
         overallLabel.textContent = `Done — ${done} file${done !== 1 ? 's' : ''} uploaded.`;
@@ -942,7 +942,10 @@
       const iv = setInterval(() => {
         secs--;
         rebootSec.textContent = secs;
-        if (secs <= 0) clearInterval(iv);
+        if (secs <= 0) {
+          clearInterval(iv);
+          rebootRow.classList.remove('visible');
+        }
       }, 1000);
     }
 

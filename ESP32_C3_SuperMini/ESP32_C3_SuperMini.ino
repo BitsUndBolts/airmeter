@@ -621,9 +621,9 @@ void setupWebServer() {
       // response before the device disappears off the network.
       request->send(200, "text/plain", "OK");
  
-      // Small delay so the TCP stack can flush the response.
-      delay(300);
-      ESP.restart();
+      // Schedule restart so the TCP stack can flush the response.
+      rebootTimer = millis(); 
+      pendingReboot = true;   
     },
  
     // ── Upload handler (called per chunk) ─────────────────────────────────
