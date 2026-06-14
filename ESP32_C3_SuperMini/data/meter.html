@@ -909,6 +909,34 @@
             console.error("Browser lacks Server-Sent Events capabilities.");
         }
 
+        window.addEventListener('keydown', function(e) {
+            if (e.key === '+' || e.key === '=') { 
+                zoomIn();
+            }
+            else if (e.key === '-') {
+                zoomOut();
+            }
+        });
+
+        const scaleMapping = { 
+            '1': 50,'2': 75,'3': 125,'4': 150,'5': 175,
+            '6': 200,'7': 250,'8': 300,'9': 400,'0': 100 
+        };
+        window.addEventListener('keydown', function(e) {
+
+            if (e.key === 'Escape' || e.key === 'Esc') {
+                window.location.href = '/';
+                return;
+            }
+
+            const targetValue = scaleMapping[e.key];
+            if (targetValue !== undefined) {
+                currentZoomIndex = ZOOM_LEVELS.indexOf(targetValue);
+                updateZoom(); 
+                saveSettings()
+            }
+        });
+
     </script>
 </body>
 
