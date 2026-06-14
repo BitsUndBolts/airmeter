@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AirMeter · Meter Config</title>
+  <style>
+    :root {
+      --bg: #0a0c0e;
+      --panel: #111416;
+      --panel-2: #181c1f;
+      --border: #252a2e;
+      --border-bright: #2e3538;
+      --accent: #f5a623;
+      --accent-dim: rgba(245, 166, 35, 0.10);
+      --accent-glow: rgba(245, 166, 35, 0.22);
+      --green: #3ddc84;
+      --green-dim: rgba(61, 220, 132, 0.10);
+      --yellow: #f1c40f;
+      --red: #ff5555;
+      --red-dim: rgba(255, 85, 85, 0.10);
+      --blue: #4d9fff;
+      --blue-dim: rgba(77, 159, 255, 0.10);
+      --text: #e8ecef;
+      --text-2: #8a9199;
+      --text-3: #4a5158;
+      --mono: ui-monospace, SFMono-Regular, 'SF Pro Mono', Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+      --sans: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { font-size: 10px; }
+
+    body {
+      font-family: var(--sans);
+      background: var(--bg);
+      color: var(--text);
+      margin: 0;
+      padding: 0;
+      min-height: 100dvh;
+      background-image:
+        linear-gradient(rgba(245, 166, 35, 0.02) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(245, 166, 35, 0.02) 1px, transparent 1px);
+      background-size: 3.2em 3.2em;
+    }
+
+    .card {
+      width: 100%;
+      background: var(--panel);
+      border: 1px solid var(--border-bright);
+      border-radius: 0.4em;
+      overflow: hidden;
+    }
+
+    /* ── HEADER ── */
+    .card-header {
+      background: var(--panel-2);
+      border-bottom: 1px solid var(--border-bright);
+      padding: 1.4em 2em;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .device-badge {
+      display: flex;
+      align-items: center;
+      gap: 1em;
+    }
+
+    .device-name {
+      font-family: var(--mono);
+      font-size: 1.2em;
+      font-weight: 600;
+      color: var(--text-2);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 0.8em;
+    }
+
+    .btn-back {
+      display: flex;
+      align-items: center;
+      gap: 0.5em;
+      font-family: var(--mono);
+      font-size: 1em;
+      font-weight: 600;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      color: var(--text-3);
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 0.3em;
+      padding: 0.4em 0.9em;
+      cursor: pointer;
+      text-decoration: none;
+      transition: color 0.15s, border-color 0.15s;
+    }
+
+    .btn-back:hover {
+      color: var(--text-2);
+      border-color: var(--border-bright);
+    }
+
+    .btn-back svg { width: 1.1em; height: 1.1em; }
+
+    /* ── SECTION LABEL ── */
+    .section-label {
+      font-family: var(--mono);
+      font-size: 0.9em;
+      font-weight: 600;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--text-3);
+      padding: 1.6em 2em 0.8em;
+    }
+
+    /* ── EMPTY STATE ── */
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 3em 2em;
+      text-align: center;
+      gap: 0.8em;
+    }
+
+    .empty-state svg {
+      width: 4em;
+      height: 4em;
+      color: var(--text-3);
+      margin-bottom: 0.4em;
+    }
+
+    .empty-title {
+      font-family: var(--mono);
+      font-size: 1.2em;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-3);
+    }
+
+    .empty-desc {
+      font-size: 1.1em;
+      color: var(--text-3);
+      line-height: 1.5;
+      max-width: 28em;
+    }
+
+    /* ── METER CONFIG BLOCK ── */
+    .meter-blocks {
+      padding: 0 1.2em 1.2em;
+      display: flex;
+      flex-direction: column;
+      gap: 1.2em;
+    }
+
+    .meter-block {
+      background: var(--panel-2);
+      border: 1px solid var(--border-bright);
+      border-radius: 0.5em;
+      overflow: hidden;
+    }
+
+    .meter-block-header {
+      display: flex;
+      align-items: center;
+      gap: 1.2em;
+      padding: 1.2em 1.4em;
+      background: rgba(255,255,255,0.02);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .meter-thumb {
+      width: 3.2em;
+      height: 3.2em;
+      border-radius: 0.3em;
+      background: var(--accent-dim);
+      border: 1px solid var(--accent-glow);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .meter-thumb img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+
+    .meter-thumb img.loaded { opacity: 1; }
+
+    .meter-thumb-fallback {
+      font-family: var(--mono);
+      font-size: 1em;
+      font-weight: 700;
+      color: var(--accent);
+    }
+
+    .meter-block-title {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .meter-block-name {
+      font-size: 1.3em;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .meter-block-sub {
+      font-family: var(--mono);
+      font-size: 0.95em;
+      color: var(--text-3);
+      letter-spacing: 0.06em;
+      margin-top: 0.2em;
+    }
+
+    .meter-active-badge {
+      font-family: var(--mono);
+      font-size: 0.85em;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      display: flex;
+      align-items: center;
+      gap: 0.4em;
+      padding: 0.25em 0.7em;
+      border-radius: 0.25em;
+      flex-shrink: 0;
+    }
+
+    .meter-active-badge.active {
+      color: var(--green);
+      background: var(--green-dim);
+      border: 1px solid rgba(61, 220, 132, 0.2);
+    }
+
+    .meter-active-badge.inactive {
+      color: var(--text-3);
+      background: rgba(74, 81, 88, 0.2);
+      border: 1px solid var(--border);
+    }
+
+    .meter-active-badge .dot {
+      width: 0.55em;
+      height: 0.55em;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    /* ── FIELDS ── */
+    .meter-fields {
+      padding: 1.2em 1.4em;
+      display: flex;
+      flex-direction: column;
+      gap: 1em;
+    }
+
+    .field-row {
+      display: flex;
+      align-items: center;
+      gap: 1em;
+    }
+
+    .field-label {
+      font-family: var(--mono);
+      font-size: 1em;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-3);
+      width: 5.5em;
+      flex-shrink: 0;
+    }
+
+    .field-input {
+      flex: 1;
+      min-width: 0;
+      background: var(--bg);
+      border: 1px solid var(--border-bright);
+      border-radius: 0.3em;
+      padding: 0.6em 0.9em;
+      font-family: var(--sans);
+      font-size: 1.2em;
+      color: var(--text);
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    .field-input:focus {
+      border-color: var(--accent);
+    }
+
+    .field-select {
+      flex: 1;
+      min-width: 0;
+      background: var(--bg);
+      border: 1px solid var(--border-bright);
+      border-radius: 0.3em;
+      padding: 0.6em 0.9em;
+      font-family: var(--sans);
+      font-size: 1.2em;
+      color: var(--text);
+      outline: none;
+      transition: border-color 0.15s;
+      cursor: pointer;
+      appearance: none;
+      -webkit-appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%234a5158' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 0.9em center;
+      padding-right: 2.5em;
+    }
+
+    .field-select:focus {
+      border-color: var(--accent);
+    }
+
+    .field-select option {
+      background: var(--panel);
+      color: var(--text);
+    }
+
+    /* ── BLOCK FOOTER ── */
+    .meter-block-footer {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      padding: 0.8em 1.4em;
+      border-top: 1px solid var(--border);
+      gap: 0.8em;
+    }
+
+    .save-status {
+      font-family: var(--mono);
+      font-size: 1em;
+      letter-spacing: 0.06em;
+      color: var(--text-3);
+      flex: 1;
+      transition: color 0.2s;
+    }
+
+    .save-status.saved  { color: var(--green); }
+    .save-status.error  { color: var(--red);   }
+
+    .btn-save {
+      font-family: var(--mono);
+      font-size: 1.1em;
+      font-weight: 600;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      color: var(--bg);
+      background: var(--accent);
+      border: none;
+      border-radius: 0.3em;
+      padding: 0.65em 1.6em;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+
+    .btn-save:hover  { opacity: 0.88; }
+    .btn-save:active { opacity: 0.75; }
+    .btn-save:disabled { opacity: 0.4; cursor: default; }
+
+    /* ── DIVIDER ── */
+    .divider { height: 1px; background: var(--border); margin: 0.6em 0; }
+
+    /* ── FOOTER ── */
+    .card-footer {
+      background: var(--panel-2);
+      border-top: 1px solid var(--border);
+      padding: 1em 2em;
+    }
+
+    .footer-note {
+      font-family: var(--mono);
+      font-size: 1em;
+      color: var(--text-3);
+      letter-spacing: 0.04em;
+    }
+
+    /* ── TOAST ── */
+    .toast {
+      position: fixed;
+      bottom: 2em;
+      left: 50%;
+      transform: translateX(-50%) translateY(4em);
+      background: var(--panel-2);
+      border: 1px solid var(--border-bright);
+      border-radius: 0.4em;
+      padding: 0.9em 1.6em;
+      font-family: var(--mono);
+      font-size: 1.1em;
+      color: var(--text-2);
+      box-shadow: 0 0.8em 2.4em rgba(0,0,0,0.5);
+      opacity: 0;
+      transition: transform 0.25s ease, opacity 0.25s ease;
+      pointer-events: none;
+      z-index: 200;
+      white-space: nowrap;
+    }
+
+    .toast.visible {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    .toast.success { border-color: rgba(61, 220, 132, 0.35); color: var(--green); }
+    .toast.fail    { border-color: rgba(255, 85, 85, 0.35);  color: var(--red);   }
+
+    /* ── SPINNER ── */
+    .spinner-inline {
+      display: inline-block;
+      width: 1.2em;
+      height: 1.2em;
+      border: 0.18em solid var(--border-bright);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      vertical-align: middle;
+      margin-right: 0.4em;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg) } }
+
+    .hidden { display: none !important; }
+  </style>
+</head>
+
+<body>
+
+  <main class="card">
+
+    <!-- ── HEADER ── -->
+    <div class="card-header">
+      <div class="device-badge">
+        <span class="device-name">AirMeter · Meter Config</span>
+      </div>
+      <div class="header-right">
+        <a href="/" class="btn-back">
+          <svg viewBox="0 0 16 16" fill="none">
+            <path d="M10 3L5 8l5 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          Dashboard
+        </a>
+      </div>
+    </div>
+
+    <!-- ── ACTIVE METERS ── -->
+    <div class="section-label" id="active-label">Active &amp; Configured Meters</div>
+
+    <!-- Loading state -->
+    <div id="loading-state" class="empty-state">
+      <span class="spinner-inline" style="width:2.5em;height:2.5em;border-width:0.25em;margin:0 0 0.6em 0"></span>
+      <div class="empty-title">Loading</div>
+    </div>
+
+    <!-- Empty state (no meters ever seen, none configured) -->
+    <div id="empty-state" class="empty-state hidden">
+      <svg viewBox="0 0 48 48" fill="none">
+        <rect x="6" y="10" width="36" height="28" rx="3" stroke="currentColor" stroke-width="2"/>
+        <path d="M14 26l6-6 5 5 7-9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="36" cy="30" r="3" stroke="currentColor" stroke-width="1.5"/>
+      </svg>
+      <div class="empty-title">No meters found</div>
+      <div class="empty-desc">No meters have been seen since boot and no configurations are stored. Turn on a meter and come back.</div>
+    </div>
+
+    <!-- Meter blocks injected here -->
+    <div class="meter-blocks" id="meter-blocks"></div>
+
+    <div class="divider"></div>
+
+    <!-- ── FOOTER ── -->
+    <div class="card-footer">
+      <div class="footer-note">
+        Settings are stored on the ESP32's flash memory and survive reboots.
+        Changes take effect immediately — no restart required.
+      </div>
+    </div>
+
+  </main>
+
+  <!-- ── TOAST ── -->
+  <div class="toast" id="toast"></div>
+
+  <script>
+    /* ── FLUID SCALE ── */
+    const SCALE_FACTOR = 0.018, MIN_PX = 7, MAX_PX = 22;
+    function applyScale() {
+      document.documentElement.style.fontSize =
+        Math.min(MAX_PX, Math.max(MIN_PX, window.innerWidth * SCALE_FACTOR)) + 'px';
+    }
+    applyScale();
+    window.addEventListener('resize', applyScale);
+
+    /* ── GLOBALS ── */
+    const $ = id => document.getElementById(id);
+    const FPS_OPTIONS = [1, 2, 3, 5, 10]; // index 0–4, matches transmitter
+
+    let allSettings  = {}; // full settings blob from ESP32
+    let activeMeterIds = new Set(); // meters seen since boot
+    let availableImages = []; // .webp files from LittleFS
+
+    /* ── TOAST ── */
+    let toastTimer = null;
+    function showToast(msg, type = 'success') {
+      const t = $('toast');
+      t.textContent = msg;
+      t.className   = `toast ${type} visible`;
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => t.classList.remove('visible'), 2800);
+    }
+
+    /* ── IMAGE THUMBNAIL ── */
+    function thumbHtml(image, name) {
+      const initials = (name || '??').replace(/[^A-Z0-9]/gi, '').slice(0, 2).toUpperCase() || '??';
+      if (image) {
+        return `<img src="${image}" alt="${name}"
+                    onload="this.classList.add('loaded')"
+                    onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+                <span class="meter-thumb-fallback" style="display:none">${initials}</span>`;
+      }
+      return `<span class="meter-thumb-fallback">${initials}</span>`;
+    }
+
+    /* ── BUILD IMAGE OPTIONS ── */
+    function imageOptions(selected) {
+      let html = `<option value="">— None —</option>`;
+      availableImages.forEach(f => {
+        const sel = f === selected ? ' selected' : '';
+        html += `<option value="${f}"${sel}>${f}</option>`;
+      });
+      return html;
+    }
+
+    /* ── BUILD FPS OPTIONS ── */
+    function fpsOptions(selectedIdx) {
+      return FPS_OPTIONS.map((fps, idx) => {
+        const sel = idx === selectedIdx ? ' selected' : '';
+        return `<option value="${idx}"${sel}>${fps} Hz</option>`;
+      }).join('');
+    }
+
+    /* ── RENDER ONE METER BLOCK ── */
+    function renderMeterBlock(id, isActive, cfg) {
+      const name     = cfg.name     || '';
+      const image    = cfg.image    || '';
+      const fpsIdx   = (cfg.fps !== undefined) ? cfg.fps : 2; // default index 2 = 3 Hz
+
+      const displayName = name || 'UNKNOWN';
+      const badgeClass  = isActive ? 'active' : 'inactive';
+      const badgeLabel  = isActive ? 'Active'  : 'Stored';
+
+      const block = document.createElement('div');
+      block.className   = 'meter-block';
+      block.dataset.mid = id;
+      block.innerHTML = `
+        <div class="meter-block-header">
+          <div class="meter-thumb" id="thumb-${id}">
+            ${thumbHtml(image, displayName)}
+          </div>
+          <div class="meter-block-title">
+            <div class="meter-block-name" id="display-name-${id}">${displayName}</div>
+            <div class="meter-block-sub">ID · ${id}</div>
+          </div>
+          <span class="meter-active-badge ${badgeClass}">
+            <span class="dot"></span>${badgeLabel}
+          </span>
+        </div>
+        <div class="meter-fields">
+          <div class="field-row">
+            <span class="field-label">Name</span>
+            <input  type="text"
+                    class="field-input"
+                    id="name-${id}"
+                    placeholder="UNKNOWN"
+                    maxlength="32"
+                    value="${name}"
+                    oninput="onFieldChange(${id})">
+          </div>
+          <div class="field-row">
+            <span class="field-label">Image</span>
+            <select class="field-select" id="image-${id}" onchange="onImageChange(${id})">
+              ${imageOptions(image)}
+            </select>
+          </div>
+          <div class="field-row">
+            <span class="field-label">Rate</span>
+            <select class="field-select" id="fps-${id}" onchange="onFieldChange(${id})">
+              ${fpsOptions(fpsIdx)}
+            </select>
+          </div>
+        </div>
+        <div class="meter-block-footer">
+          <span class="save-status" id="status-${id}"></span>
+          <button class="btn-save" id="save-${id}" onclick="saveMeter(${id})" disabled>Save</button>
+        </div>
+      `;
+      return block;
+    }
+
+    /* ── FIELD CHANGE: enable save ── */
+    function onFieldChange(id) {
+      $(`save-${id}`).disabled = false;
+      $(`status-${id}`).className = 'save-status';
+      $(`status-${id}`).textContent = '';
+    }
+
+    /* ── IMAGE CHANGE: also update thumbnail preview ── */
+    function onImageChange(id) {
+      onFieldChange(id);
+      const img  = $(`image-${id}`).value;
+      const name = $(`name-${id}`).value.trim();
+      const thumb = $(`thumb-${id}`);
+      const initials = (name || 'UNKNOWN').replace(/[^A-Z0-9]/gi, '').slice(0, 2).toUpperCase() || '??';
+      thumb.innerHTML = thumbHtml(img, name || 'UNKNOWN');
+    }
+
+    /* ── SAVE ONE METER ── */
+    function saveMeter(id) {
+      const btn      = $(`save-${id}`);
+      const statusEl = $(`status-${id}`);
+      const name     = $(`name-${id}`).value.trim();
+      const image    = $(`image-${id}`).value;
+      const fpsIdx   = parseInt($(`fps-${id}`).value, 10);
+
+      btn.disabled       = true;
+      statusEl.className = 'save-status';
+      statusEl.textContent = 'Saving…';
+
+      // Merge into full settings (preserving theme/zoomIndex from meter.html)
+      if (!allSettings.meters)     allSettings.meters     = {};
+      if (!allSettings.meters[id]) allSettings.meters[id] = {};
+
+      allSettings.meters[id].name  = name;
+      allSettings.meters[id].image = image;
+      allSettings.meters[id].fps   = fpsIdx;
+
+      fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(allSettings)
+      })
+      .then(r => r.json())
+      .then(d => {
+        if (d.status === 'success') {
+          statusEl.className   = 'save-status saved';
+          statusEl.textContent = '✓ Saved';
+          // Update display name in header
+          const displayName = name || 'UNKNOWN';
+          $(`display-name-${id}`).textContent = displayName;
+          // Update thumbnail initials if no image
+          if (!image) {
+            const initials = displayName.replace(/[^A-Z0-9]/gi,'').slice(0,2).toUpperCase() || '??';
+            $(`thumb-${id}`).innerHTML = `<span class="meter-thumb-fallback">${initials}</span>`;
+          }
+          showToast(`Meter ${id} saved`, 'success');
+        } else {
+          throw new Error('Save returned non-success');
+        }
+      })
+      .catch(() => {
+        btn.disabled         = false;
+        statusEl.className   = 'save-status error';
+        statusEl.textContent = '✗ Save failed';
+        showToast('Save failed — check connection', 'fail');
+      });
+    }
+
+    /* ── INIT ── */
+    async function init() {
+      // Parallel fetch: settings, system info, available image files
+      const [settingsRes, systemRes, filesRes] = await Promise.allSettled([
+        fetch('/api/settings').then(r => r.json()),
+        fetch('/api/system').then(r => r.json()),
+        fetch('/api/files').then(r => r.json())
+      ]);
+
+      // Process settings
+      allSettings = (settingsRes.status === 'fulfilled') ? settingsRes.value : {};
+      if (!allSettings.meters) allSettings.meters = {};
+
+      // Process active meters
+      if (systemRes.status === 'fulfilled') {
+        (systemRes.value.meters || []).forEach(m => activeMeterIds.add(m.id));
+      }
+
+      // Process image list
+      availableImages = (filesRes.status === 'fulfilled') ? filesRes.value : [];
+
+      // Build merged list: union of active + stored meter IDs
+      const storedIds = Object.keys(allSettings.meters).map(Number);
+      const allIds    = [...new Set([...activeMeterIds, ...storedIds])].sort((a, b) => a - b);
+
+      $('loading-state').classList.add('hidden');
+
+      if (allIds.length === 0) {
+        $('empty-state').classList.remove('hidden');
+        return;
+      }
+
+      const container = $('meter-blocks');
+      allIds.forEach(id => {
+        const cfg    = allSettings.meters[id] || {};
+        const active = activeMeterIds.has(id);
+        container.appendChild(renderMeterBlock(id, active, cfg));
+      });
+    }
+
+    init().catch(err => {
+      console.error('Init failed:', err);
+      $('loading-state').classList.add('hidden');
+      $('empty-state').classList.remove('hidden');
+    });
+  </script>
+
+</body>
+</html>

@@ -106,7 +106,10 @@ unsigned long     bootButtonPressedTime  = 0;
 // =============================================================================
 
 int               buzzer_status          = 0;
-unsigned long     lastPacketTime         = 0;
+
+// Per-meter last-seen timestamps (key = meter ID 0–31)
+#include <map>
+std::map<uint8_t, unsigned long> meterLastSeen;
 
 // =============================================================================
 // PACKET RECEIVE STATE MACHINE
@@ -197,6 +200,9 @@ void decodePacket(const uint8_t* payload) {
     }
   }
 
+  // Track per-meter last-seen timestamp
+  meterLastSeen[meter_id] = millis();
+
   // Broadcast over SSE — increased JSON buffer sizing to 120 bytes safely 
   // to account for added "fps" and "meterId" keys
   char jsonPayload[120];
@@ -280,7 +286,7 @@ void processHC12() {
 
         if (b == expected_crc) {
           rx_packet_count++;
-          lastPacketTime = millis();
+          //lastPacketTime = millis();
           decodePacket(rx_payload);
         } else {
           rx_error_count++;
@@ -468,9 +474,6 @@ void setupWebServer() {
 
   // ── API: System Info ──────────────────────────────────────────────────────
   server.on("/api/system", HTTP_GET, [](AsyncWebServerRequest* request) {
-    const long secondsSinceLastPacket =
-        (lastPacketTime > 0) ? (long)((millis() - lastPacketTime) / 1000) : -1;
-
     JsonDocument doc;
 
     doc["firmware"] = FIRMWARE_VERSION;
@@ -478,7 +481,15 @@ void setupWebServer() {
     doc["ssid"] = WiFi.SSID();
     doc["rssi"] = WiFi.RSSI();
     doc["memory"] = ESP.getFreeHeap();
-    doc["last_seen"] = secondsSinceLastPacket;
+
+    // Per-meter last-seen array — only meters seen since boot
+    JsonArray meters = doc["meters"].to<JsonArray>();
+    const unsigned long now = millis();
+    for (auto& kv : meterLastSeen) {
+      JsonObject m = meters.add<JsonObject>();
+      m["id"]   = kv.first;
+      m["seen"] = (long)((now - kv.second) / 1000);
+    }
 
     if (littlefs_available) {
       size_t totalBytes = LittleFS.totalBytes();
@@ -494,6 +505,30 @@ void setupWebServer() {
     serializeJson(doc, jsonResponse);
 
     request->send(200, "application/json", jsonResponse);
+  });
+
+  // ── API: List WebP images on LittleFS ────────────────────────────────────
+  server.on("/api/files", HTTP_GET, [](AsyncWebServerRequest* request) {
+    if (!littlefs_available) {
+      request->send(200, "application/json", "[]");
+      return;
+    }
+    String json = "[";
+    bool first = true;
+    File root = LittleFS.open("/");
+    File file = root.openNextFile();
+    while (file) {
+      String name = String(file.name());
+      // Only expose .webp images
+      if (name.endsWith(".webp")) {
+        if (!first) json += ",";
+        json += "\"" + name + "\"";
+        first = false;
+      }
+      file = root.openNextFile();
+    }
+    json += "]";
+    request->send(200, "application/json", json);
   });
 
   // ── API: Settings Read ────────────────────────────────────────────────────

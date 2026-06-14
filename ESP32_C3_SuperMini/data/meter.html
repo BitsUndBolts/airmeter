@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AN870 Dashboard</title>
+    <title>AirMeter · Live View</title>
     <style>
         @font-face {
             font-family: 'MultimeterFont';
@@ -839,13 +839,30 @@
             if (!themeSelect.contains(e.target)) themeSelect.classList.remove('open');
         });
 
-        // Load settings
+        // ── Resolve meter ID from URL (?id=X) ────────────────────────────
+        const METER_ID = (() => {
+            const v = new URLSearchParams(window.location.search).get('id');
+            const n = parseInt(v, 10);
+            return (!isNaN(n) && n >= 0 && n <= 31) ? n : null;
+        })();
+
+        if (METER_ID === null) {
+            // No valid ID → redirect home
+            window.location.href = '/';
+        }
+
+        // Update page title once we know the ID
+        document.title = `AirMeter · Meter ${METER_ID}`;
+
+        // ── Per-meter settings helpers ────────────────────────────────────
         function loadSettings() {
             fetch('/api/settings', { method: 'GET' })
                 .then(res => res.json())
                 .then(data => {
-                    const theme = (data.theme in THEMES) ? data.theme : 'Classic';
-                    const zoomIndex = data.zoomIndex ?? ZOOM_LEVELS.indexOf(100);
+                    const meters    = data.meters || {};
+                    const cfg       = meters[METER_ID] || {};
+                    const theme     = (cfg.theme in THEMES) ? cfg.theme : 'Classic';
+                    const zoomIndex = cfg.zoomIndex ?? ZOOM_LEVELS.indexOf(100);
 
                     currentZoomIndex = zoomIndex;
                     updateZoom();
@@ -853,18 +870,30 @@
 
                     $('screen').classList.add('visible');
                 })
-                .catch(() => console.log('Could not read settings.'));
+                .catch(() => {
+                    applyTheme(DEFAULT_THEME);
+                    $('screen').classList.add('visible');
+                });
         }
 
         function saveSettings() {
-            fetch('/api/settings', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ theme: currentTheme, zoomIndex: currentZoomIndex })
-            })
-            .then(r => r.json())
-            .then(d => { if (d.status === 'success') console.log('Settings saved to ESP32 Flash!') })
-            .catch(e => console.error('Error saving settings:', e));
+            // Read full settings first, then merge our meter slice
+            fetch('/api/settings', { method: 'GET' })
+                .then(r => r.json())
+                .then(data => {
+                    if (!data.meters) data.meters = {};
+                    if (!data.meters[METER_ID]) data.meters[METER_ID] = {};
+                    data.meters[METER_ID].theme     = currentTheme;
+                    data.meters[METER_ID].zoomIndex = currentZoomIndex;
+                    return fetch('/api/settings', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(data)
+                    });
+                })
+                .then(r => r.json())
+                .then(d => { if (d.status === 'success') console.log('Settings saved!'); })
+                .catch(e => console.error('Error saving settings:', e));
         }
 
         if (window.location.protocol !== 'file:') {
@@ -878,13 +907,16 @@
             if (t) document.documentElement.style.setProperty('--lcd-off', t.on);
         }
 
+        // ── SSE — filtered to this meter's ID only ────────────────────────
         if ('EventSource' in window) {
             const source = new EventSource('/events');
 
-            // 1. Your working custom event listener
             source.addEventListener('multimeter-update', function (e) {
                 try {
                     const data = JSON.parse(e.data);
+
+                    // Ignore packets from other meters
+                    if (data.meterId !== METER_ID) return;
 
                     updateMultimeterDisplay(data.lcd);
                     buzzer(data.buzzer === 1);
@@ -893,7 +925,6 @@
                 }
             }, false);
 
-            // 2. Critical addition: Error handling (detects disconnects)
             source.addEventListener('error', function (e) {
                 if (source.readyState === EventSource.CLOSED) {
                     console.error("Connection was closed by the server.");
@@ -902,7 +933,6 @@
                 }
             }, false);
 
-            // 3. Optional: Clean up connection when user leaves the page
             window.addEventListener('beforeunload', () => source.close());
 
         } else {
