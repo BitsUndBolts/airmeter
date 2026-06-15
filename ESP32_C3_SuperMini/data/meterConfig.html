@@ -690,25 +690,36 @@
       const newId    = parseInt($(`newid-${id}`).value, 10);
       const fpsIdx   = parseInt($(`fps-${id}`).value, 10);
 
-      if (newId !== id) {
-        // ID change: call setid first, then proceed with newId
+      const fpsChanged = allSettings.meters[id] && allSettings.meters[id].fps !== fpsIdx;
+      const idChanged  = newId !== id;
+
+      // POST to /update whenever ID or FPS changed (RP2040 needs to know)
+      if (idChanged || fpsChanged) {
         const r = await fetch('/api/meter/update', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ oldId: id, newId, fpsIdx })
+          body: JSON.stringify({ oldId: id, newId: idChanged ? newId : id, fpsIdx })
         }).then(r => r.json());
 
         if (r.status !== 'success') {
           statusEl.className   = 'save-status error';
-          statusEl.textContent = '✗ ID change failed';
+          statusEl.textContent = idChanged ? '✗ ID change failed' : '✗ Update failed';
           btn.disabled = false;
           return;
         }
 
-        // Move in local state before rebuilding
-        allSettings.meters[newId] = allSettings.meters[id] || {};
-        rebuildBlock(id, newId);
-        return;
+        if (idChanged) {
+          // Flush the current field values into allSettings under the new ID BEFORE rebuilding,
+          // so rebuildBlock picks up the name, image, and fps the user just typed.
+          allSettings.meters[newId] = {
+            ...(allSettings.meters[id] || {}),
+            name,
+            image,
+            fps: fpsIdx
+          };
+          rebuildBlock(id, newId);
+          return;
+        }
       }
 
       btn.disabled       = true;
