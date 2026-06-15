@@ -978,13 +978,6 @@
 
     <div class="file-table-section">
 
-      <!-- Storage bar (sits above the table) -->
-      <div class="storage-bar-wrap" style="margin-bottom:1em">
-        <div class="storage-bar-track">
-          <div class="storage-bar-fill" id="fs-bar-fill"></div>
-        </div>
-        <div class="storage-bar-label" id="fs-bar-label"><span>—</span> free</div>
-      </div>
 
       <!-- Loading state -->
       <div class="fs-state" id="fs-loading">
@@ -1014,22 +1007,16 @@
         <tbody id="fs-tbody"></tbody>
       </table>
 
-    </div>
+      <div class="divider"></div>
 
-    <div class="divider"></div>
-
-    <!-- ── FOOTER ── -->
-    <div class="card-footer">
-      <div class="footer-kv">
-        <div class="footer-item">
-          <span class="footer-key">Storage Free</span>
-          <span class="footer-val" id="footer-free">—</span>
+      <!-- Storage bar (sits above the table) -->
+      <div class="storage-bar-wrap" style="margin-bottom:1em">
+        <div class="storage-bar-track">
+          <div class="storage-bar-fill" id="fs-bar-fill"></div>
         </div>
-        <div class="footer-item">
-          <span class="footer-key">Storage Total</span>
-          <span class="footer-val" id="footer-total">—</span>
-        </div>
+        <div class="storage-bar-label" id="fs-bar-label"><span>—</span> free</div>
       </div>
+
     </div>
 
   </div><!-- /card -->
@@ -1362,8 +1349,9 @@
           if (!data) return;
           const free  = data?.littlefs_free  ?? null;
           const total = data?.littlefs_total ?? null;
-          if (free  !== null) { freeSpaceBytes = free; $('footer-free').textContent  = fmtBytes(free);  }
-          if (total !== null) { $('footer-total').textContent = fmtBytes(total); }
+          if (free  !== null) { 
+            freeSpaceBytes = free; 
+          }
           updateStorageBar(total, free);
           updateUI(); // re-check space warnings with fresh data
         })
