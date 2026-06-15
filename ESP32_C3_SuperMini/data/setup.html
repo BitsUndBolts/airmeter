@@ -33,7 +33,7 @@
     }
 
     html {
-      font-size: 10px; /* overridden immediately by JS */
+      font-size: clamp(7px, 1.8vw, 22px);
     }
 
     body {
@@ -733,24 +733,6 @@
 
 
   <script>
-    /* ── FLUID SCALE ENGINE ──────────────────────────────────────────────
-     * Same system as index.html — tune SCALE_FACTOR to taste.
-     * At 400px wide  → 1rem = 7.2px  (matches original design feel)
-     * At 800px wide  → 1rem = 14.4px (everything doubles)
-     * At 1200px wide → 1rem = 21.6px (everything triples, capped at MAX_PX)
-     * ─────────────────────────────────────────────────────────────────── */
-    const SCALE_FACTOR = 0.018;
-    const MIN_PX       = 7;
-    const MAX_PX       = 22;
-
-    function applyScale() {
-      const fs = Math.min(MAX_PX, Math.max(MIN_PX, window.innerWidth * SCALE_FACTOR));
-      document.documentElement.style.fontSize = fs + 'px';
-    }
-
-    applyScale();
-    window.addEventListener('resize', applyScale);
-
     /* ── APP LOGIC ────────────────────────────────────────────────────── */
     let selectedSSID = "";
     const $ = id => document.getElementById(id);

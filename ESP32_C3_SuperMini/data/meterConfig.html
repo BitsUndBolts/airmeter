@@ -31,7 +31,9 @@
 
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-    html { font-size: 10px; }
+    html {
+      font-size: clamp(7px, 1.8vw, 22px);
+    }
 
     body {
       font-family: var(--sans);
@@ -500,15 +502,6 @@
   <div class="toast" id="toast"></div>
 
   <script>
-    /* ── FLUID SCALE ── */
-    const SCALE_FACTOR = 0.018, MIN_PX = 7, MAX_PX = 22;
-    function applyScale() {
-      document.documentElement.style.fontSize =
-        Math.min(MAX_PX, Math.max(MIN_PX, window.innerWidth * SCALE_FACTOR)) + 'px';
-    }
-    applyScale();
-    window.addEventListener('resize', applyScale);
-
     /* ── GLOBALS ── */
     const $ = id => document.getElementById(id);
     const FPS_OPTIONS = [1, 2, 3, 5, 10]; // index 0–4, matches transmitter

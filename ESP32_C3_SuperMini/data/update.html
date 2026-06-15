@@ -42,7 +42,9 @@
       padding: 0;
     }
 
-    html { font-size: 10px; }
+    html {
+      font-size: clamp(7px, 1.8vw, 22px);
+    }
 
     body {
       font-family: var(--sans);
@@ -644,19 +646,6 @@
   </div><!-- /card -->
 
   <script>
-    /* ── FLUID SCALE ENGINE ─────────────────────────────────────────────── */
-    const SCALE_FACTOR = 0.018;
-    const MIN_PX = 7;
-    const MAX_PX = 22;
-
-    function applyScale() {
-      const fs = Math.min(MAX_PX, Math.max(MIN_PX, window.innerWidth * SCALE_FACTOR));
-      document.documentElement.style.fontSize = fs + 'px';
-    }
-
-    applyScale();
-    window.addEventListener('resize', applyScale);
-
     /* ── CONFIG ─────────────────────────────────────────────────────────── */
     const FIRMWARE_ENDPOINT = '/ota/firmware';
     const FILE_ENDPOINT     = '/ota/file';

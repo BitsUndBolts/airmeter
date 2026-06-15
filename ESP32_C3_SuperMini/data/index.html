@@ -52,10 +52,8 @@
       padding: 0;
     }
 
-    /* Root font-size is driven by JS → sets the em scale anchor */
     html {
-      font-size: 10px;
-      /* fallback; overridden immediately by JS */
+      font-size: clamp(7px, 1.8vw, 22px);
     }
 
     body {
@@ -1192,31 +1190,6 @@
 
 
   <script>
-    /* ── FLUID SCALE ENGINE ──────────────────────────────────────────────
-     *
-     * Converts viewport width → a root font-size in px.
-     * All CSS uses em/rem, so everything scales together.
-     *
-     * Formula:  fontSize = viewportWidth * SCALE_FACTOR
-     * Clamped between MIN_PX and MAX_PX to prevent extremes.
-     *
-     * Tune SCALE_FACTOR to taste:
-     *   0.018 → at 400px wide, 1rem = 7.2px  (matches the original design)
-     *   0.020 → slightly larger at any given width
-     *
-     * ─────────────────────────────────────────────────────────────────── */
-    const SCALE_FACTOR = 0.018;   // vw fraction → rem
-    const MIN_PX = 7;       // never smaller than this
-    const MAX_PX = 22;      // never larger than this
-
-    function applyScale() {
-      const fs = Math.min(MAX_PX, Math.max(MIN_PX, window.innerWidth * SCALE_FACTOR));
-      document.documentElement.style.fontSize = fs + 'px';
-    }
-
-    applyScale(); // run immediately (before paint)
-    window.addEventListener('resize', applyScale);
-
     /* ── APP LOGIC ────────────────────────────────────────────────────── */
     const $ = id => document.getElementById(id);
 
@@ -1280,6 +1253,20 @@
       return 'red';
     }
 
+    function formatLastSeen(seconds) {
+      if (seconds < 0) return 'Waiting...';
+      if (seconds < 60) return `Last seen ${seconds}s ago`;
+      
+      const minutes = Math.floor(seconds / 60);
+      if (minutes < 60) return `Last seen ${minutes}m ago`;
+      
+      const hours = Math.floor(minutes / 60);
+      if (hours < 24) return `Last seen ${hours}h ago`;
+      
+      const days = Math.floor(hours / 24);
+      return `Last seen ${days}d ago`;
+    }
+
     function buildMeterCard(meterId, seen, cfg) {
       const name  = cfg?.name  || 'UNKNOWN';
       const image = cfg?.image || null;
@@ -1290,6 +1277,8 @@
         : '';
       const fallbackStyle = image ? 'display:none' : '';
       const initials = name.replace(/[^A-Z0-9]/gi, '').slice(0, 2).toUpperCase() || '??';
+
+      //const lastSeen = formatLastSeen(seen);
 
       return `
         <a href="/meter?id=${meterId}" class="meter-card">
