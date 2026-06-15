@@ -87,31 +87,31 @@
       gap: 0.8em;
     }
 
-    .btn-back {
+    /* Home button — pushed to the right */
+    .home-btn {
+      margin-left: auto;
+      width: 2.8em;
+      height: 2.8em;
+      border-radius: 0.3em;
+      background: none;
+      border: 1px solid var(--border-bright);
       display: flex;
       align-items: center;
-      gap: 0.5em;
-      font-family: var(--mono);
-      font-size: 1em;
-      font-weight: 600;
-      letter-spacing: 0.07em;
-      text-transform: uppercase;
-      color: var(--text-3);
-      background: none;
-      border: 1px solid var(--border);
-      border-radius: 0.3em;
-      padding: 0.4em 0.9em;
+      justify-content: center;
       cursor: pointer;
+      color: var(--text-3);
       text-decoration: none;
-      transition: color 0.15s, border-color 0.15s;
+      transition: color 0.15s, border-color 0.15s, background 0.15s;
+      flex-shrink: 0;
     }
 
-    .btn-back:hover {
-      color: var(--text-2);
-      border-color: var(--border-bright);
+    .home-btn:hover {
+      color: var(--text);
+      border-color: var(--text-2);
+      background: var(--panel);
     }
 
-    .btn-back svg { width: 1.1em; height: 1.1em; }
+    .home-btn svg { width: 1.4em; height: 1.4em; }
 
     /* ── SECTION LABEL ── */
     .section-label {
@@ -453,12 +453,16 @@
       <div class="device-badge">
         <span class="device-name">AirMeter · Meter Config</span>
       </div>
+
       <div class="header-right">
-        <a href="/" class="btn-back">
-          <svg viewBox="0 0 16 16" fill="none">
-            <path d="M10 3L5 8l5 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <!-- Home button -->
+        <a class="home-btn" href="/" title="Home">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 12 L12 3 L21 12" />
+            <path d="M5 10 L5 21 L19 21 L19 10" />
+            <path d="M9 21 L9 15 L15 15 L15 21" />
           </svg>
-          Dashboard
         </a>
       </div>
     </div>
