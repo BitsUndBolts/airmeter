@@ -1263,8 +1263,6 @@
       const fallbackStyle = image ? 'display:none' : '';
       const initials = name.replace(/[^A-Z0-9]/gi, '').slice(0, 2).toUpperCase() || '??';
 
-      //const lastSeen = formatLastSeen(seen);
-
       return `
         <a href="/meter?id=${meterId}" class="meter-card">
           <div class="meter-thumb">
@@ -1275,7 +1273,7 @@
             <div class="nav-title">${name}</div>
             <div class="nav-desc" style="display:flex;align-items:center;gap:0.6em">
               <span class="status-dot ${dot}" style="width:0.65em;height:0.65em;flex-shrink:0"></span>
-              <span>${seen >= 0 ? `Last seen ${seen}s ago` : 'Waiting...'}</span>
+              <span>${formatLastSeen(seen)}</span>
             </div>
           </div>
           <span class="meter-id-badge">ID ${meterId}</span>
@@ -1322,7 +1320,9 @@
             dotEl.className = `status-dot ${dotClass(seen)}`;
             dotEl.style.cssText = 'width:0.65em;height:0.65em;flex-shrink:0';
           }
-          if (seenEl) seenEl.textContent = seen >= 0 ? `Last seen ${seen}s ago` : 'Waiting...';
+          if (seenEl) {
+            seenEl.textContent = formatLastSeen(seen);
+          }
         } else {
           const wrapper = document.createElement('div');
           wrapper.dataset.meterId = id;
