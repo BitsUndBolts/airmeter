@@ -3,12 +3,13 @@
 // Firmware Version: 1.0
 //
 // Architecture:
-//   HC-12 (2400 baud, UART1) → ESP32 → Wi-Fi (STA or AP) → Browser (SSE)
+//   HC-12 (9600 baud, UART1) → ESP32 → Wi-Fi (STA or AP) → Browser (SSE)
 //
 // Pin Map:
 //   GPIO 8  — Onboard LED  (LOW = ON, HIGH = OFF on most ESP32-C3 boards)
 //   GPIO 9  — BOOT button  (INPUT_PULLUP, active LOW)
-//   GPIO 20 — HC-12 TXD → ESP32 UART1 RX (receive-only)
+//   GPIO 20 — HC-12 TXD → ESP32 UART1 RX
+//   GPIO 21 — ESP32 UART1 TX → HC-12 RXD
 // =============================================================================
 
 #include <WiFi.h>
@@ -53,10 +54,10 @@ static const int  BOOT_BUTTON_PIN  = 9;
 // =============================================================================
 // HC-12 UART CONFIGURATION
 // =============================================================================
-// HC-12 TXD → ESP32 GPIO20 (UART1 RX). No TX needed — receive-only.
 
-#define HC12_RX_PIN  20
-#define HC12_BAUD    9600
+static const int HC12_RX_PIN = 20;
+static const int HC12_TX_PIN = 21;
+static const int HC12_BAUD   = 9600;
 
 HardwareSerial HC12(1); // UART1
 
@@ -64,17 +65,17 @@ HardwareSerial HC12(1); // UART1
 // PROTOCOL CONSTANTS  (must match the transmitter firmware)
 // =============================================================================
 
-#define PREAMBLE_1   0x55
-#define PREAMBLE_2   0xAA
-#define PAYLOAD_LEN  0x09
-#define PACKET_SIZE  14   // 2 preamble + 1 len + 1 seq + 1 META + 8 payload + 1 crc
+static const uint8_t PREAMBLE_1  = 0x55;
+static const uint8_t PREAMBLE_2  = 0xAA;
+static const uint8_t PAYLOAD_LEN = 0x09;
+static const uint8_t PACKET_SIZE = 14;    // 2 preamble + 1 len + 1 seq + 1 META + 8 payload + 1 crc
 
 // =============================================================================
 // NETWORK & SERVER OBJECTS
 // =============================================================================
 
 static const byte DNS_PORT               = 53;  // Standard DNS port
-static const int  SSE_BROADCAST_INTERVAL = 500; // ms (reserved for future throttling)
+
 
 AsyncWebServer    server(80);
 AsyncEventSource  events("/events"); // Server-Sent Events endpoint
@@ -125,7 +126,7 @@ enum RxState : uint8_t {
 };
 
 static RxState  rx_state       = WAIT_PREAMBLE_1;
-static uint8_t  rx_payload[9];
+static uint8_t  rx_payload[PAYLOAD_LEN];
 static uint8_t  rx_seq         = 0;
 static uint8_t  rx_len         = 0;
 static uint8_t  rx_payload_idx = 0;
@@ -286,7 +287,7 @@ void processHC12() {
 
         if (b == expected_crc) {
           rx_packet_count++;
-          //lastPacketTime = millis();
+          
           decodePacket(rx_payload);
         } else {
           rx_error_count++;
@@ -632,6 +633,77 @@ void setupWebServer() {
     pendingReboot = true;
   });
 
+  // ── API: Meter Update (rename ID + set fps, forwards config to RP2040) ────
+  server.on("/api/meter/update", HTTP_POST, [](AsyncWebServerRequest* request) {}, NULL,
+    [](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+      JsonDocument doc;
+      if (deserializeJson(doc, data, len)) {
+        request->send(400, "application/json", "{\"status\":\"error\"}");
+        return;
+      }
+      uint8_t oldId = doc["oldId"];
+      uint8_t newId = doc["newId"];
+      uint8_t fpsIdx = doc["fpsIdx"];
+
+      // 1. Rename in settings: load, move key, save
+      String raw = loadSettings();
+      JsonDocument cfg;
+      deserializeJson(cfg, raw);
+      if (cfg["meters"][oldId]) {
+        cfg["meters"][newId] = cfg["meters"][oldId];
+        cfg["meters"].remove(String(oldId).c_str());
+        String out; serializeJson(cfg, out);
+        saveSettings(out.c_str());
+      }
+
+      // 2. Move runtime last-seen entry
+      if (meterLastSeen.count(oldId)) {
+        meterLastSeen[newId] = meterLastSeen[oldId];
+        meterLastSeen.erase(oldId);
+      }
+
+      // Build the 6-byte config packet
+      uint8_t tx[6];
+      tx[0] = 0xAA;                              // Preamble 1 (flipped for ESP→RP direction)
+      tx[1] = 0x55;                              // Preamble 2
+      tx[2] = 0x02;                              // Payload length
+      tx[3] = oldId;                             // Target: who should act on this
+      tx[4] = ((fpsIdx & 0x07) << 5) | (newId & 0x1F);  // DATA_BYTE: fps|newId
+
+      uint8_t crc_input[3] = { tx[2], tx[3], tx[4] };
+      tx[5] = calculate_crc8(crc_input, 3);
+
+      HC12.write(tx, 6);
+
+      request->send(200, "application/json", "{\"status\":\"success\"}");
+    }
+  );
+
+  // ── API: Meter Delete ─────────────────────────────────────────────────────
+  server.on("/api/meter/delete", HTTP_POST, [](AsyncWebServerRequest* request) {}, NULL,
+    [](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+      JsonDocument doc;
+      if (deserializeJson(doc, data, len)) {
+        request->send(400, "application/json", "{\"status\":\"error\"}");
+        return;
+      }
+      uint8_t meterId = doc["id"];
+
+      // Remove from stored settings
+      String raw = loadSettings();
+      JsonDocument cfg;
+      deserializeJson(cfg, raw);
+      cfg["meters"].remove(String(meterId).c_str());
+      String out; serializeJson(cfg, out);
+      saveSettings(out.c_str());
+
+      // Remove from runtime last-seen (won't show on dashboard anymore)
+      meterLastSeen.erase(meterId);
+
+      request->send(200, "application/json", "{\"status\":\"success\"}");
+    }
+  );
+
   // ── API: File Upload ─────────────────────────────────────────────────────────
   server.on("/ota/file", HTTP_POST, [](AsyncWebServerRequest* request) {
       if (fileCtx.error) {
@@ -733,7 +805,7 @@ void setup() {
   digitalWrite(ONBOARD_LED_PIN, LOW); // LED ON during boot
 
   // ── HC-12 UART ────────────────────────────────────────────────────────────
-  HC12.begin(HC12_BAUD, SERIAL_8N1, HC12_RX_PIN, -1); // -1 = no TX
+  HC12.begin(HC12_BAUD, SERIAL_8N1, HC12_RX_PIN, HC12_TX_PIN);
   Serial.println("[HC12] UART1 RX active on GPIO20 @ 9600 baud.");
 
   // ── LittleFS ──────────────────────────────────────────────────────────────
@@ -786,20 +858,11 @@ void setup() {
   setupWebServer();
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// OTA Update Handler for ESP32 (Arduino / ESPAsyncWebServer)
-//
-// Endpoints:
-//   POST /ota/firmware  — streams a .bin directly into the OTA partition
-//   POST /ota/file      — writes any file into LittleFS
-//
-// Dependencies:
-//   - ESPAsyncWebServer  (https://github.com/me-no-dev/ESPAsyncWebServer)
-//   - LittleFS           (built-in with ESP32 Arduino core >= 2.x)
-//   - Update             (built-in with ESP32 Arduino core)
-//
-// Add to your main .ino / .cpp where you configure your AsyncWebServer.
-// ─────────────────────────────────────────────────────────────────────────────
+// =============================================================================
+// OTA UPLOAD HANDLERS
+//   POST /ota/firmware  — streams a .bin into the OTA partition, then reboots
+//   POST /ota/file      — writes any file to LittleFS
+// =============================================================================
 
 // ── /ota/firmware ─────────────────────────────────────────────────────────────
  

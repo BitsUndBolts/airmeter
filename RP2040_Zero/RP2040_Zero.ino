@@ -34,13 +34,13 @@
 //
 // Frame Rate Selection (BOOT Button):
 //   The onboard BOOT button (GP23) cycles through six transmission rates:
-//     1 fps → 3 fps → 5 fps → 10 fps → 30 fps → 50 fps → (wraps to 1 fps)
+//     1 fps → 2 fps → 3 fps → 5 fps → 10 fps → (wraps to 1 fps)
 //   The selected rate is stored in flash (EEPROM emulation) and restored
 //   on next power-up. If no saved setting exists, 3 fps is used by default.
 //   Each button press is confirmed by a short LED flash sequence showing
 //   the new rate index (1 flash = 1fps, 2 flashes = 3fps, etc.).
 //
-// Transmission Protocol:
+// Transmission Protocol - Sending:
 //   [ 0x55 ][ 0xAA ]          — 2-byte preamble (sync marker)
 //   [ 0x09 ]                  — payload length (9 bytes); acts as implicit format tag
 //   [ SEQ  ]                  — rolling sequence number (0x00–0xFF)
@@ -50,6 +50,13 @@
 //   [ COM2_HI ][ COM2_LO ]    — 15 SEG bits for COM2 row
 //   [ COM3_HI ][ COM3_LO ]    — 15 SEG bits for COM3 row
 //   [ CRC8  ]                 — CRC-8 (Dallas/Maxim) over bytes 2-12 (LEN through COM3_LO)
+//
+// Transmission Protocol - Receiving:
+//   [ 0xAA ][ 0x55 ]          — 2-byte preamble (sync marker)
+//   [ 0x02 ]                  — payload length (2 bytes); acts as implicit format tag
+//   [ METER_ID ]              — Identifier for the RP2040 if this packet is meant for it
+//   [ DATA_BYTE ]             — bits 7-5: fps index (0-7), bits 4-0: meter ID (0-31). This is for update purposes
+//   [ CRC8  ]                 — CRC-8 (Dallas/Maxim) over bytes 2-4 (LEN through SHARED_BYTE)
 //
 // Hardware:
 //   MCU         : RP2040 Zero
@@ -112,35 +119,42 @@ const int LED_HEARTBEAT = 10;   // Number of TX cycles to show heartbeat
 // SECTION 2 — TRANSMISSION PROTOCOL CONSTANTS
 // =============================================================================
 
-// HC-12 UART interface — TX only (RX not used).
+// HC-12 UART interface — TX only
 const int HC12_TX_PIN = 12;    // GP12 → HC-12 TXD
-const int HC12_RX_PIN = 17;    // GP17 → HC-12 RXD (unused)
+const int HC12_RX_PIN = 17;    // GP17 → HC-12 RXD
 const int HC12_BAUD   = 9600;
 
 // Packet framing. Total packet size = 14 bytes.
 // [ PREAMBLE×2 ][ LEN ][ SEQ ][ META ][ PAYLOAD×8 ][ CRC8 ]
 const uint8_t PREAMBLE_1  = 0x55;
 const uint8_t PREAMBLE_2  = 0xAA;
-const uint8_t PAYLOAD_LEN = 0x09;  // 9 payload bytes: 1 META + 4 COM rows × 2 bytes
+const uint8_t PAYLOAD_LEN_TX = 0x09;  // 9 payload bytes: 1 META + 4 COM rows × 2 bytes
+const uint8_t PAYLOAD_LEN_RX = 0x02;  // 2 payload bytes: METER_ID + DATA_BYTE
 
-// Meter identity — set this once per physical unit before flashing.
-//
-// Each RP2040 installation should be assigned a unique ID so the receiver can
-// distinguish packets from multiple meters even when they are the same model.
-// This value is a compile-time constant: it is the flasher's responsibility to
-// assign a unique ID per unit. The receiver maps ID to a display name and
-// protocol decoder; the firmware itself does not need to know the meter model.
-//
-// Valid range: 0-31 (5 bits). Values above 31 are truncated by the packing macro.
-const uint8_t METER_ID = 0;
+// =============================================================================
+// PACKET RECEIVE STATE MACHINE
+// =============================================================================
+enum RxState {
+  WAIT_PREAMBLE_1,
+  WAIT_PREAMBLE_2,
+  WAIT_LEN,
+  READ_PAYLOAD,
+  WAIT_CRC
+};
 
-// Build the META byte from the current fps index and METER_ID.
-// Bit layout:  [ F2 F1 F0 | M4 M3 M2 M1 M0 ]
-//               bits 7-5     bits 4-0
-// fps index occupies the three most-significant bits (0-7, matching FRAME_RATE_COUNT).
-// Meter ID occupies the five least-significant bits (0-31).
-#define MAKE_META_BYTE(fps_idx) \
-  ((uint8_t)(((fps_idx) & 0x07) << 5) | ((METER_ID) & 0x1F))
+RxState rx_state = WAIT_PREAMBLE_1;
+uint8_t rx_len = 0;
+uint8_t rx_payload[PAYLOAD_LEN_RX];
+uint8_t rx_payload_idx = 0;
+unsigned long rx_packet_count = 0;
+unsigned long rx_error_count = 0;
+
+
+// Meter identity — loaded from EEPROM on boot, configurable at runtime via
+// the ESP32 web UI. Defaults to 0 if no saved value exists.
+// Valid range: 0-31 (5 bits, packed into the META byte low bits).
+uint8_t METER_ID = 0;
+
 
 // COM line settle delay in microseconds. After a COM pin is detected HIGH,
 // sampling is delayed to reach the centre of the active window (~2ms wide)
@@ -177,9 +191,10 @@ const unsigned long BUZZER_HOLD_MS = 80;
 // index 0 after the last entry.
 //
 //   Index 0 →  1 fps (1000ms)
-//   Index 1 →  3 fps ( 333ms)  ← default if no saved setting exists
-//   Index 2 →  5 fps ( 200ms)
-//   Index 3 → 10 fps ( 100ms)
+//   Index 1 →  2 fps ( 500ms)
+//   Index 2 →  3 fps ( 333ms)  ← default
+//   Index 3 →  5 fps ( 200ms)
+//   Index 4 → 10 fps ( 100ms)
 const unsigned long FRAME_INTERVALS[] = { 1000, 500, 333, 200, 100 };
 const int           FRAME_RATE_COUNT  = 5;
 const int           FRAME_RATE_DEFAULT_INDEX = 2;   // 3 fps
@@ -195,6 +210,7 @@ static_assert(FRAME_RATE_COUNT <= 8,
 const int EEPROM_ADDR_FRAME_INDEX = 0;
 const int EEPROM_MAGIC_ADDR       = 1;    // Address used to detect initialised EEPROM
 const uint8_t EEPROM_MAGIC_VALUE  = 0xA5; // Sentinel — if present, EEPROM data is valid
+const int EEPROM_ADDR_METER_ID    = 2;
 
 // Active frame rate index and interval. Set during setup and updated on button press.
 int           frameRateIndex    = FRAME_RATE_DEFAULT_INDEX;
@@ -247,7 +263,7 @@ bool systemSleeping = false;
 
 
 // =============================================================================
-// SECTION 8 — PROTOCOL STATE
+// SECTION 7 — PROTOCOL STATE
 // =============================================================================
 
 // Rolling sequence number incremented with each transmitted packet (0x00–0xFF).
@@ -268,15 +284,19 @@ bool led_active      = true;
 
 
 // =============================================================================
-// SECTION 9 — PERIPHERAL OBJECTS
+// SECTION 8 — PERIPHERAL OBJECTS
 // =============================================================================
 
 Adafruit_NeoPixel rgb_led(1, LED_PIN, NEO_GRB + NEO_KHZ800);
 
 
 // =============================================================================
-// SECTION 10 — HELPER FUNCTIONS
+// SECTION 9 — HELPER FUNCTIONS
 // =============================================================================
+
+uint8_t makeMetaByte(uint8_t fps_idx, uint8_t meter_id) {
+  return ((fps_idx & 0x07) << 5) | (meter_id & 0x1F);
+}
 
 // Flash the LED a given number of times in blue to confirm a frame rate change.
 // Each flash is 80ms on / 80ms off. Called after a button press is registered.
@@ -314,16 +334,116 @@ uint8_t calculate_crc8(uint8_t *data, uint8_t len) {
   for (uint8_t i = 0; i < len; i++) {
     crc ^= data[i];
     for (uint8_t j = 0; j < 8; j++) {
-      if (crc & 0x80) crc = (crc << 1) ^ 0x31;
-      else            crc <<= 1;
+      crc = (crc & 0x80) ? (crc << 1) ^ 0x31 : (crc << 1);
     }
   }
   return crc;
 }
 
+void applyNewConfiguration(uint8_t new_id, uint8_t new_fps_idx) {
+  bool changed = false;
+
+  if (new_id != METER_ID && new_id <= 31) {
+    METER_ID = new_id;
+    EEPROM.write(EEPROM_ADDR_METER_ID, METER_ID);
+    changed = true;
+  }
+
+  if (new_fps_idx < FRAME_RATE_COUNT) {
+    frameRateIndex = new_fps_idx;
+    txIntervalMs   = FRAME_INTERVALS[frameRateIndex];
+    EEPROM.write(EEPROM_ADDR_FRAME_INDEX, frameRateIndex);
+    changed = true;
+  }
+
+  if (changed) {
+    EEPROM.write(EEPROM_MAGIC_ADDR, EEPROM_MAGIC_VALUE);
+    EEPROM.commit();
+    flashLED(3);  // 3 flashes = config received confirmation
+  }
+}
+
+void decodeConfigPacket(const uint8_t* payload) {
+  const uint8_t current_id = payload[0];
+  if (current_id != METER_ID) return;
+
+  // Extract shared fields: frequency (bits 7-5) | new_id (bits 4-0)
+  const uint8_t shared_byte = payload[1];
+  const uint8_t frequency   = (shared_byte >> 5) & 0x07;
+  const uint8_t new_id      = shared_byte & 0x1F;
+
+  // Print debug confirmation over USB serial
+  Serial.printf("[ESP32 -> RP2040] Target ID: %u | New ID: %u | Freq Index: %u\n", 
+                current_id, new_id, frequency);
+
+
+  applyNewConfiguration(new_id, frequency);
+}
+
+void processIncomingESP32() {
+  while (Serial1.available()) { // Note: using RP2040's target Serial interface
+    const uint8_t b = Serial1.read();
+
+    switch (rx_state) {
+
+      case WAIT_PREAMBLE_1:
+        if (b == PREAMBLE_2) rx_state = WAIT_PREAMBLE_2;
+        break;
+
+      case WAIT_PREAMBLE_2:
+        if (b == PREAMBLE_1) {
+          rx_state = WAIT_LEN;
+        } else if (b == PREAMBLE_2) {
+          rx_state = WAIT_PREAMBLE_2; // Keep state if duplicate 0xAA arrives
+        } else {
+          rx_state = WAIT_PREAMBLE_1;
+        }
+        break;
+
+      case WAIT_LEN:
+        rx_len = b;
+        if (rx_len == PAYLOAD_LEN_RX) {
+          rx_payload_idx = 0;
+          rx_state = READ_PAYLOAD;
+        } else {
+          Serial.printf("[HC12] Bad LEN byte from ESP32: 0x%02X — resyncing\n", b);
+          rx_error_count++;
+          rx_state = WAIT_PREAMBLE_1;
+        }
+        break;
+
+      case READ_PAYLOAD:
+        rx_payload[rx_payload_idx++] = b;
+        if (rx_payload_idx == rx_len) {
+          rx_state = WAIT_CRC;
+        }
+        break;
+
+      case WAIT_CRC: {
+        // CRC covers LEN + PAYLOAD (1 byte length + 2 bytes data = 3 bytes total)
+        uint8_t crc_input[3];
+        crc_input[0] = rx_len;
+        memcpy(&crc_input[1], rx_payload, rx_len);
+
+        const uint8_t expected_crc = calculate_crc8(crc_input, 3);
+
+        if (b == expected_crc) {
+          rx_packet_count++;
+          decodeConfigPacket(rx_payload);
+        } else {
+          rx_error_count++;
+          Serial.printf("[HC12] CRC FAIL from ESP32 — got 0x%02X expected 0x%02X (Total: %lu)\n",
+                        b, expected_crc, rx_error_count);
+        }
+        rx_state = WAIT_PREAMBLE_1;
+        break;
+      }
+    }
+  }
+}
 
 // =============================================================================
-// SECTION 11 — SETUP
+// SECTION 10 — SETUP
 // =============================================================================
 
 void setup() {
@@ -339,7 +459,7 @@ void setup() {
   for (int i = 0; i < 15; i++) pinMode(SEG_PINS[i], INPUT_PULLUP);
   pinMode(BUZZER_PIN, INPUT_PULLUP);
 
-  // Initialise HC-12 UART (TX only)
+  // Initialise HC-12 UART
   Serial1.setTX(HC12_TX_PIN);
   Serial1.setRX(HC12_RX_PIN);
   Serial1.begin(HC12_BAUD);
@@ -349,11 +469,14 @@ void setup() {
   // by this firmware before. If absent, use the default frame rate index.
   EEPROM.begin(256);
   if (EEPROM.read(EEPROM_MAGIC_ADDR) == EEPROM_MAGIC_VALUE) {
-    uint8_t saved = EEPROM.read(EEPROM_ADDR_FRAME_INDEX);
-    if (saved < FRAME_RATE_COUNT) {
-      frameRateIndex = saved;
+    uint8_t savedFpsIdx = EEPROM.read(EEPROM_ADDR_FRAME_INDEX);
+    uint8_t savedId = EEPROM.read(EEPROM_ADDR_METER_ID);
+    
+    if (savedFpsIdx < FRAME_RATE_COUNT) {
+      frameRateIndex = savedFpsIdx;
       txIntervalMs   = FRAME_INTERVALS[frameRateIndex];
     }
+    if (savedId <= 31) METER_ID = savedId;
   }
 
   // Seed activity timer so the sleep timeout does not trigger immediately
@@ -411,7 +534,7 @@ bool __no_inline_not_in_flash_func(get_boot_button)() {
 }
 
 // =============================================================================
-// SECTION 12 — MAIN LOOP
+// SECTION 11 — MAIN LOOP
 // =============================================================================
 
 void loop() {
@@ -510,7 +633,16 @@ void loop() {
   }
 
   // ---------------------------------------------------------------------------
-  // PHASE 4: Transmit packet every txIntervalMs (active mode only)
+  // PHASE 4: Process incoming config packets from ESP32
+  //
+  // Receive and decode configuration commands sent by the ESP32 web UI over
+  // the HC-12 reverse channel. Valid packets update METER_ID and/or
+  // frameRateIndex and persist both to EEPROM immediately.
+  // ---------------------------------------------------------------------------
+  processIncomingESP32();
+
+  // ---------------------------------------------------------------------------
+  // PHASE 5: Transmit packet every txIntervalMs (active mode only)
   //
   // Snapshot the current display matrix into a local TX buffer so the buzzer
   // bit can be packed into the reserved bit without modifying live state.
@@ -539,13 +671,13 @@ void loop() {
 
     tx_packet[0]  = PREAMBLE_1;                        // Sync byte 1
     tx_packet[1]  = PREAMBLE_2;                        // Sync byte 2
-    tx_packet[2]  = PAYLOAD_LEN;                       // Payload length (0x09)
+    tx_packet[2]  = PAYLOAD_LEN_TX;                    // Payload length
     tx_packet[3]  = sequence_number++;                 // Rolling sequence number
 
     // META byte: upper 3 bits = current fps index, lower 5 bits = meter ID.
     // Lets the receiver display the active frame rate and route packets from
     // multiple meters to separate UI panels without any extra protocol overhead.
-    tx_packet[4]  = MAKE_META_BYTE(frameRateIndex);    // [F2 F1 F0 | M4 M3 M2 M1 M0]
+    tx_packet[4]  = makeMetaByte(frameRateIndex, METER_ID);    // [F2 F1 F0 | M4 M3 M2 M1 M0]
 
     tx_packet[5]  = (tx_matrix[0] >> 8) & 0xFF;       // COM0 high byte (bit15 = buzzer)
     tx_packet[6]  =  tx_matrix[0]       & 0xFF;        // COM0 low byte

@@ -113,6 +113,28 @@
 
     .home-btn svg { width: 1.4em; height: 1.4em; }
 
+    .btn-delete {
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 0.3em;
+      color: var(--text-3);
+      padding: 0.4em;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: color 0.15s, border-color 0.15s, background 0.15s;
+    }
+
+    .btn-delete:hover {
+      color: var(--red);
+      border-color: rgba(255, 85, 85, 0.4);
+      background: var(--red-dim);
+    }
+
+    .btn-delete svg { width: 1.4em; height: 1.4em; }
+
     /* ── SECTION LABEL ── */
     .section-label {
       font-family: var(--mono);
@@ -579,6 +601,12 @@
           <span class="meter-active-badge ${badgeClass}">
             <span class="dot"></span>${badgeLabel}
           </span>
+          <button class="btn-delete" onclick="deleteMeter(${id})" title="Delete config">
+            <svg viewBox="0 0 16 16" fill="none">
+              <path d="M3 4h10M6 4V3h4v1M5 4l.5 9h5L11 4" stroke="currentColor" 
+                    stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
         </div>
         <div class="meter-fields">
           <div class="field-row">
@@ -598,7 +626,13 @@
             </select>
           </div>
           <div class="field-row">
-            <span class="field-label">Rate</span>
+            <span class="field-label">Meter ID</span>
+            <input type="number" class="field-input" id="newid-${id}" 
+                  min="0" max="31" value="${id}" 
+                  oninput="onFieldChange(${id})">
+          </div>
+          <div class="field-row">
+            <span class="field-label">Refresh Rate</span>
             <select class="field-select" id="fps-${id}" onchange="onFieldChange(${id})">
               ${fpsOptions(fpsIdx)}
             </select>
@@ -629,13 +663,53 @@
       thumb.innerHTML = thumbHtml(img, name || 'UNKNOWN');
     }
 
+    function rebuildBlock(oldId, newId) {
+      // Grab the migrated config from allSettings (already moved by the setid endpoint)
+      const cfg    = allSettings.meters[newId] || {};
+      const active = activeMeterIds.has(newId);
+
+      // Replace the old block in the DOM with a new one under the new ID
+      const oldBlock = document.querySelector(`[data-mid="${oldId}"]`);
+      const newBlock = renderMeterBlock(newId, active, cfg);
+      oldBlock.replaceWith(newBlock);
+
+      // Clean up allSettings reference for old ID
+      delete allSettings.meters[oldId];
+      activeMeterIds.delete(oldId);
+
+      // Immediately save name/image/fps under the new ID
+      saveMeter(newId);
+    }
+
     /* ── SAVE ONE METER ── */
-    function saveMeter(id) {
+    async function saveMeter(id) {
       const btn      = $(`save-${id}`);
       const statusEl = $(`status-${id}`);
       const name     = $(`name-${id}`).value.trim();
       const image    = $(`image-${id}`).value;
+      const newId    = parseInt($(`newid-${id}`).value, 10);
       const fpsIdx   = parseInt($(`fps-${id}`).value, 10);
+
+      if (newId !== id) {
+        // ID change: call setid first, then proceed with newId
+        const r = await fetch('/api/meter/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ oldId: id, newId, fpsIdx })
+        }).then(r => r.json());
+
+        if (r.status !== 'success') {
+          statusEl.className   = 'save-status error';
+          statusEl.textContent = '✗ ID change failed';
+          btn.disabled = false;
+          return;
+        }
+
+        // Move in local state before rebuilding
+        allSettings.meters[newId] = allSettings.meters[id] || {};
+        rebuildBlock(id, newId);
+        return;
+      }
 
       btn.disabled       = true;
       statusEl.className = 'save-status';
@@ -678,6 +752,29 @@
         statusEl.textContent = '✗ Save failed';
         showToast('Save failed — check connection', 'fail');
       });
+    }
+
+    function deleteMeter(id) {
+      fetch('/api/meter/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id })
+      })
+      .then(r => r.json())
+      .then(d => {
+        if (d.status === 'success') {
+          document.querySelector(`[data-mid="${id}"]`).remove();
+          delete allSettings.meters[id];
+          // Show empty state if no blocks remain
+          if ($('meter-blocks').children.length === 0) {
+            $('empty-state').classList.remove('hidden');
+          }
+          showToast(`Meter ${id} deleted`, 'success');
+        } else {
+          showToast('Delete failed', 'fail');
+        }
+      })
+      .catch(() => showToast('Delete failed — check connection', 'fail'));
     }
 
     /* ── INIT ── */
