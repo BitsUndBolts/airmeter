@@ -794,7 +794,7 @@
       const [settingsRes, systemRes, filesRes] = await Promise.allSettled([
         fetch('/api/settings').then(r => r.json()),
         fetch('/api/system').then(r => r.json()),
-        fetch('/api/files').then(r => r.json())
+        fetch('/api/files/meters').then(r => r.json())
       ]);
 
       // Process settings

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>OTA Update</title>
+  <title>AirMeter · Update &amp; Files</title>
   <style>
     :root {
       --bg: #0a0c0e;
@@ -517,6 +517,233 @@
     .reboot-row span { color: var(--accent); font-weight: 600; margin: 0 0.3em; }
 
     @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── STORAGE BAR ── */
+    .storage-bar-wrap {
+      display: flex;
+      align-items: center;
+      gap: 1.2em;
+      padding: 0 0 0.4em 0;
+    }
+
+    .storage-bar-track {
+      flex: 1;
+      height: 0.35em;
+      background: var(--border-bright);
+      border-radius: 1em;
+      overflow: hidden;
+    }
+
+    .storage-bar-fill {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 1em;
+      transition: width 0.4s ease;
+      width: 0%;
+    }
+
+    .storage-bar-fill.warn { background: var(--yellow); }
+    .storage-bar-fill.crit { background: var(--red); }
+
+    .storage-bar-label {
+      font-family: var(--mono);
+      font-size: 1em;
+      color: var(--text-3);
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .storage-bar-label span { color: var(--text-2); }
+
+    /* ── FILE TABLE ── */
+    .file-table-section {
+      padding: 0 1.2em 1.2em;
+    }
+
+    .file-table {
+      width: 100%;
+      border-collapse: collapse;
+      border: 1px solid var(--border-bright);
+      border-radius: 0.4em;
+      overflow: hidden;
+    }
+
+    .file-table thead tr {
+      background: var(--panel-2);
+      border-bottom: 1px solid var(--border-bright);
+    }
+
+    .file-table th {
+      font-family: var(--mono);
+      font-size: 0.85em;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--text-3);
+      padding: 0.9em 1.2em;
+      text-align: left;
+    }
+
+    .file-table th.col-size   { width: 7em; text-align: right; }
+    .file-table th.col-action { width: 6.5em; text-align: center; }
+
+    .file-table tbody tr {
+      border-bottom: 1px solid var(--border);
+      transition: background 0.12s;
+    }
+
+    .file-table tbody tr:last-child { border-bottom: none; }
+    .file-table tbody tr:hover { background: rgba(255,255,255,0.02); }
+
+    .file-table td {
+      padding: 0.75em 1.2em;
+      vertical-align: middle;
+    }
+
+    /* File name cell — view + rename */
+    .fn-wrap {
+      display: flex;
+      align-items: center;
+      gap: 0.6em;
+      min-width: 0;
+    }
+
+    .fn-icon { color: var(--text-3); flex-shrink: 0; }
+    .fn-icon svg { width: 1.25em; height: 1.25em; display: block; }
+
+    .fn-icon.ext-html { color: var(--accent); }
+    .fn-icon.ext-js   { color: var(--yellow); }
+    .fn-icon.ext-css  { color: var(--blue); }
+    .fn-icon.ext-webp,
+    .fn-icon.ext-png,
+    .fn-icon.ext-jpg  { color: var(--green); }
+    .fn-icon.ext-json { color: #c792ea; }
+    .fn-icon.ext-bin  { color: var(--accent); }
+
+    .fn-name {
+      font-family: var(--mono);
+      font-size: 1.05em;
+      color: var(--text);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      cursor: pointer;
+      border-bottom: 1px dashed transparent;
+      transition: border-color 0.15s, color 0.15s;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .fn-name:hover {
+      color: var(--accent);
+      border-bottom-color: var(--accent-glow);
+    }
+
+    /* Inline rename input */
+    .fn-edit {
+      font-family: var(--mono);
+      font-size: 1.05em;
+      color: var(--text);
+      background: var(--bg);
+      border: 1px solid var(--accent);
+      border-radius: 0.25em;
+      padding: 0.15em 0.5em;
+      outline: none;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .fn-confirm {
+      font-family: var(--mono);
+      font-size: 0.85em;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--bg);
+      background: var(--accent);
+      border: none;
+      border-radius: 0.25em;
+      padding: 0.25em 0.6em;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: opacity 0.15s;
+    }
+
+    .fn-confirm:hover { opacity: 0.85; }
+
+    .fn-cancel {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--text-3);
+      display: flex;
+      align-items: center;
+      padding: 0.2em;
+      transition: color 0.15s;
+      flex-shrink: 0;
+    }
+
+    .fn-cancel:hover { color: var(--red); }
+    .fn-cancel svg { width: 1.1em; height: 1.1em; }
+
+    .file-size {
+      font-family: var(--mono);
+      font-size: 1em;
+      color: var(--text-3);
+      text-align: right;
+    }
+
+    .col-action { text-align: center; }
+
+    .btn-del {
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 0.3em;
+      color: var(--text-3);
+      padding: 0.35em;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: color 0.15s, border-color 0.15s, background 0.15s;
+    }
+
+    .btn-del:hover {
+      color: var(--red);
+      border-color: rgba(255,85,85,0.4);
+      background: var(--red-dim);
+    }
+
+    .btn-del svg { width: 1.25em; height: 1.25em; }
+
+    /* Empty + loading states inside the file section */
+    .fs-state {
+      padding: 2.4em 2em;
+      text-align: center;
+      font-family: var(--mono);
+      font-size: 1.05em;
+      color: var(--text-3);
+      border: 1px solid var(--border-bright);
+      border-radius: 0.4em;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.6em;
+    }
+
+    .fs-state svg { width: 2.8em; height: 2.8em; color: var(--text-3); }
+
+    .spinner-sm {
+      display: inline-block;
+      width: 1.6em;
+      height: 1.6em;
+      border: 0.18em solid var(--border-bright);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+
+    .hidden { display: none !important; }
   </style>
 </head>
 <body>
@@ -532,7 +759,7 @@
           <path d="M2 12l10 5 10-5"/>
         </svg>
       </div>
-      <span class="header-title">OTA Update</span>
+      <span class="header-title">AirMeter · Update &amp; Files</span>
 
       <!-- Home button -->
       <a class="home-btn" href="/" title="Home">
@@ -618,6 +845,51 @@
       </div>
 
     </div><!-- /upload-section -->
+
+    <div class="divider"></div>
+
+    <!-- ── FILES ON DEVICE ── -->
+    <div class="section-label">Files on Device</div>
+
+    <div class="file-table-section">
+
+      <!-- Storage bar (sits above the table) -->
+      <div class="storage-bar-wrap" style="margin-bottom:1em">
+        <div class="storage-bar-track">
+          <div class="storage-bar-fill" id="fs-bar-fill"></div>
+        </div>
+        <div class="storage-bar-label" id="fs-bar-label"><span>—</span> free</div>
+      </div>
+
+      <!-- Loading state -->
+      <div class="fs-state" id="fs-loading">
+        <div class="spinner-sm"></div>
+        Loading…
+      </div>
+
+      <!-- Empty state -->
+      <div class="fs-state hidden" id="fs-empty">
+        <svg viewBox="0 0 48 48" fill="none">
+          <rect x="8" y="6" width="24" height="32" rx="2" stroke="currentColor" stroke-width="2"/>
+          <path d="M24 6l8 8h-8V6z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+          <path d="M14 20h16M14 26h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+        No files found — LittleFS is empty.
+      </div>
+
+      <!-- File table -->
+      <table class="file-table hidden" id="fs-table">
+        <thead>
+          <tr>
+            <th>Filename <span style="font-weight:400;opacity:0.5">(click to rename)</span></th>
+            <th class="col-size">Size</th>
+            <th class="col-action">Delete</th>
+          </tr>
+        </thead>
+        <tbody id="fs-tbody"></tbody>
+      </table>
+
+    </div>
 
     <div class="divider"></div>
 
@@ -864,6 +1136,7 @@
         queue = queue.filter(e => e.status !== 'done');
         renderQueue();
         fetchSystemInfo();
+        loadFiles(); // refresh file table
       }
 
       updateUI();
@@ -940,9 +1213,182 @@
           const total = data?.littlefs_total ?? null;
           if (free  !== null) { freeSpaceBytes = free; $('footer-free').textContent  = fmtBytes(free);  }
           if (total !== null) { $('footer-total').textContent = fmtBytes(total); }
+          updateStorageBar(total, free);
           updateUI(); // re-check space warnings with fresh data
         })
         .catch((err) => { console.log(err); });
+    }
+
+    /* ── STORAGE BAR ────────────────────────────────────────────────────── */
+    function updateStorageBar(total, free) {
+      if (total === null || free === null) return;
+      const pct  = total > 0 ? ((total - free) / total) * 100 : 0;
+      const fill = $('fs-bar-fill');
+      fill.style.width = pct.toFixed(1) + '%';
+      fill.classList.toggle('warn', pct >= 70 && pct < 90);
+      fill.classList.toggle('crit', pct >= 90);
+      $('fs-bar-label').innerHTML = `<span>${fmtBytes(free)}</span> free of ${fmtBytes(total)}`;
+    }
+
+    /* ── FILE MANAGER ───────────────────────────────────────────────────── */
+    function extClass(name) {
+      const ext = name.split('.').pop().toLowerCase();
+      const map = { html:'ext-html', js:'ext-js', css:'ext-css',
+                    webp:'ext-webp', png:'ext-png', jpg:'ext-jpg',
+                    jpeg:'ext-jpg', json:'ext-json', bin:'ext-bin' };
+      return map[ext] || '';
+    }
+
+    const fileIconSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+        stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+        <polyline points="14 2 14 8 20 8"/></svg>`;
+
+    function escH(s) {
+      return s.replace(/&/g,'&amp;').replace(/</g,'&lt;')
+              .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function renderFileTable(files) {
+      const loading = $('fs-loading');
+      const empty   = $('fs-empty');
+      const table   = $('fs-table');
+      const tbody   = $('fs-tbody');
+
+      loading.classList.add('hidden');
+
+      if (!files || files.length === 0) {
+        empty.classList.remove('hidden');
+        table.classList.add('hidden');
+        return;
+      }
+
+      empty.classList.add('hidden');
+      table.classList.remove('hidden');
+      tbody.innerHTML = '';
+
+      files.forEach(f => {
+        const tr = document.createElement('tr');
+        tr.id = 'frow-' + CSS.escape(f.name);
+        tr.innerHTML = `
+          <td>
+            <div class="fn-wrap" id="fn-wrap-${escH(f.name)}">
+              <span class="fn-icon ${extClass(f.name)}">${fileIconSvg}</span>
+              <span class="fn-name" title="Click to rename"
+                    onclick="startRename('${f.name.replace(/'/g,"\\'")}')">/${escH(f.name)}</span>
+            </div>
+          </td>
+          <td class="file-size">${fmtBytes(f.size)}</td>
+          <td class="col-action">
+            <button class="btn-del" title="Delete ${escH(f.name)}"
+                    onclick="deleteFile('${f.name.replace(/'/g,"\\'")}')">
+              <svg viewBox="0 0 16 16" fill="none">
+                <path d="M3 4h10M6 4V3h4v1M5 4l.5 9h5L11 4"
+                      stroke="currentColor" stroke-width="1.3"
+                      stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    async function loadFiles() {
+      $('fs-loading').classList.remove('hidden');
+      $('fs-empty').classList.add('hidden');
+      $('fs-table').classList.add('hidden');
+
+      try {
+        const files = await fetch('/api/files/all').then(r => r.json());
+        renderFileTable(Array.isArray(files) ? files : []);
+      } catch (e) {
+        $('fs-loading').classList.add('hidden');
+        $('fs-empty').classList.remove('hidden');
+      }
+    }
+
+    /* ── RENAME ─────────────────────────────────────────────────────────── */
+    function startRename(name) {
+      const wrap = document.getElementById('fn-wrap-' + name);
+      if (!wrap) return;
+
+      wrap.innerHTML = `
+        <span class="fn-icon ${extClass(name)}">${fileIconSvg}</span>
+        <input class="fn-edit" id="fn-input-${escH(name)}"
+               value="${escH(name)}" spellcheck="false"
+               onkeydown="handleRenameKey(event,'${name.replace(/'/g,"\\'")}')">
+        <button class="fn-confirm" onclick="confirmRename('${name.replace(/'/g,"\\'")}')">OK</button>
+        <button class="fn-cancel" title="Cancel" onclick="cancelRename('${name.replace(/'/g,"\\'")}')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      `;
+      const input = document.getElementById('fn-input-' + name);
+      if (input) { input.focus(); input.select(); }
+    }
+
+    function handleRenameKey(e, name) {
+      if (e.key === 'Enter')  confirmRename(name);
+      if (e.key === 'Escape') cancelRename(name);
+    }
+
+    function cancelRename(name) {
+      const wrap = document.getElementById('fn-wrap-' + name);
+      if (!wrap) return;
+      wrap.innerHTML = `
+        <span class="fn-icon ${extClass(name)}">${fileIconSvg}</span>
+        <span class="fn-name" title="Click to rename"
+              onclick="startRename('${name.replace(/'/g,"\\'")}')">/${escH(name)}</span>
+      `;
+    }
+
+    async function confirmRename(oldName) {
+      const input   = document.getElementById('fn-input-' + oldName);
+      if (!input) return;
+      const newName = input.value.trim();
+
+      if (!newName || newName === oldName) { cancelRename(oldName); return; }
+
+      try {
+        const r = await fetch('/api/files/rename', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ from: '/' + oldName, to: '/' + newName })
+        }).then(r => r.json());
+
+        if (r.status === 'success') {
+          loadFiles();
+        } else {
+          showStatus('error', `Rename failed: ${r.message || 'unknown error'}`);
+          cancelRename(oldName);
+        }
+      } catch (e) {
+        showStatus('error', 'Rename failed — check connection.');
+        cancelRename(oldName);
+      }
+    }
+
+    /* ── DELETE ─────────────────────────────────────────────────────────── */
+    async function deleteFile(name) {
+      try {
+        const r = await fetch('/api/files/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: '/' + name })
+        }).then(r => r.json());
+
+        if (r.status === 'success') {
+          loadFiles();
+          fetchSystemInfo(); // refresh free space
+        } else {
+          showStatus('error', `Delete failed: ${r.message || 'unknown error'}`);
+        }
+      } catch (e) {
+        showStatus('error', 'Delete failed — check connection.');
+      }
     }
 
     /* ── EVENTS ─────────────────────────────────────────────────────────── */
@@ -970,6 +1416,7 @@
 
     /* ── INIT ────────────────────────────────────────────────────────────── */
     fetchSystemInfo();
+    loadFiles();
   </script>
 
 </body>

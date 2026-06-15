@@ -32,14 +32,6 @@
 //   HC-12 transmission is suspended. Normal operation resumes automatically
 //   as soon as COM activity is detected again (e.g. the user wakes the meter).
 //
-// Frame Rate Selection (BOOT Button):
-//   The onboard BOOT button (GP23) cycles through six transmission rates:
-//     1 fps → 2 fps → 3 fps → 5 fps → 10 fps → (wraps to 1 fps)
-//   The selected rate is stored in flash (EEPROM emulation) and restored
-//   on next power-up. If no saved setting exists, 3 fps is used by default.
-//   Each button press is confirmed by a short LED flash sequence showing
-//   the new rate index (1 flash = 1fps, 2 flashes = 3fps, etc.).
-//
 // Transmission Protocol - Sending:
 //   [ 0x55 ][ 0xAA ]          — 2-byte preamble (sync marker)
 //   [ 0x09 ]                  — payload length (9 bytes); acts as implicit format tag
@@ -120,8 +112,8 @@ const int LED_HEARTBEAT = 10;   // Number of TX cycles to show heartbeat
 // =============================================================================
 
 // HC-12 UART interface — TX only
-const int HC12_TX_PIN = 12;    // GP12 → HC-12 TXD
-const int HC12_RX_PIN = 17;    // GP17 → HC-12 RXD
+const int HC12_TX_PIN = 12;    // GP12 → HC-12 RXD (RP2040 TX → module RX)
+const int HC12_RX_PIN = 17;    // GP17 → HC-12 TXD (RP2040 RX ← module TX)
 const int HC12_BAUD   = 9600;
 
 // Packet framing. Total packet size = 14 bytes.
@@ -146,7 +138,6 @@ RxState rx_state = WAIT_PREAMBLE_1;
 uint8_t rx_len = 0;
 uint8_t rx_payload[PAYLOAD_LEN_RX];
 uint8_t rx_payload_idx = 0;
-unsigned long rx_packet_count = 0;
 unsigned long rx_error_count = 0;
 
 
@@ -187,8 +178,7 @@ const unsigned long BUZZER_HOLD_MS = 80;
 // =============================================================================
 
 // Available transmission intervals in milliseconds, ordered from slowest to
-// fastest. Button presses cycle forward through this list, wrapping back to
-// index 0 after the last entry.
+// fastest.
 //
 //   Index 0 →  1 fps (1000ms)
 //   Index 1 →  2 fps ( 500ms)
@@ -206,7 +196,7 @@ static_assert(FRAME_RATE_COUNT <= 8,
   "FRAME_RATE_COUNT exceeds 8 — fps index field in META byte is only 3 bits wide");
 
 // EEPROM address where the selected frame rate index is stored.
-// A single byte is sufficient (values 0–5).
+// A single byte is sufficient (values 0–4).
 const int EEPROM_ADDR_FRAME_INDEX = 0;
 const int EEPROM_MAGIC_ADDR       = 1;    // Address used to detect initialised EEPROM
 const uint8_t EEPROM_MAGIC_VALUE  = 0xA5; // Sentinel — if present, EEPROM data is valid
@@ -270,13 +260,6 @@ bool systemSleeping = false;
 // Allows the receiver to detect dropped or out-of-order packets.
 uint8_t sequence_number = 0;
 
-// BOOT button debounce state.
-// lastButtonState tracks the raw GPIO level from the previous loop iteration.
-// A press is only registered on the HIGH→LOW falling edge (button pulled LOW
-// when pressed), preventing cycleFrameRate() from firing repeatedly while
-// the button is held down.
-bool lastButtonState = false;
-
 // Heartbeat LED state. Counts transmitted packets and disables the LED
 // after LED_HEARTBEAT transmissions to save power.
 int  heartbeat_count = 0;
@@ -300,30 +283,16 @@ uint8_t makeMetaByte(uint8_t fps_idx, uint8_t meter_id) {
 
 // Flash the LED a given number of times in blue to confirm a frame rate change.
 // Each flash is 80ms on / 80ms off. Called after a button press is registered.
-void flashLED(int times) {
+void flashLED(int times, int r, int g, int b) {
   for (int i = 0; i < times; i++) {
-    rgb_led.setPixelColor(0, rgb_led.Color(0, 0, 180));
+    rgb_led.setBrightness(20);
+    rgb_led.setPixelColor(0, rgb_led.Color(r, g, b));
     rgb_led.show();
     delay(80);
     rgb_led.setPixelColor(0, rgb_led.Color(0, 0, 0));
     rgb_led.show();
     delay(80);
   }
-}
-
-// Advance to the next frame rate in the cycle, save to EEPROM, and confirm
-// with an LED flash sequence. Wraps from the last index back to index 0.
-void cycleFrameRate() {
-  frameRateIndex = (frameRateIndex + 1) % FRAME_RATE_COUNT;
-  txIntervalMs   = FRAME_INTERVALS[frameRateIndex];
-
-  // Persist to EEPROM so the setting survives power cycles
-  EEPROM.write(EEPROM_ADDR_FRAME_INDEX, (uint8_t)frameRateIndex);
-  EEPROM.write(EEPROM_MAGIC_ADDR, EEPROM_MAGIC_VALUE);
-  EEPROM.commit();
-
-  // Confirm new rate with LED flashes (index + 1 flashes, so index 0 = 1 flash)
-  flashLED(frameRateIndex + 1);
 }
 
 // CRC-8 using the Dallas/Maxim polynomial (X^8 + X^5 + X^4 + 1 = 0x31).
@@ -349,7 +318,7 @@ void applyNewConfiguration(uint8_t new_id, uint8_t new_fps_idx) {
     changed = true;
   }
 
-  if (new_fps_idx < FRAME_RATE_COUNT) {
+  if (new_fps_idx < FRAME_RATE_COUNT && new_fps_idx != frameRateIndex) {
     frameRateIndex = new_fps_idx;
     txIntervalMs   = FRAME_INTERVALS[frameRateIndex];
     EEPROM.write(EEPROM_ADDR_FRAME_INDEX, frameRateIndex);
@@ -359,7 +328,7 @@ void applyNewConfiguration(uint8_t new_id, uint8_t new_fps_idx) {
   if (changed) {
     EEPROM.write(EEPROM_MAGIC_ADDR, EEPROM_MAGIC_VALUE);
     EEPROM.commit();
-    flashLED(3);  // 3 flashes = config received confirmation
+    flashLED(3, 0, 0, 180);  // 3 flashes = config received confirmation
   }
 }
 
@@ -381,12 +350,13 @@ void decodeConfigPacket(const uint8_t* payload) {
 }
 
 void processIncomingESP32() {
-  while (Serial1.available()) { // Note: using RP2040's target Serial interface
+  while (Serial1.available()) { // Drain HC-12 RX buffer
     const uint8_t b = Serial1.read();
 
     switch (rx_state) {
 
       case WAIT_PREAMBLE_1:
+        // RX preamble is reversed: [0xAA][0x55], so first byte is PREAMBLE_2
         if (b == PREAMBLE_2) rx_state = WAIT_PREAMBLE_2;
         break;
 
@@ -428,7 +398,6 @@ void processIncomingESP32() {
         const uint8_t expected_crc = calculate_crc8(crc_input, 3);
 
         if (b == expected_crc) {
-          rx_packet_count++;
           decodeConfigPacket(rx_payload);
         } else {
           rx_error_count++;
@@ -448,9 +417,7 @@ void processIncomingESP32() {
 
 void setup() {
   // Initialise onboard RGB LED (off at startup)
-  rgb_led.begin();
-  rgb_led.setBrightness(20);
-  rgb_led.show();
+  flashLED(2, 0, 180, 0);
 
   // Configure COM and SEG pins as inputs with pull-ups.
   // The LMV339 comparator outputs are open-drain compatible; pull-ups ensure
@@ -482,55 +449,6 @@ void setup() {
   // Seed activity timer so the sleep timeout does not trigger immediately
   // on boot before any COM lines have been sampled.
   lastActivityTime = millis();
-}
-
-// Read the RP2040 Zero onboard BOOT button.
-//
-// The BOOT button on the RP2040 Zero shares the QSPI chip-select (SS) pin with
-// the external Flash memory. Under normal operation, the RP2040 drives that pin
-// as the SPI CS line. To read it as a GPIO we must briefly relinquish control,
-// sample the level, then restore Flash operation — all while preventing any
-// firmware code from executing from Flash during the window (which would cause
-// a bus fault because CS is tristated).
-//
-// The __no_inline_not_in_flash_func macro ensures the entire function body is
-// compiled into SRAM rather than Flash, satisfying that constraint.
-//
-// Returns true if the button is currently pressed (pin reads LOW), false if not.
-bool __no_inline_not_in_flash_func(get_boot_button)() {
-    // Step 1 — Disable all interrupts.
-    //   Any interrupt that triggers a Flash read while CS is tristated would
-    //   hang the bus. Interrupts must be off for the entire sampling window.
-    uint32_t flags = save_and_disable_interrupts();
-
-    // Step 2 — Override QSPI CS output enable to Hi-Z (GPIO_OVERRIDE_LOW = output off).
-    //   This releases the CS line so the onboard pull-up and button can set its level.
-    //   The OEOVER field controls whether the pad drives its output; LOW means disabled.
-    hw_write_masked(&ioqspi_hw->io[1].ctrl, 
-                    GPIO_OVERRIDE_LOW << IO_QSPI_GPIO_QSPI_SS_CTRL_OEOVER_LSB, 
-                    IO_QSPI_GPIO_QSPI_SS_CTRL_OEOVER_BITS);
-
-    // Step 3 — Short stabilisation delay.
-    //   Allows the pin voltage to settle after the driver is disabled before we read.
-    //   Implemented as a volatile spin-loop so the compiler cannot optimise it away.
-    for (volatile int i = 0; i < 1000; ++i);
-
-    // Step 4 — Sample the QSPI CS pin via the GPIO_HI_IN register.
-    //   GPIO_HI_IN reflects the raw pad state for pins that are not in the normal
-    //   GPIO bank (QSPI pins live here). Bit 1 corresponds to QSPI_SS (CS).
-    //   The button pulls the line LOW when pressed, so we invert the reading.
-    bool button_state = !(sio_hw->gpio_hi_in & (1u << 1));
-
-    // Step 5 — Restore normal QSPI CS output drive (GPIO_OVERRIDE_NORMAL).
-    //   The RP2040 resumes control of the CS line; Flash reads are safe again.
-    hw_write_masked(&ioqspi_hw->io[1].ctrl, 
-                    GPIO_OVERRIDE_NORMAL << IO_QSPI_GPIO_QSPI_SS_CTRL_OEOVER_LSB, 
-                    IO_QSPI_GPIO_QSPI_SS_CTRL_OEOVER_BITS);
-
-    // Step 6 — Re-enable interrupts. Normal firmware execution resumes.
-    restore_interrupts(flags);
-
-    return button_state;
 }
 
 // =============================================================================
@@ -600,27 +518,7 @@ void loop() {
   }
 
   // ---------------------------------------------------------------------------
-  // PHASE 2: BOOT button handling
-  //
-  // get_boot_button() returns true for every loop iteration while the button
-  // is held. Without edge detection, a single press would call cycleFrameRate()
-  // hundreds of times before the finger lifts.
-  //
-  // We use a simple rising-edge detector: compare the current reading against
-  // lastButtonState and act only on the false→true transition (button just
-  // pressed). lastButtonState is then updated unconditionally so subsequent
-  // loop iterations while the button is held see no new edge.
-  // ---------------------------------------------------------------------------
-  {
-    bool currentButtonState = get_boot_button();
-    if (currentButtonState && !lastButtonState) {
-      cycleFrameRate();                        // Fire once per physical press
-    }
-    lastButtonState = currentButtonState;      // Track state for next iteration
-  }
-
-  // ---------------------------------------------------------------------------
-  // PHASE 3: Sleep detection
+  // PHASE 2: Sleep detection
   //
   // If no COM activity has been detected for SLEEP_TIMEOUT_MS, the multimeter
   // has entered its auto-shutoff low-power state. Suspend HC-12 transmission
@@ -633,7 +531,7 @@ void loop() {
   }
 
   // ---------------------------------------------------------------------------
-  // PHASE 4: Process incoming config packets from ESP32
+  // PHASE 3: Process incoming config packets from ESP32
   //
   // Receive and decode configuration commands sent by the ESP32 web UI over
   // the HC-12 reverse channel. Valid packets update METER_ID and/or
@@ -642,7 +540,7 @@ void loop() {
   processIncomingESP32();
 
   // ---------------------------------------------------------------------------
-  // PHASE 5: Transmit packet every txIntervalMs (active mode only)
+  // PHASE 4: Transmit packet every txIntervalMs (active mode only)
   //
   // Snapshot the current display matrix into a local TX buffer so the buzzer
   // bit can be packed into the reserved bit without modifying live state.
@@ -661,9 +559,9 @@ void loop() {
 
     // Heartbeat: flash green LED for the first LED_HEARTBEAT transmissions
     if (led_active) {
-      rgb_led.setPixelColor(0, rgb_led.Color(0, 255, 0));
-      rgb_led.show();
+      flashLED(1, 180, 0, 0);
       heartbeat_count++;
+      if (heartbeat_count >= LED_HEARTBEAT) led_active = false;
     }
 
     // Build 14-byte packet
@@ -692,12 +590,5 @@ void loop() {
     tx_packet[13] = calculate_crc8(&tx_packet[2], 11);
 
     Serial1.write(tx_packet, 14);
-
-    // Turn off heartbeat LED after transmission; disable permanently after limit
-    if (led_active) {
-      rgb_led.setPixelColor(0, rgb_led.Color(0, 0, 0));
-      rgb_led.show();
-      if (heartbeat_count >= LED_HEARTBEAT) led_active = false;
-    }
   }
 }

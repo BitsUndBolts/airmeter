@@ -22,6 +22,12 @@
 #include <DNSServer.h>
 #include <ArduinoJson.h>
 
+// Per-meter last-seen timestamps (key = meter ID 0–31)
+#include <map>
+std::map<uint8_t, unsigned long> meterLastSeen;
+
+//#define DEBUG_LCD_VISUAL  // Comment out to suppress per-packet LCD debug output
+
 // =============================================================================
 // FIRMWARE METADATA
 // =============================================================================
@@ -68,7 +74,6 @@ HardwareSerial HC12(1); // UART1
 static const uint8_t PREAMBLE_1  = 0x55;
 static const uint8_t PREAMBLE_2  = 0xAA;
 static const uint8_t PAYLOAD_LEN = 0x09;
-static const uint8_t PACKET_SIZE = 14;    // 2 preamble + 1 len + 1 seq + 1 META + 8 payload + 1 crc
 
 // =============================================================================
 // NETWORK & SERVER OBJECTS
@@ -101,16 +106,6 @@ unsigned long     connectionAttemptStart = 0;
 
 bool              isBootButtonPressed    = false;
 unsigned long     bootButtonPressedTime  = 0;
-
-// =============================================================================
-// RUNTIME STATE — MULTIMETER DATA
-// =============================================================================
-
-int               buzzer_status          = 0;
-
-// Per-meter last-seen timestamps (key = meter ID 0–31)
-#include <map>
-std::map<uint8_t, unsigned long> meterLastSeen;
 
 // =============================================================================
 // PACKET RECEIVE STATE MACHINE
@@ -181,13 +176,13 @@ void decodePacket(const uint8_t* payload) {
   // Reconstruct the four 16-bit COM rows (skipping payload[0])
   uint16_t com[4];
   for (int c = 0; c < 4; c++) {
-    int base_idx = 1 + (c * 2); // Shift past the META byte
+    int base_idx = 1 + (c * 2); // payload[0] is META; COM rows start at index 1, 2 bytes each
     com[c] = ((uint16_t)payload[base_idx] << 8) | payload[base_idx + 1];
   }
 
   // Extract buzzer from bit 15 of COM0 BEFORE masking
   const bool buzzer = (com[0] & 0x8000) != 0;
-  buzzer_status = buzzer ? 1 : 0;
+  int buzzer_status = buzzer ? 1 : 0;
 
   // Strip buzzer bit — only SEG0-SEG14 (bits 0-14) carry valid LCD data
   com[0] &= 0x7FFF;
@@ -212,7 +207,8 @@ void decodePacket(const uint8_t* payload) {
            bitString, buzzer_status, fps_index, meter_id);
   events.send(jsonPayload, "multimeter-update");
 
-  // Debug: visual 64-bit block with buzzer on COM0
+  // Debug: 4-row visual display (1 buzzer prefix + 15 SEG bits per COM row)
+#ifdef DEBUG_LCD_VISUAL
   String visual;
   visual.reserve(72);
   for (int c = 0; c < 4; c++) {
@@ -226,6 +222,7 @@ void decodePacket(const uint8_t* payload) {
 
   Serial.printf("[HC12] Packet #%lu | SEQ:%u | Meter ID:%u | FPS Idx:%u | Buzzer:%d\n%s\n",
                 rx_packet_count, rx_seq, meter_id, fps_index, buzzer_status, visual.c_str());
+#endif
 }
 
 // =============================================================================
@@ -312,21 +309,23 @@ String getNetworksJSON() {
     return "[]";
   }
 
-  String json = "[";
-  int validCount = 0;
+  JsonDocument doc;
+  JsonArray arr = doc.to<JsonArray>();
 
   for (int i = 0; i < n; ++i) {
     const String ssid = WiFi.SSID(i);
     if (ssid.length() > 0) {
-      if (validCount > 0) json += ',';
-      json += "{\"ssid\":\"" + ssid + "\",\"rssi\":" + String(WiFi.RSSI(i)) + "}";
-      validCount++;
+      JsonObject entry = arr.add<JsonObject>();
+      entry["ssid"] = ssid;           // ArduinoJson escapes quotes and backslashes
+      entry["rssi"] = WiFi.RSSI(i);
     }
   }
 
-  json += ']';
-  WiFi.scanDelete(); // Free scan memory
-  return json;
+  WiFi.scanDelete();
+
+  String out;
+  serializeJson(doc, out);
+  return out;
 }
 
 // =============================================================================
@@ -375,9 +374,10 @@ void factoryReset(bool fullReset, const char* source) {
 }
 
 // =============================================================================
-// DEOBFUSCATION — decrypts hex-encoded XOR strings using a key
+// DEOBFUSCATION — decodes hex-encoded XOR strings using a key
 // =============================================================================
 String deobfuscate(const String& hex, const char* key) {
+  if (hex.length() == 0 || hex.length() % 2 != 0) return "";  // Malformed input
   size_t keyLen = strlen(key);
   String result = "";
   result.reserve(hex.length() / 2);
@@ -436,6 +436,11 @@ void setupWebServer() {
     if (request->hasParam("ssid", true) && request->hasParam("pass", true)) {
       const String test_ssid = request->getParam("ssid", true)->value();
       const String test_pass = deobfuscate(request->getParam("pass", true)->value(), "bitsundbolts");
+
+      if (test_pass.isEmpty()) {
+        request->send(400, "application/json", "{\"status\":\"error\",\"message\":\"Malformed password\"}");
+        return;
+      }
 
       Serial.printf("[NETWORK] Testing connection to: %s\n", test_ssid.c_str());
 
@@ -508,29 +513,151 @@ void setupWebServer() {
     request->send(200, "application/json", jsonResponse);
   });
 
-  // ── API: List WebP images on LittleFS ────────────────────────────────────
-  server.on("/api/files", HTTP_GET, [](AsyncWebServerRequest* request) {
+  // ── API: Settings Read ────────────────────────────────────────────────────
+  server.on("/api/settings", HTTP_GET, [](AsyncWebServerRequest* request) {
+    request->send(200, "application/json", loadSettings());
+  });
+
+  // ── API: List all files on LittleFS ────────────────────────────────────
+  server.on("/api/files/all", HTTP_GET, [](AsyncWebServerRequest* request) {
     if (!littlefs_available) {
       request->send(200, "application/json", "[]");
       return;
     }
-    String json = "[";
-    bool first = true;
+
+    JsonDocument doc;
+    JsonArray arr = doc.to<JsonArray>();
+
+    File root = LittleFS.open("/");
+    File file = root.openNextFile();
+    while (file) {
+      if (!file.isDirectory()) {
+        JsonObject entry = arr.add<JsonObject>();
+        entry["name"] = String(file.name());
+        entry["size"] = file.size();
+      }
+      file = root.openNextFile();
+    }
+
+    String out;
+    serializeJson(doc, out);
+    request->send(200, "application/json", out);
+  });
+
+  // ── API: List WebP images of Multimeters on LittleFS ────────────────────────────────────
+  server.on("/api/files/meters", HTTP_GET, [](AsyncWebServerRequest* request) {
+    if (!littlefs_available) {
+      request->send(200, "application/json", "[]");
+      return;
+    }
+
+    JsonDocument doc;
+    JsonArray arr = doc.to<JsonArray>();
+
     File root = LittleFS.open("/");
     File file = root.openNextFile();
     while (file) {
       String name = String(file.name());
-      // Only expose .webp images
-      if (name.endsWith(".webp")) {
-        if (!first) json += ",";
-        json += "\"" + name + "\"";
-        first = false;
+      if (name.startsWith("mm_") && name.endsWith(".webp")) {
+        arr.add(name);
       }
       file = root.openNextFile();
     }
-    json += "]";
-    request->send(200, "application/json", json);
+
+    String out;
+    serializeJson(doc, out);
+    request->send(200, "application/json", out);
   });
+
+  // ── API: Deletes a file on LittleFS ────────────────────────────────────
+  server.on("/api/files/delete", HTTP_POST, [](AsyncWebServerRequest* request) {}, NULL,
+    [](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+      JsonDocument doc;
+      if (deserializeJson(doc, data, len)) {
+        request->send(400, "application/json", "{\"status\":\"error\",\"message\":\"Invalid JSON\"}");
+        return;
+      }
+
+      if (!doc["path"].is<const char*>()) {
+        request->send(400, "application/json", "{\"status\":\"error\",\"message\":\"Missing path\"}");
+        return;
+      }
+
+      const String path = doc["path"].as<String>();
+      if (path.isEmpty() || path == "/") {
+        request->send(400, "application/json", "{\"status\":\"error\",\"message\":\"Invalid path\"}");
+        return;
+      }
+
+      if (!littlefs_available) {
+        request->send(503, "application/json", "{\"status\":\"error\",\"message\":\"Storage unavailable\"}");
+        return;
+      }
+
+      if (!LittleFS.exists(path)) {
+        request->send(404, "application/json", "{\"status\":\"error\",\"message\":\"File not found\"}");
+        return;
+      }
+
+      if (LittleFS.remove(path)) {
+        Serial.printf("[FS] Deleted: %s\n", path.c_str());
+        request->send(200, "application/json", "{\"status\":\"success\"}");
+      } else {
+        request->send(500, "application/json", "{\"status\":\"error\",\"message\":\"Delete failed\"}");
+      }
+    }
+  );
+
+  // ── API: Renames a file on LittleFS ────────────────────────────────────
+  server.on("/api/files/rename", HTTP_POST, [](AsyncWebServerRequest* request) {}, NULL,
+    [](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+      JsonDocument doc;
+      if (deserializeJson(doc, data, len)) {
+        request->send(400, "application/json", "{\"status\":\"error\",\"message\":\"Invalid JSON\"}");
+        return;
+      }
+
+      if (!doc["from"].is<const char*>() || !doc["to"].is<const char*>()) {
+        request->send(400, "application/json", "{\"status\":\"error\",\"message\":\"Missing from/to\"}");
+        return;
+      }
+
+      const String fromPath = doc["from"].as<String>();
+      const String toPath   = doc["to"].as<String>();
+
+      if (fromPath.isEmpty() || fromPath == "/" || toPath.isEmpty() || toPath == "/") {
+        request->send(400, "application/json", "{\"status\":\"error\",\"message\":\"Invalid path\"}");
+        return;
+      }
+
+      if (fromPath == toPath) {
+        request->send(200, "application/json", "{\"status\":\"success\"}");
+        return;
+      }
+
+      if (!littlefs_available) {
+        request->send(503, "application/json", "{\"status\":\"error\",\"message\":\"Storage unavailable\"}");
+        return;
+      }
+
+      if (!LittleFS.exists(fromPath)) {
+        request->send(404, "application/json", "{\"status\":\"error\",\"message\":\"File not found\"}");
+        return;
+      }
+
+      if (LittleFS.exists(toPath)) {
+        request->send(409, "application/json", "{\"status\":\"error\",\"message\":\"Target name already exists\"}");
+        return;
+      }
+
+      if (LittleFS.rename(fromPath, toPath)) {
+        Serial.printf("[FS] Renamed: %s → %s\n", fromPath.c_str(), toPath.c_str());
+        request->send(200, "application/json", "{\"status\":\"success\"}");
+      } else {
+        request->send(500, "application/json", "{\"status\":\"error\",\"message\":\"Rename failed\"}");
+      }
+    }
+  );
 
   // ── API: Settings Read ────────────────────────────────────────────────────
   server.on("/api/settings", HTTP_GET, [](AsyncWebServerRequest* request) {
@@ -641,17 +768,28 @@ void setupWebServer() {
         request->send(400, "application/json", "{\"status\":\"error\"}");
         return;
       }
-      uint8_t oldId = doc["oldId"];
-      uint8_t newId = doc["newId"];
-      uint8_t fpsIdx = doc["fpsIdx"];
+
+      if (!doc["oldId"].is<uint8_t>() || doc["oldId"].as<uint8_t>() > 31 ||
+          !doc["newId"].is<uint8_t>() || doc["newId"].as<uint8_t>() > 31 ||
+          !doc["fpsIdx"].is<uint8_t>() || doc["fpsIdx"].as<uint8_t>() > 7) {
+        request->send(400, "application/json",
+                      "{\"status\":\"error\",\"message\":\"Invalid field value\"}");
+        return;
+      }
+      const uint8_t oldId  = doc["oldId"].as<uint8_t>();
+      const uint8_t newId  = doc["newId"].as<uint8_t>();
+      const uint8_t fpsIdx = doc["fpsIdx"].as<uint8_t>();
 
       // 1. Rename in settings: load, move key, save
       String raw = loadSettings();
       JsonDocument cfg;
       deserializeJson(cfg, raw);
-      if (cfg["meters"][oldId]) {
-        cfg["meters"][newId] = cfg["meters"][oldId];
-        cfg["meters"].remove(String(oldId).c_str());
+
+      const String oldKey = String(oldId);
+      const String newKey = String(newId);
+      if (cfg["meters"][oldKey]) {
+        cfg["meters"][newKey] = cfg["meters"][oldKey];
+        cfg["meters"].remove(oldKey.c_str());
         String out; serializeJson(cfg, out);
         saveSettings(out.c_str());
       }
@@ -687,7 +825,13 @@ void setupWebServer() {
         request->send(400, "application/json", "{\"status\":\"error\"}");
         return;
       }
-      uint8_t meterId = doc["id"];
+
+      if (!doc["id"].is<uint8_t>() || doc["id"].as<uint8_t>() > 31) {
+        request->send(400, "application/json",
+                      "{\"status\":\"error\",\"message\":\"Invalid meter ID\"}");
+        return;
+      }
+      const uint8_t meterId = doc["id"].as<uint8_t>();
 
       // Remove from stored settings
       String raw = loadSettings();
