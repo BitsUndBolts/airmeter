@@ -1177,6 +1177,7 @@
   <script>
     /* ── APP LOGIC ────────────────────────────────────────────────────── */
     const $ = id => document.getElementById(id);
+    const HIDE_METERS_AFTER_SECONDS = 30;
 
     function openResetModal() {
       $('modal-overlay').classList.add('visible');
@@ -1288,7 +1289,10 @@
       const label     = $('meters-label');
       const empty     = $('meters-empty');
 
-      if (!meters || meters.length === 0) {
+      // 1. Filter out inactive meters before doing anything else
+      const activeMeters = (meters || []).filter(m => m.seen <= HIDE_METERS_AFTER_SECONDS);
+
+      if (!activeMeters || activeMeters.length === 0) {
         label.style.display   = 'none';
         empty.style.display   = '';
         container.innerHTML   = '';
@@ -1299,7 +1303,7 @@
       empty.style.display = 'none';
 
       // Build a set of current meter IDs
-      const incoming = new Set(meters.map(m => m.id));
+      const incoming = new Set(activeMeters.map(m => m.id));
 
       // Remove cards for meters no longer in the list
       container.querySelectorAll('[data-meter-id]').forEach(el => {
@@ -1307,7 +1311,7 @@
       });
 
       // Update or insert each meter card
-      meters.forEach(({ id, seen }) => {
+      activeMeters.forEach(({ id, seen }) => {
         const cfg      = meterConfigs[id] || {};
         const html     = buildMeterCard(id, seen, cfg);
         const existing = container.querySelector(`[data-meter-id="${id}"]`);
