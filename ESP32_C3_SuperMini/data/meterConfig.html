@@ -463,6 +463,24 @@
     @keyframes spin { to { transform: rotate(360deg) } }
 
     .hidden { display: none !important; }
+
+    .header-logo {
+      height: 2.5em;
+      width: auto;
+      object-fit: contain;
+      aspect-ratio: 180 / 80;
+      animation: breathe 10s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+    }
+
+    @keyframes breathe {
+      0%, 100% {
+        transform: scale(1);
+        opacity: 1;
+      }
+      50% {
+        transform: scale(1.1); /* Tiny upscale prevents pixelation or blurriness */
+      }
+    }
   </style>
 </head>
 
@@ -473,7 +491,8 @@
     <!-- ── HEADER ── -->
     <div class="card-header">
       <div class="device-badge">
-        <span class="device-name">AirMeter · Meter Config</span>
+        <img src="airmeter.webp" alt="AirMeter Logo" class="header-logo">
+        <span class="device-name">Meters</span>
       </div>
 
       <div class="header-right">

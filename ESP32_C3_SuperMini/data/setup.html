@@ -74,21 +74,6 @@
       gap: 1em;
     }
 
-    .status-dot {
-      width: 0.8em;
-      height: 0.8em;
-      border-radius: 50%;
-      background: var(--green);
-      box-shadow: 0 0 0.8em var(--green);
-      animation: pulse-dot 2s ease-in-out infinite;
-      flex-shrink: 0;
-    }
-
-    @keyframes pulse-dot {
-      0%, 100% { opacity: 1; }
-      50%       { opacity: 0.4; }
-    }
-
     .device-name {
       font-family: var(--mono);
       font-size: 1.2em;
@@ -611,6 +596,24 @@
     /* Hide Edge/IE password reveal buttons */
     input[type="password"]::-ms-reveal { display: none; }
     input[type="password"]::-ms-clear  { display: none; }
+
+    .header-logo {
+      height: 2.5em;
+      width: auto;
+      object-fit: contain;
+      aspect-ratio: 180 / 80;
+      animation: breathe 10s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+    }
+
+    @keyframes breathe {
+      0%, 100% {
+        transform: scale(1);
+        opacity: 1;
+      }
+      50% {
+        transform: scale(1.1); /* Tiny upscale prevents pixelation or blurriness */
+      }
+    }
   </style>
 </head>
 
@@ -621,8 +624,8 @@
     <!-- ── HEADER ── -->
     <div class="card-header">
       <div class="device-badge">
-        <div class="status-dot"></div>
-        <span class="device-name">AirMeter · Provisioning</span>
+        <img src="airmeter.webp" alt="AirMeter Logo" class="header-logo">
+        <span class="device-name">Provisioning</span>
       </div>
       <span class="header-meta">SETUP MODE</span>
     </div>

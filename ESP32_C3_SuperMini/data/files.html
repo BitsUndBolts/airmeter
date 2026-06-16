@@ -892,6 +892,24 @@
     }
 
     .hidden { display: none !important; }
+
+    .header-logo {
+      height: 2.5em;
+      width: auto;
+      object-fit: contain;
+      aspect-ratio: 180 / 80;
+      animation: breathe 10s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+    }
+
+    @keyframes breathe {
+      0%, 100% {
+        transform: scale(1);
+        opacity: 1;
+      }
+      50% {
+        transform: scale(1.1); /* Tiny upscale prevents pixelation or blurriness */
+      }
+    }
   </style>
 </head>
 <body>
@@ -900,14 +918,8 @@
 
     <!-- ── HEADER ── -->
     <div class="card-header">
-      <div class="header-icon">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M12 2L2 7l10 5 10-5-10-5z"/>
-          <path d="M2 17l10 5 10-5"/>
-          <path d="M2 12l10 5 10-5"/>
-        </svg>
-      </div>
-      <span class="header-title">AirMeter · Update &amp; Files</span>
+      <img src="airmeter.webp" alt="AirMeter Logo" class="header-logo">
+      <span class="header-title">Files</span>
 
       <!-- Home button -->
       <a class="home-btn" href="/" title="Home">
