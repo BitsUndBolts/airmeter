@@ -5,114 +5,26 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AirMeter · Meter Config</title>
+  <link rel="stylesheet" href="airmeter.css">
   <style>
-    :root {
-      --bg: #0a0c0e;
-      --panel: #111416;
-      --panel-2: #181c1f;
-      --border: #252a2e;
-      --border-bright: #2e3538;
-      --accent: #f5a623;
-      --accent-dim: rgba(245, 166, 35, 0.10);
-      --accent-glow: rgba(245, 166, 35, 0.22);
-      --green: #3ddc84;
-      --green-dim: rgba(61, 220, 132, 0.10);
-      --yellow: #f1c40f;
-      --red: #ff5555;
-      --red-dim: rgba(255, 85, 85, 0.10);
-      --blue: #4d9fff;
-      --blue-dim: rgba(77, 159, 255, 0.10);
-      --text: #e8ecef;
-      --text-2: #8a9199;
-      --text-3: #4a5158;
-      --mono: ui-monospace, SFMono-Regular, 'SF Pro Mono', Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
-      --sans: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    .card-header { justify-content: space-between; }
+
+    /* ── EMPTY STATE OVERRIDE (taller padding for this page) ── */
+    .empty-state { padding: 3em 2em; }
+
+    /* ── METER THUMB SIZE ── */
+    .meter-block .meter-thumb          { width: 3.2em; height: 3.2em; }
+    .meter-block .meter-thumb-fallback { font-size: 1em; }
+
+    /* ── SPINNER OVERRIDE (smaller on this page) ── */
+    .spinner-inline {
+      width: 1.2em;
+      height: 1.2em;
+      border-width: 0.18em;
+      margin-right: 0.4em;
     }
 
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-    html {
-      font-size: clamp(7px, 1.8vw, 22px);
-    }
-
-    body {
-      font-family: var(--sans);
-      background: var(--bg);
-      color: var(--text);
-      margin: 0;
-      padding: 0;
-      min-height: 100dvh;
-      background-image:
-        linear-gradient(rgba(245, 166, 35, 0.02) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(245, 166, 35, 0.02) 1px, transparent 1px);
-      background-size: 3.2em 3.2em;
-    }
-
-    .card {
-      width: 100%;
-      background: var(--panel);
-      border: 1px solid var(--border-bright);
-      border-radius: 0.4em;
-      overflow: hidden;
-    }
-
-    /* ── HEADER ── */
-    .card-header {
-      background: var(--panel-2);
-      border-bottom: 1px solid var(--border-bright);
-      padding: 1.4em 2em;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
-
-    .device-badge {
-      display: flex;
-      align-items: center;
-      gap: 1em;
-    }
-
-    .device-name {
-      font-family: var(--mono);
-      font-size: 1.2em;
-      font-weight: 600;
-      color: var(--text-2);
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-    }
-
-    .header-right {
-      display: flex;
-      align-items: center;
-      gap: 0.8em;
-    }
-
-    /* Home button — pushed to the right */
-    .home-btn {
-      margin-left: auto;
-      width: 2.8em;
-      height: 2.8em;
-      border-radius: 0.3em;
-      background: none;
-      border: 1px solid var(--border-bright);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      color: var(--text-3);
-      text-decoration: none;
-      transition: color 0.15s, border-color 0.15s, background 0.15s;
-      flex-shrink: 0;
-    }
-
-    .home-btn:hover {
-      color: var(--text);
-      border-color: var(--text-2);
-      background: var(--panel);
-    }
-
-    .home-btn svg { width: 1.4em; height: 1.4em; }
-
+    /* ── DELETE BUTTON ── */
     .btn-delete {
       background: none;
       border: 1px solid var(--border);
@@ -127,60 +39,10 @@
       transition: color 0.15s, border-color 0.15s, background 0.15s;
     }
 
-    .btn-delete:hover {
-      color: var(--red);
-      border-color: rgba(255, 85, 85, 0.4);
-      background: var(--red-dim);
-    }
+    .btn-delete:hover { color: var(--red); border-color: rgba(255,85,85,0.4); background: var(--red-dim); }
+    .btn-delete svg   { width: 1.4em; height: 1.4em; }
 
-    .btn-delete svg { width: 1.4em; height: 1.4em; }
-
-    /* ── SECTION LABEL ── */
-    .section-label {
-      font-family: var(--mono);
-      font-size: 0.9em;
-      font-weight: 600;
-      letter-spacing: 0.18em;
-      text-transform: uppercase;
-      color: var(--text-3);
-      padding: 1.6em 2em 0.8em;
-    }
-
-    /* ── EMPTY STATE ── */
-    .empty-state {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      padding: 3em 2em;
-      text-align: center;
-      gap: 0.8em;
-    }
-
-    .empty-state svg {
-      width: 4em;
-      height: 4em;
-      color: var(--text-3);
-      margin-bottom: 0.4em;
-    }
-
-    .empty-title {
-      font-family: var(--mono);
-      font-size: 1.2em;
-      font-weight: 600;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      color: var(--text-3);
-    }
-
-    .empty-desc {
-      font-size: 1.1em;
-      color: var(--text-3);
-      line-height: 1.5;
-      max-width: 28em;
-    }
-
-    /* ── METER CONFIG BLOCK ── */
+    /* ── METER BLOCKS ── */
     .meter-blocks {
       padding: 0 1.2em 1.2em;
       display: flex;
@@ -204,47 +66,8 @@
       border-bottom: 1px solid var(--border);
     }
 
-    .meter-thumb {
-      width: 3.2em;
-      height: 3.2em;
-      border-radius: 0.3em;
-      background: var(--accent-dim);
-      border: 1px solid var(--accent-glow);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      flex-shrink: 0;
-      overflow: hidden;
-      position: relative;
-    }
-
-    .meter-thumb img {
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
-      opacity: 0;
-      transition: opacity 0.3s;
-    }
-
-    .meter-thumb img.loaded { opacity: 1; }
-
-    .meter-thumb-fallback {
-      font-family: var(--mono);
-      font-size: 1em;
-      font-weight: 700;
-      color: var(--accent);
-    }
-
-    .meter-block-title {
-      flex: 1;
-      min-width: 0;
-    }
-
-    .meter-block-name {
-      font-size: 1.3em;
-      font-weight: 600;
-      color: var(--text);
-    }
+    .meter-block-title { flex: 1; min-width: 0; }
+    .meter-block-name  { font-size: 1.3em; font-weight: 600; color: var(--text); }
 
     .meter-block-sub {
       font-family: var(--mono);
@@ -268,17 +91,8 @@
       flex-shrink: 0;
     }
 
-    .meter-active-badge.active {
-      color: var(--green);
-      background: var(--green-dim);
-      border: 1px solid rgba(61, 220, 132, 0.2);
-    }
-
-    .meter-active-badge.inactive {
-      color: var(--text-3);
-      background: rgba(74, 81, 88, 0.2);
-      border: 1px solid var(--border);
-    }
+    .meter-active-badge.active   { color: var(--green);  background: var(--green-dim); border: 1px solid rgba(61,220,132,0.2); }
+    .meter-active-badge.inactive { color: var(--text-3); background: rgba(74,81,88,0.2); border: 1px solid var(--border); }
 
     .meter-active-badge .dot {
       width: 0.55em;
@@ -288,18 +102,9 @@
     }
 
     /* ── FIELDS ── */
-    .meter-fields {
-      padding: 1.2em 1.4em;
-      display: flex;
-      flex-direction: column;
-      gap: 1em;
-    }
+    .meter-fields { padding: 1.2em 1.4em; display: flex; flex-direction: column; gap: 1em; }
 
-    .field-row {
-      display: flex;
-      align-items: center;
-      gap: 1em;
-    }
+    .field-row   { display: flex; align-items: center; gap: 1em; }
 
     .field-label {
       font-family: var(--mono);
@@ -326,9 +131,7 @@
       transition: border-color 0.15s;
     }
 
-    .field-input:focus {
-      border-color: var(--accent);
-    }
+    .field-input:focus { border-color: var(--accent); }
 
     .field-select {
       flex: 1;
@@ -351,14 +154,8 @@
       padding-right: 2.5em;
     }
 
-    .field-select:focus {
-      border-color: var(--accent);
-    }
-
-    .field-select option {
-      background: var(--panel);
-      color: var(--text);
-    }
+    .field-select:focus         { border-color: var(--accent); }
+    .field-select option        { background: var(--panel); color: var(--text); }
 
     /* ── BLOCK FOOTER ── */
     .meter-block-footer {
@@ -370,17 +167,9 @@
       gap: 0.8em;
     }
 
-    .save-status {
-      font-family: var(--mono);
-      font-size: 1em;
-      letter-spacing: 0.06em;
-      color: var(--text-3);
-      flex: 1;
-      transition: color 0.2s;
-    }
-
+    .save-status        { font-family: var(--mono); font-size: 1em; letter-spacing: 0.06em; color: var(--text-3); flex: 1; transition: color 0.2s; }
     .save-status.saved  { color: var(--green); }
-    .save-status.error  { color: var(--red);   }
+    .save-status.error  { color: var(--red); }
 
     .btn-save {
       font-family: var(--mono);
@@ -397,89 +186,16 @@
       transition: opacity 0.15s;
     }
 
-    .btn-save:hover  { opacity: 0.88; }
-    .btn-save:active { opacity: 0.75; }
+    .btn-save:hover    { opacity: 0.88; }
+    .btn-save:active   { opacity: 0.75; }
     .btn-save:disabled { opacity: 0.4; cursor: default; }
 
-    /* ── DIVIDER ── */
-    .divider { height: 1px; background: var(--border); margin: 0.6em 0; }
-
-    /* ── FOOTER ── */
-    .card-footer {
-      background: var(--panel-2);
-      border-top: 1px solid var(--border);
-      padding: 1em 2em;
-    }
-
+    /* ── FOOTER NOTE ── */
     .footer-note {
       font-family: var(--mono);
       font-size: 1em;
       color: var(--text-3);
       letter-spacing: 0.04em;
-    }
-
-    /* ── TOAST ── */
-    .toast {
-      position: fixed;
-      bottom: 2em;
-      left: 50%;
-      transform: translateX(-50%) translateY(4em);
-      background: var(--panel-2);
-      border: 1px solid var(--border-bright);
-      border-radius: 0.4em;
-      padding: 0.9em 1.6em;
-      font-family: var(--mono);
-      font-size: 1.1em;
-      color: var(--text-2);
-      box-shadow: 0 0.8em 2.4em rgba(0,0,0,0.5);
-      opacity: 0;
-      transition: transform 0.25s ease, opacity 0.25s ease;
-      pointer-events: none;
-      z-index: 200;
-      white-space: nowrap;
-    }
-
-    .toast.visible {
-      opacity: 1;
-      transform: translateX(-50%) translateY(0);
-    }
-
-    .toast.success { border-color: rgba(61, 220, 132, 0.35); color: var(--green); }
-    .toast.fail    { border-color: rgba(255, 85, 85, 0.35);  color: var(--red);   }
-
-    /* ── SPINNER ── */
-    .spinner-inline {
-      display: inline-block;
-      width: 1.2em;
-      height: 1.2em;
-      border: 0.18em solid var(--border-bright);
-      border-top-color: var(--accent);
-      border-radius: 50%;
-      animation: spin 0.7s linear infinite;
-      vertical-align: middle;
-      margin-right: 0.4em;
-    }
-
-    @keyframes spin { to { transform: rotate(360deg) } }
-
-    .hidden { display: none !important; }
-
-    .header-logo {
-      height: 2.5em;
-      width: auto;
-      object-fit: contain;
-      aspect-ratio: 180 / 80;
-      animation: breathe 10s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-    }
-
-    @keyframes breathe {
-      0%, 100% {
-        transform: scale(1);
-        opacity: 1;
-      }
-      50% {
-        transform: scale(1.1); /* Tiny upscale prevents pixelation or blurriness */
-      }
     }
   </style>
 </head>

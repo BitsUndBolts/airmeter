@@ -1,0 +1,375 @@
+/* ═══════════════════════════════════════════════════════════
+   shared.css — AirMeter common styles
+   Linked by: index.html, files.html, meterConfig.html, setup.html
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── CSS VARIABLES ── */
+:root {
+  --bg:          #0a0c0e;
+  --panel:       #111416;
+  --panel-2:     #181c1f;
+  --border:      #252a2e;
+  --border-bright:#2e3538;
+  --accent:      #f5a623;
+  --accent-dim:  rgba(245, 166, 35, 0.10);
+  --accent-glow: rgba(245, 166, 35, 0.22);
+  --green:       #3ddc84;
+  --green-dim:   rgba(61, 220, 132, 0.10);
+  --yellow:      #f1c40f;
+  --red:         #ff5555;
+  --red-dim:     rgba(255, 85, 85, 0.10);
+  --blue:        #4d9fff;
+  --blue-dim:    rgba(77, 159, 255, 0.10);
+  --text:        #e8ecef;
+  --text-2:      #8a9199;
+  --text-3:      #4a5158;
+  --mono: ui-monospace, SFMono-Regular, 'SF Pro Mono', Menlo, Monaco,
+          Consolas, 'Liberation Mono', 'Courier New', monospace;
+  --sans: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI',
+          Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* ── RESET ── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* ── BASE ── */
+html {
+  font-size: clamp(7px, 1.8vw, 22px);
+}
+
+body {
+  font-family: var(--sans);
+  background: var(--bg);
+  color: var(--text);
+  margin: 0;
+  padding: 0;
+  min-height: 100dvh;
+  background-image:
+    linear-gradient(rgba(245, 166, 35, 0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(245, 166, 35, 0.02) 1px, transparent 1px);
+  background-size: 3.2em 3.2em;
+}
+
+/* ── CARD ── */
+.card {
+  width: 100%;
+  background: var(--panel);
+  border: 1px solid var(--border-bright);
+  border-radius: 0.4em;
+  overflow: hidden;
+}
+
+.card-header {
+  background: var(--panel-2);
+  border-bottom: 1px solid var(--border-bright);
+  padding: 1.4em 2em;
+  display: flex;
+  align-items: center;
+}
+
+.card-footer {
+  background: var(--panel-2);
+  border-top: 1px solid var(--border);
+  padding: 1em 2em;
+}
+
+.card-footer a,
+.card-footer a:visited,
+.card-footer a:active {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.card-footer a:hover {
+  text-decoration: underline;
+}
+
+/* ── FOOTER KEY-VALUE GRID ── */
+.footer-kv {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1em 1.4em;
+}
+
+.footer-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15em;
+}
+
+.footer-key {
+  font-family: var(--mono);
+  font-size: 0.9em;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.footer-val {
+  font-family: var(--mono);
+  font-size: 1.1em;
+  color: var(--text-2);
+}
+
+/* ── SECTION LABEL ── */
+.section-label {
+  font-family: var(--mono);
+  font-size: 0.9em;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  padding: 1.6em 2em 0.8em;
+}
+
+/* ── DEVICE BADGE (header left side) ── */
+.device-badge {
+  display: flex;
+  align-items: center;
+  gap: 1em;
+}
+
+.device-name {
+  font-family: var(--mono);
+  font-size: 1.2em;
+  font-weight: 600;
+  color: var(--text-2);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* ── HEADER RIGHT GROUP ── */
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 0.8em;
+}
+
+.header-tag {
+  font-family: var(--mono);
+  font-size: 1em;
+  letter-spacing: 0.07em;
+  color: var(--text-3);
+}
+
+.version-pill {
+  font-family: var(--mono);
+  font-size: 1em;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--accent-dim);
+  border: 1px solid var(--accent-glow);
+  border-radius: 0.3em;
+  padding: 0.2em 0.7em;
+  letter-spacing: 0.06em;
+}
+
+/* ── HOME BUTTON ── */
+.home-btn {
+  margin-left: auto;
+  width: 2.8em;
+  height: 2.8em;
+  border-radius: 0.3em;
+  background: none;
+  border: 1px solid var(--border-bright);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--text-3);
+  text-decoration: none;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+  flex-shrink: 0;
+}
+
+.home-btn:hover {
+  color: var(--text);
+  border-color: var(--text-2);
+  background: var(--panel);
+}
+
+.home-btn svg {
+  width: 1.4em;
+  height: 1.4em;
+}
+
+/* ── STATUS DOT ── */
+.status-dot {
+  width: 0.8em;
+  height: 0.8em;
+  border-radius: 50%;
+  background: var(--dot-color);
+  box-shadow:
+    0 0 4px var(--dot-color),
+    0 0 12px var(--dot-color),
+    0 0 20px var(--dot-color);
+  animation: pulse-dot 2.5s ease-in-out infinite;
+  flex-shrink: 0;
+  transition: background 0.3s ease, box-shadow 0.3s ease;
+}
+
+.status-dot.green  { --dot-color: var(--green); }
+.status-dot.yellow { --dot-color: var(--yellow); }
+.status-dot.red    { --dot-color: var(--red); }
+
+@keyframes pulse-dot {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow:
+      0 0 4px var(--dot-color),
+      0 0 12px var(--dot-color),
+      0 0 24px var(--dot-color);
+  }
+  50% {
+    transform: scale(0.92);
+    box-shadow:
+      0 0 2px var(--dot-color),
+      0 0 6px var(--dot-color),
+      0 0 10px var(--dot-color);
+  }
+}
+
+/* ── EMPTY STATE ── */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 1em 2em;
+  text-align: center;
+  gap: 0.8em;
+}
+
+.empty-state svg {
+  width: 4em;
+  height: 4em;
+  color: var(--text-3);
+  margin-bottom: 0.4em;
+}
+
+.empty-title {
+  font-family: var(--mono);
+  font-size: 1.2em;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.empty-desc {
+  font-size: 1.1em;
+  color: var(--text-3);
+  line-height: 1.5;
+  max-width: 28em;
+}
+
+/* ── METER THUMBNAIL ── */
+.meter-thumb {
+  border-radius: 0.3em;
+  background: var(--accent-dim);
+  border: 1px solid var(--accent-glow);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.meter-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.meter-thumb img.loaded {
+  opacity: 1;
+}
+
+.meter-thumb-fallback {
+  font-family: var(--mono);
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: -0.02em;
+}
+
+/* ── INLINE SPINNER ── */
+.spinner-inline {
+  display: inline-block;
+  width: 1.4em;
+  height: 1.4em;
+  border: 0.2em solid var(--border-bright);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  vertical-align: middle;
+  margin-right: 0.6em;
+}
+
+.spinner-inline.danger  { border-top-color: var(--red); }
+.spinner-inline.warning { border-top-color: var(--accent); }
+
+/* ── TOAST ── */
+.toast {
+  position: fixed;
+  bottom: 2em;
+  left: 50%;
+  transform: translateX(-50%) translateY(4em);
+  background: var(--panel-2);
+  border: 1px solid var(--border-bright);
+  border-radius: 0.4em;
+  padding: 0.9em 1.6em;
+  font-family: var(--mono);
+  font-size: 1.1em;
+  color: var(--text-2);
+  box-shadow: 0 0.8em 2.4em rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  transition: transform 0.25s ease, opacity 0.25s ease;
+  pointer-events: none;
+  z-index: 200;
+  white-space: nowrap;
+}
+
+.toast.visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.toast.success { border-color: rgba(61, 220, 132, 0.35); color: var(--green); }
+.toast.fail    { border-color: rgba(255, 85, 85, 0.35);  color: var(--red); }
+
+/* ── DIVIDER ── */
+.divider {
+  height: 1px;
+  background: var(--border);
+  margin: 0.6em 0;
+}
+
+/* ── UTILITY ── */
+.hidden {
+  display: none !important;
+}
+
+/* ── ANIMATIONS ── */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── HEADER LOGO ── */
+.header-logo {
+  height: 2.5em;
+  width: auto;
+  object-fit: contain;
+  aspect-ratio: 180 / 80;
+  animation: breathe 10s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+@keyframes breathe {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50%       { transform: scale(1.1); }
+}

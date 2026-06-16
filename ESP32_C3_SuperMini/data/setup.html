@@ -5,83 +5,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AirMeter Provisioning Wizard</title>
+  <link rel="stylesheet" href="airmeter.css">
   <style>
-    :root {
-      --bg:           #0a0c0e;
-      --panel:        #111416;
-      --panel-2:      #181c1f;
-      --border:       #252a2e;
-      --border-bright:#2e3538;
-      --accent:       #f5a623;
-      --accent-dim:   rgba(245,166,35,0.12);
-      --accent-glow:  rgba(245,166,35,0.25);
-      --green:        #3ddc84;
-      --green-dim:    rgba(61,220,132,0.12);
-      --red:          #ff5555;
-      --red-dim:      rgba(255,85,85,0.12);
-      --text:         #e8ecef;
-      --text-2:       #8a9199;
-      --text-3:       #4a5158;
-      --mono: ui-monospace, SFMono-Regular, 'SF Pro Mono', Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
-      --sans: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-    }
-
-    *, *::before, *::after {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
-
-    html {
-      font-size: clamp(7px, 1.8vw, 22px);
-    }
-
-    body {
-      font-family: var(--sans);
-      background: var(--bg);
-      color: var(--text);
-      margin: 0;
-      padding: 0;
-      min-height: 100dvh;
-      background-image:
-        linear-gradient(rgba(245,166,35,0.02) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(245,166,35,0.02) 1px, transparent 1px);
-      background-size: 3.2em 3.2em;
-    }
-
-    /* ── CARD ── */
-    .card {
-      width: 100%;
-      background: var(--panel);
-      border: 1px solid var(--border-bright);
-      border-radius: 0.4em;
-      overflow: hidden;
-    }
-
-    /* ── HEADER BAR ── */
-    .card-header {
-      background: var(--panel-2);
-      border-bottom: 1px solid var(--border-bright);
-      padding: 1.2em 2em;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
-
-    .device-badge {
-      display: flex;
-      align-items: center;
-      gap: 1em;
-    }
-
-    .device-name {
-      font-family: var(--mono);
-      font-size: 1.2em;
-      font-weight: 600;
-      color: var(--text-2);
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-    }
+    /* ── CARD HEADER OVERRIDE (smaller padding on this page) ── */
+    .card-header { justify-content: space-between; padding: 1.2em 2em; }
 
     .header-meta {
       font-family: var(--mono);
@@ -90,10 +17,11 @@
       letter-spacing: 0.05em;
     }
 
+    /* ── DIVIDER OVERRIDE (wider margin on this page) ── */
+    .divider { margin: 2em 0; }
+
     /* ── BODY ── */
-    .card-body {
-      padding: 2.4em 2em;
-    }
+    .card-body { padding: 2.4em 2em; }
 
     /* ── SCREEN TITLES ── */
     .screen-title {
@@ -116,14 +44,8 @@
     }
 
     /* ── SECTION ROW ── */
-    .row {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-end;
-      margin-bottom: 1.4em;
-    }
-
-    .row h1 { margin-bottom: 0; }
+    .row          { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 1.4em; }
+    .row h1       { margin-bottom: 0; }
 
     /* ── SCAN BUTTON ── */
     .btn-scan {
@@ -142,17 +64,8 @@
       white-space: nowrap;
     }
 
-    .btn-scan:hover {
-      background: rgba(245,166,35,0.2);
-      border-color: rgba(245,166,35,0.45);
-    }
-
-    .btn-scan:disabled {
-      color: var(--text-3);
-      background: transparent;
-      border-color: var(--border);
-      cursor: not-allowed;
-    }
+    .btn-scan:hover    { background: rgba(245,166,35,0.2); border-color: rgba(245,166,35,0.45); }
+    .btn-scan:disabled { color: var(--text-3); background: transparent; border-color: var(--border); cursor: not-allowed; }
 
     /* ── NETWORK LIST ── */
     .list-box {
@@ -165,9 +78,9 @@
       scrollbar-color: var(--border-bright) transparent;
     }
 
-    .list-box::-webkit-scrollbar        { width: 0.4em; }
-    .list-box::-webkit-scrollbar-track  { background: transparent; }
-    .list-box::-webkit-scrollbar-thumb  { background: var(--border-bright); border-radius: 0.2em; }
+    .list-box::-webkit-scrollbar       { width: 0.4em; }
+    .list-box::-webkit-scrollbar-track { background: transparent; }
+    .list-box::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 0.2em; }
 
     .net-item {
       display: flex;
@@ -180,13 +93,10 @@
       position: relative;
     }
 
-    .net-item:last-child  { border-bottom: none; }
-    .net-item:hover       { background: rgba(255,255,255,0.03); }
+    .net-item:last-child { border-bottom: none; }
+    .net-item:hover      { background: rgba(255,255,255,0.03); }
 
-    .net-item.selected {
-      background: var(--accent-dim);
-      border-color: rgba(245,166,35,0.2);
-    }
+    .net-item.selected { background: var(--accent-dim); border-color: rgba(245,166,35,0.2); }
 
     .net-item.selected::before {
       content: '';
@@ -196,21 +106,11 @@
       background: var(--accent);
     }
 
-    .net-ssid {
-      font-size: 1.4em;
-      font-weight: 500;
-      color: var(--text);
-    }
+    .net-ssid                          { font-size: 1.4em; font-weight: 500; color: var(--text); }
+    .net-item.selected .net-ssid       { color: var(--accent); }
 
-    .net-item.selected .net-ssid { color: var(--accent); }
-
-    /* Signal bars — heights in em so they scale */
-    .signal-bars {
-      display: flex;
-      align-items: flex-end;
-      gap: 0.2em;
-      height: 1.6em;
-    }
+    /* ── SIGNAL BARS (WiFi list) ── */
+    .signal-bars { display: flex; align-items: flex-end; gap: 0.2em; height: 1.6em; }
 
     .signal-bars span {
       display: block;
@@ -225,7 +125,7 @@
     .signal-bars span:nth-child(3) { height: 1.2em; }
     .signal-bars span:nth-child(4) { height: 1.6em; }
 
-    .net-item.selected .signal-bars span.lit     { background: var(--accent); }
+    .net-item.selected .signal-bars span.lit      { background: var(--accent); }
     .net-item:not(.selected) .signal-bars span.lit { background: var(--text-2); }
 
     /* ── PRIMARY BUTTON ── */
@@ -240,7 +140,6 @@
       cursor: pointer;
       border: none;
       text-align: center;
-      box-sizing: border-box;
       text-decoration: none;
       letter-spacing: 0.01em;
       transition: opacity 0.15s, transform 0.1s, box-shadow 0.15s;
@@ -250,9 +149,7 @@
 
     .btn-primary { background: var(--accent); color: #0a0c0e; }
 
-    .btn-primary:hover:not(:disabled) {
-      box-shadow: 0 0 2em var(--accent-glow);
-    }
+    .btn-primary:hover:not(:disabled) { box-shadow: 0 0 2em var(--accent-glow); }
 
     .btn-primary:disabled {
       background: var(--panel-2);
@@ -280,14 +177,8 @@
       transition: color 0.15s;
     }
 
-    .btn-back:hover { color: var(--accent); }
-
-    .btn-back svg {
-      width: 1.4em;
-      height: 1.4em;
-      transition: transform 0.15s;
-    }
-
+    .btn-back:hover     { color: var(--accent); }
+    .btn-back svg       { width: 1.4em; height: 1.4em; transition: transform 0.15s; }
     .btn-back:hover svg { transform: translateX(-0.2em); }
 
     /* ── NETWORK BANNER ── */
@@ -302,27 +193,11 @@
       gap: 1em;
     }
 
-    .banner svg {
-      width: 2.4em;
-      height: 2.4em;
-      flex-shrink: 0;
-    }
-
-    .banner-ssid {
-      font-family: var(--mono);
-      font-size: 1.3em;
-      font-weight: 600;
-      color: var(--accent);
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
+    .banner svg     { width: 2.4em; height: 2.4em; flex-shrink: 0; }
+    .banner-ssid    { font-family: var(--mono); font-size: 1.3em; font-weight: 600; color: var(--accent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
     /* ── PASSWORD INPUT ── */
-    .input-wrap {
-      position: relative;
-      margin-bottom: 1.6em;
-    }
+    .input-wrap { position: relative; margin-bottom: 1.6em; }
 
     .input-wrap input {
       width: 100%;
@@ -336,15 +211,9 @@
       transition: border-color 0.15s, box-shadow 0.15s;
     }
 
-    .input-wrap input::placeholder { color: var(--text-3); }
-
-    .input-wrap input:focus {
-      outline: none;
-      border-color: var(--accent);
-      box-shadow: 0 0 0 0.3em var(--accent-dim);
-    }
-
-    .input-wrap input:focus + .input-label { color: var(--accent); }
+    .input-wrap input::placeholder           { color: var(--text-3); }
+    .input-wrap input:focus                  { outline: none; border-color: var(--accent); box-shadow: 0 0 0 0.3em var(--accent-dim); }
+    .input-wrap input:focus + .input-label   { color: var(--accent); }
 
     .input-label {
       position: absolute;
@@ -376,11 +245,7 @@
     }
 
     .eye-btn:hover { color: var(--text-2); }
-
-    .eye-btn svg {
-      width: 1.6em;
-      height: 1.6em;
-    }
+    .eye-btn svg   { width: 1.6em; height: 1.6em; }
 
     /* ── ERROR ── */
     .error {
@@ -421,14 +286,7 @@
       flex-shrink: 0;
     }
 
-    @keyframes spin { to { transform: rotate(360deg); } }
-
-    .loading-text {
-      font-family: var(--mono);
-      font-size: 1.2em;
-      color: var(--text-2);
-      letter-spacing: 0.05em;
-    }
+    .loading-text { font-family: var(--mono); font-size: 1.2em; color: var(--text-2); letter-spacing: 0.05em; }
 
     /* ── SUCCESS SCREEN ── */
     .success-icon {
@@ -445,10 +303,7 @@
       animation: pop-in 0.4s cubic-bezier(0.175,0.885,0.32,1.275) both;
     }
 
-    .success-icon svg {
-      width: 2.4em;
-      height: 2.4em;
-    }
+    .success-icon svg { width: 2.4em; height: 2.4em; }
 
     @keyframes pop-in {
       from { transform: scale(0.5); opacity: 0; }
@@ -466,13 +321,7 @@
       margin-bottom: 0.8em;
     }
 
-    .success-sub {
-      font-size: 1.3em;
-      color: var(--text-2);
-      text-align: center;
-      line-height: 1.55;
-      margin-bottom: 2.2em;
-    }
+    .success-sub { font-size: 1.3em; color: var(--text-2); text-align: center; line-height: 1.55; margin-bottom: 2.2em; }
 
     .steps-box {
       background: var(--panel-2);
@@ -518,23 +367,10 @@
       flex-shrink: 0;
     }
 
-    .step-text {
-      font-size: 1.3em;
-      color: var(--text-2);
-      line-height: 1.5;
-      padding-top: 0.15em;
-    }
-
-    .step-text strong { color: var(--text); font-weight: 600; }
-
-    .step-text a {
-      color: var(--accent);
-      text-decoration: none;
-      font-family: var(--mono);
-      font-size: 0.92em;
-    }
-
-    .step-text a:hover { text-decoration: underline; }
+    .step-text              { font-size: 1.3em; color: var(--text-2); line-height: 1.5; padding-top: 0.15em; }
+    .step-text strong       { color: var(--text); font-weight: 600; }
+    .step-text a            { color: var(--accent); text-decoration: none; font-family: var(--mono); font-size: 0.92em; }
+    .step-text a:hover      { text-decoration: underline; }
 
     .migration-warning {
       display: none;
@@ -547,33 +383,13 @@
 
     .migration-warning.visible { display: block; }
 
-    .migration-warning p {
-      font-family: var(--mono);
-      font-size: 1.1em;
-      color: var(--red);
-      line-height: 1.5;
-      letter-spacing: 0.02em;
-    }
-
-    .migration-warning strong { color: var(--red); }
+    .migration-warning p        { font-family: var(--mono); font-size: 1.1em; color: var(--red); line-height: 1.5; letter-spacing: 0.02em; }
+    .migration-warning strong   { color: var(--red); }
 
     .btn-success { background: var(--green); color: #0a0c0e; }
+    .btn-success:hover:not(:disabled) { box-shadow: 0 0 2em rgba(61,220,132,0.3); }
 
-    .btn-success:hover:not(:disabled) {
-      box-shadow: 0 0 2em rgba(61,220,132,0.3);
-    }
-
-    /* ── DIVIDER ── */
-    .divider {
-      height: 1px;
-      background: var(--border);
-      margin: 2em 0;
-    }
-
-    /* ── HIDDEN ── */
-    .hidden { display: none !important; }
-
-    /* ── EMPTY / LOADING STATE ── */
+    /* ── LIST PLACEHOLDER (scan loading/empty state) ── */
     .list-placeholder {
       padding: 3.2em 2em;
       text-align: center;
@@ -596,24 +412,6 @@
     /* Hide Edge/IE password reveal buttons */
     input[type="password"]::-ms-reveal { display: none; }
     input[type="password"]::-ms-clear  { display: none; }
-
-    .header-logo {
-      height: 2.5em;
-      width: auto;
-      object-fit: contain;
-      aspect-ratio: 180 / 80;
-      animation: breathe 10s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-    }
-
-    @keyframes breathe {
-      0%, 100% {
-        transform: scale(1);
-        opacity: 1;
-      }
-      50% {
-        transform: scale(1.1); /* Tiny upscale prevents pixelation or blurriness */
-      }
-    }
   </style>
 </head>
 
@@ -736,7 +534,7 @@
 
 
   <script>
-    /* ── APP LOGIC ────────────────────────────────────────────────────── */
+    /* ── APP LOGIC ────────────────────────────────────────────────── */
     let selectedSSID = "";
     const $ = id => document.getElementById(id);
 
