@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AirMeter · Update &amp; Files</title>
+  <title>AirMeter · Files</title>
   <link rel="stylesheet" href="airmeter.css">
   <style>
     .card-header { gap: 1em; }
@@ -24,15 +24,6 @@
     }
 
     .header-icon svg { width: 1.4em; height: 1.4em; }
-
-    .header-title {
-      font-family: var(--mono);
-      font-size: 1.2em;
-      font-weight: 600;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      color: var(--text-2);
-    }
 
     /* ── UPLOAD SECTION ── */
     .upload-section { padding: 0 1.2em 1.2em; display: flex; flex-direction: column; gap: 0.8em; }
@@ -322,38 +313,8 @@
     .file-size  { font-family: var(--mono); font-size: 1em; color: var(--text-3); text-align: right; }
     .col-action { text-align: center; }
 
-    .btn-del {
-      background: none;
-      border: 1px solid var(--border);
-      border-radius: 0.3em;
-      color: var(--text-3);
-      padding: 0.35em;
-      cursor: pointer;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      transition: color 0.15s, border-color 0.15s, background 0.15s;
-    }
-
-    .btn-del:hover { color: var(--red); border-color: rgba(255,85,85,0.4); background: var(--red-dim); }
-    .btn-del svg   { width: 1.25em; height: 1.25em; }
-
-    .btn-dl {
-      background: none;
-      border: 1px solid var(--border);
-      border-radius: 0.3em;
-      color: var(--text-3);
-      padding: 0.35em;
-      cursor: pointer;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      transition: color 0.15s, border-color 0.15s, background 0.15s;
-      text-decoration: none;
-    }
-
-    .btn-dl:hover { color: var(--blue); border-color: rgba(77,159,255,0.4); background: var(--blue-dim); }
-    .btn-dl svg   { width: 1.25em; height: 1.25em; }
+    /* btn-icon padding override (slightly tighter than shared default) */
+    .btn-icon { padding: 0.35em; }
 
     /* ── FILE LOADING / EMPTY STATE ── */
     .fs-state {
@@ -1034,7 +995,7 @@
           </td>
           <td class="file-size">${fmtBytes(f.size)}</td>
             <td class="col-action" style="display:flex;gap:0.4em;justify-content:center">
-              <a class="btn-dl" href="/${escH(f.name)}" download="${escH(f.name)}" title="Download ${escH(f.name)}">
+              <a class="btn-icon blue" href="/${escH(f.name)}" download="${escH(f.name)}" title="Download ${escH(f.name)}">
                 <svg viewBox="0 0 16 16" fill="none">
                   <path d="M8 2v8M5 7l3 3 3-3" stroke="currentColor"
                         stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
@@ -1042,7 +1003,7 @@
                         stroke-width="1.3" stroke-linecap="round"/>
                 </svg>
               </a>
-              <button class="btn-del" title="Delete ${escH(f.name)}"
+              <button class="btn-icon danger" title="Delete ${escH(f.name)}"
                       onclick="confirmDelete('${f.name.replace(/'/g,"\\'")}')">
                 <svg viewBox="0 0 16 16" fill="none">
                   <path d="M3 4h10M6 4V3h4v1M5 4l.5 9h5L11 4"
@@ -1140,8 +1101,8 @@
       pendingDeleteName = name;
       document.getElementById('confirm-filename').textContent = '/' + name;
       document.getElementById('confirm-ok').onclick = () => {
-        closeConfirm();
         deleteFile(pendingDeleteName);
+        closeConfirm();
       };
       document.getElementById('confirm-overlay').classList.add('visible');
     }

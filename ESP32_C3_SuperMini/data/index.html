@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AirMeter Dashboard</title>
+  <title>AirMeter · Dashboard</title>
   <link rel="stylesheet" href="airmeter.css">
   <style>
     .card-header { justify-content: space-between; }
@@ -290,30 +290,7 @@
     .btn-confirm:hover   { opacity: 0.88; }
 
     /* ── RESET STEPS ── */
-    .reset-steps { display: flex; flex-direction: column; gap: 1em; }
-    .reset-step  { display: flex; gap: 1.2em; align-items: flex-start; }
-
-    .reset-step-num {
-      font-family: var(--mono);
-      font-size: 1em;
-      font-weight: 600;
-      color: var(--accent);
-      background: var(--accent-dim);
-      border: 1px solid var(--accent-glow);
-      border-radius: 0.2em;
-      width: 2em;
-      height: 2em;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      flex-shrink: 0;
-      margin-top: 0.1em;
-    }
-
-    .reset-step-text         { font-size: 1.3em; color: var(--text-2); line-height: 1.5; }
-    .reset-step-text strong  { color: var(--text); }
-    .reset-step-text a       { color: var(--accent); font-family: var(--mono); font-size: 0.92em; text-decoration: none; }
-    .reset-step-text a:hover { text-decoration: underline; }
+    .reset-steps { display: flex; flex-direction: column; }
 
     /* ── SIGNAL BARS (footer) ── */
     .signal-bars { display: inline-flex; align-items: flex-end; gap: 0.2em; vertical-align: -0.1em; }
@@ -408,9 +385,9 @@
 
     <!-- ── HEADER ── -->
     <div class="card-header">
-      <div class="device-badge">
+      <div class="header-badge">
         <img src="airmeter.webp" alt="AirMeter Logo" class="header-logo">
-        <span class="device-name">Dashboard</span>
+        <span class="header-title">Dashboard</span>
       </div>
       <div class="header-right">
         <span class="header-tag">FIRMWARE</span>
@@ -582,17 +559,17 @@
         <div class="modal-body">
           <p>Device is rebooting. Follow these steps to reconnect:</p>
           <div class="reset-steps">
-            <div class="reset-step">
-              <div class="reset-step-num">1</div>
-              <div class="reset-step-text">Open Wi-Fi settings on your phone or computer.</div>
+            <div class="step-row">
+              <div class="step-num">1</div>
+              <div class="step-text">Open Wi-Fi settings on your phone or computer.</div>
             </div>
-            <div class="reset-step">
-              <div class="reset-step-num">2</div>
-              <div class="reset-step-text">Connect to hotspot: <strong>AirMeter-Setup</strong></div>
+            <div class="step-row">
+              <div class="step-num">2</div>
+              <div class="step-text">Connect to hotspot: <strong>AirMeter-Setup</strong></div>
             </div>
-            <div class="reset-step">
-              <div class="reset-step-num">3</div>
-              <div class="reset-step-text">Visit <a href="http://airmeter.local">airmeter.local</a> to run setup again.</div>
+            <div class="step-row">
+              <div class="step-num">3</div>
+              <div class="step-text">Visit <a href="http://airmeter.local">airmeter.local</a> to run setup again.</div>
             </div>
           </div>
         </div>
