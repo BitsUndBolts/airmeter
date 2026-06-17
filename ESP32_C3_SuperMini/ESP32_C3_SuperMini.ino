@@ -207,13 +207,14 @@ void decodePacket(const uint8_t* payload) {
   meterRegistry[meter_id].lastSeen     = millis();
   meterRegistry[meter_id].lastFpsIndex = fps_index;
 
-  // Broadcast over SSE — increased JSON buffer sizing to 120 bytes safely 
-  // to account for added "fpsIdx" and "meterId" keys
+  // Broadcast over SSE — meterId is now encoded in the event name
+  // (meter-data-<id>) instead of the payload, since each stream
+  // only ever carries one meter's data.
   char jsonPayload[120];
   snprintf(jsonPayload, sizeof(jsonPayload),
-           "{\"lcd\":\"%s\",\"buzzer\":%d,\"fpsIdx\":%u,\"meterId\":%u}", 
-           bitString, buzzer_status, fps_index, meter_id);
-  
+           "{\"lcd\":\"%s\",\"buzzer\":%d,\"fpsIdx\":%u}", 
+           bitString, buzzer_status, fps_index);
+
   // Separate SSE event names per METER ID
   char eventName[16];
   snprintf(eventName, sizeof(eventName), "meter-data-%u", meter_id);
