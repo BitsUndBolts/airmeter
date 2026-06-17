@@ -332,7 +332,7 @@
     const FPS_OPTIONS = [1, 2, 3, 5, 10]; // index 0–4, matches transmitter
 
     let allSettings    = {}; // full settings blob from ESP32
-    let activeMeterIds = new Set(); // meters seen since boot
+    let activeMeters = new Map(); // meters seen since boot
     let availableImages = []; // .webp files from Storage
 
     /* ── TOAST ── */
@@ -493,14 +493,16 @@
     }
 
     /* ── RENDER ONE METER BLOCK ── */
-    function renderMeterBlock(id, isActive, cfg) {
+    function renderMeterBlock(id, cfg) {
       const name   = cfg.name  || '';
       const image  = cfg.image || '';
-      const fpsIdx = (cfg.fps !== undefined) ? cfg.fps : 2; // default index 2 = 3 Hz
+      const meterData = activeMeters.get(id);
+      const fpsIdx = meterData?.fpsIdx ?? cfg?.fps ?? 2; // default index 2 = 3 Hz
+      const isActive = (meterData !== undefined && meterData.seen < 5);
 
       const displayName = name || 'UNKNOWN';
       const badgeClass  = isActive ? 'active'  : 'inactive';
-      const badgeLabel  = isActive ? 'Active'  : 'Stored';
+      const badgeLabel  = isActive ? 'Active'  : 'Inactive';
 
       // Build option lists for the custom selects
       const imageOpts = [
@@ -580,14 +582,13 @@
 
     function rebuildBlock(oldId, newId) {
       const cfg    = allSettings.meters[newId] || {};
-      const active = activeMeterIds.has(newId);
 
       const oldBlock = document.querySelector(`[data-mid="${oldId}"]`);
-      const newBlock = renderMeterBlock(newId, active, cfg);
+      const newBlock = renderMeterBlock(newId, cfg);
       oldBlock.replaceWith(newBlock);
 
       delete allSettings.meters[oldId];
-      activeMeterIds.delete(oldId);
+      activeMeters.delete(oldId);
 
       saveMeter(newId);
     }
@@ -601,7 +602,10 @@
       const newId    = parseInt($(`newid-${id}`).value, 10);
       const fpsIdx   = parseInt($(`fps-${id}`).value, 10);
 
-      const fpsChanged = allSettings.meters[id] && allSettings.meters[id].fps !== fpsIdx;
+      const baselineFps = activeMeters.get(id)?.fpsIdx 
+                 ?? allSettings.meters?.[id]?.fps 
+                 ?? 2;
+      const fpsChanged = fpsIdx !== baselineFps;
       const idChanged  = newId !== id;
 
       if (idChanged || fpsChanged) {
@@ -704,13 +708,16 @@
       if (!allSettings.meters) allSettings.meters = {};
 
       if (systemRes.status === 'fulfilled') {
-        (systemRes.value.meters || []).forEach(m => activeMeterIds.add(m.id));
+        (systemRes.value.meters || []).forEach(m => {
+          const { id, ...data } = m; 
+          activeMeters.set(id, data);
+        });
       }
 
       availableImages = (filesRes.status === 'fulfilled') ? filesRes.value : [];
 
       const storedIds = Object.keys(allSettings.meters).map(Number);
-      const allIds    = [...new Set([...activeMeterIds, ...storedIds])].sort((a, b) => a - b);
+      const allIds = [...new Set([...activeMeters.keys(), ...storedIds])].sort((a, b) => a - b);
 
       $('loading-state').classList.add('hidden');
 
@@ -722,8 +729,7 @@
       const container = $('meter-blocks');
       allIds.forEach(id => {
         const cfg    = allSettings.meters[id] || {};
-        const active = activeMeterIds.has(id);
-        container.appendChild(renderMeterBlock(id, active, cfg));
+        container.appendChild(renderMeterBlock(id, cfg));
       });
     }
 

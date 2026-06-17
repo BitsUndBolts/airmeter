@@ -21,12 +21,19 @@
 #include <Preferences.h>
 #include <DNSServer.h>
 #include <ArduinoJson.h>
-
-// Per-meter last-seen timestamps (key = meter ID 0–31)
 #include <map>
-std::map<uint8_t, unsigned long> meterLastSeen;
 
 //#define DEBUG_LCD_VISUAL  // Comment out to suppress per-packet LCD debug output
+
+// =============================================================================
+// STORED METER DATA SINCE BOOT - REFRESHES WITH EACH PACKET ARRIVAL
+// =============================================================================
+struct MeterData {
+    unsigned long lastSeen = 0;
+    uint8_t lastFpsIndex   = 0;
+};
+
+std::map<uint8_t, MeterData> meterRegistry;
 
 // =============================================================================
 // FIRMWARE METADATA
@@ -161,7 +168,7 @@ uint8_t calculate_crc8(const uint8_t* data, uint8_t len) {
 // =============================================================================
 // PACKET DECODER
 // Unpacks 9 payload bytes into:
-//   - 8-bit FPS and METER_ID
+//   - 8-bit FPS INDEX and METER_ID
 //   - 60-bit LCD string  (COM0[15] + COM1[15] + COM2[15] + COM3[15])
 //   - buzzer flag        (bit 15 of COM0)
 // Broadcasts result immediately over SSE.
@@ -196,16 +203,21 @@ void decodePacket(const uint8_t* payload) {
     }
   }
 
-  // Track per-meter last-seen timestamp
-  meterLastSeen[meter_id] = millis();
+  // Track per-meter last-seen timestamp and fps_index
+  meterRegistry[meter_id].lastSeen     = millis();
+  meterRegistry[meter_id].lastFpsIndex = fps_index;
 
   // Broadcast over SSE — increased JSON buffer sizing to 120 bytes safely 
-  // to account for added "fps" and "meterId" keys
+  // to account for added "fpsIdx" and "meterId" keys
   char jsonPayload[120];
   snprintf(jsonPayload, sizeof(jsonPayload),
-           "{\"lcd\":\"%s\",\"buzzer\":%d,\"fps\":%u,\"meterId\":%u}", 
+           "{\"lcd\":\"%s\",\"buzzer\":%d,\"fpsIdx\":%u,\"meterId\":%u}", 
            bitString, buzzer_status, fps_index, meter_id);
-  events.send(jsonPayload, "multimeter-update");
+  
+  // Separate SSE event names per METER ID
+  char eventName[16];
+  snprintf(eventName, sizeof(eventName), "meter-data-%u", meter_id);
+  events.send(jsonPayload, eventName);
 
   // Debug: 4-row visual display (1 buzzer prefix + 15 SEG bits per COM row)
 #ifdef DEBUG_LCD_VISUAL
@@ -488,13 +500,15 @@ void setupWebServer() {
     doc["rssi"] = WiFi.RSSI();
     doc["memory"] = ESP.getFreeHeap();
 
-    // Per-meter last-seen array — only meters seen since boot
+    // Per-meter tracking array — only meters seen since boot
     JsonArray meters = doc["meters"].to<JsonArray>();
     const unsigned long now = millis();
-    for (auto& kv : meterLastSeen) {
+    
+    for (auto const& kv : meterRegistry) {
       JsonObject m = meters.add<JsonObject>();
-      m["id"]   = kv.first;
-      m["seen"] = (long)((now - kv.second) / 1000);
+      m["id"]  = kv.first;
+      m["seen"] = (long)((now - kv.second.lastSeen) / 1000);
+      m["fpsIdx"]  = kv.second.lastFpsIndex;
     }
 
     if (littlefs_available) {
@@ -760,7 +774,7 @@ void setupWebServer() {
     pendingReboot = true;
   });
 
-  // ── API: Meter Update (rename ID + set fps, forwards config to RP2040) ────
+  // ── API: Meter Update (rename ID + set fps index, forwards config to RP2040) ────
   server.on("/api/meter/update", HTTP_POST, [](AsyncWebServerRequest* request) {}, NULL,
     [](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
       JsonDocument doc;
@@ -795,9 +809,9 @@ void setupWebServer() {
       }
 
       // 2. Move runtime last-seen entry
-      if (meterLastSeen.count(oldId)) {
-        meterLastSeen[newId] = meterLastSeen[oldId];
-        meterLastSeen.erase(oldId);
+      if (meterRegistry.count(oldId)) {
+        meterRegistry[newId] = meterRegistry[oldId];
+        meterRegistry.erase(oldId);
       }
 
       // Build the 6-byte config packet
@@ -806,7 +820,7 @@ void setupWebServer() {
       tx[1] = 0x55;                              // Preamble 2
       tx[2] = 0x02;                              // Payload length
       tx[3] = oldId;                             // Target: who should act on this
-      tx[4] = ((fpsIdx & 0x07) << 5) | (newId & 0x1F);  // DATA_BYTE: fps|newId
+      tx[4] = ((fpsIdx & 0x07) << 5) | (newId & 0x1F);  // DATA_BYTE: fpsIdx|newId
 
       uint8_t crc_input[3] = { tx[2], tx[3], tx[4] };
       tx[5] = calculate_crc8(crc_input, 3);
@@ -841,8 +855,8 @@ void setupWebServer() {
       String out; serializeJson(cfg, out);
       saveSettings(out.c_str());
 
-      // Remove from runtime last-seen (won't show on dashboard anymore)
-      meterLastSeen.erase(meterId);
+      // Remove from runtime stored meter data (won't show on dashboard anymore)
+      meterRegistry.erase(meterId);
 
       request->send(200, "application/json", "{\"status\":\"success\"}");
     }

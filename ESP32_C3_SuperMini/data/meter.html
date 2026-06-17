@@ -911,13 +911,10 @@
         if ('EventSource' in window) {
             const source = new EventSource('/events');
 
-            source.addEventListener('multimeter-update', function (e) {
+            // We only subscribe to our METER_ID stream
+            source.addEventListener(`meter-data-${METER_ID}`, function (e) {
                 try {
                     const data = JSON.parse(e.data);
-
-                    // Ignore packets from other meters
-                    if (data.meterId !== METER_ID) return;
-
                     updateMultimeterDisplay(data.lcd);
                     buzzer(data.buzzer === 1);
                 } catch (err) {
