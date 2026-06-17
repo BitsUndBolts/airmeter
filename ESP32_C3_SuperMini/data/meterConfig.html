@@ -115,9 +115,15 @@
 
     .field-input:focus { border-color: var(--accent); }
 
-    .field-select {
+    /* ── CUSTOM SELECT ── */
+    .cselect {
       flex: 1;
       min-width: 0;
+      position: relative;
+    }
+
+    .cselect-trigger {
+      width: 100%;
       background: var(--bg);
       border: 1px solid var(--border-bright);
       border-radius: 0.3em;
@@ -125,19 +131,112 @@
       font-family: var(--sans);
       font-size: 1.2em;
       color: var(--text);
-      outline: none;
-      transition: border-color 0.15s;
       cursor: pointer;
-      appearance: none;
-      -webkit-appearance: none;
-      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%234a5158' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
-      background-repeat: no-repeat;
-      background-position: right 0.9em center;
-      padding-right: 2.5em;
+      display: flex;
+      align-items: center;
+      gap: 0.5em;
+      text-align: left;
+      transition: border-color 0.15s;
     }
 
-    .field-select:focus         { border-color: var(--accent); }
-    .field-select option        { background: var(--panel); color: var(--text); }
+    .cselect-trigger:focus,
+    .cselect.open .cselect-trigger { border-color: var(--accent); outline: none; }
+
+    .cselect-label {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .cselect-arrow {
+      flex-shrink: 0;
+      width: 0.9em;
+      height: 0.9em;
+      color: var(--text-3);
+      transition: transform 0.15s;
+    }
+
+    .cselect.open .cselect-arrow { transform: rotate(180deg); }
+
+    .cselect-panel {
+      position: fixed; /* fixed so it escapes overflow:hidden on card/meter-block */
+      background: var(--panel);
+      border: 1px solid var(--accent-glow);
+      border-radius: 0.3em;
+      box-shadow: 0 0.8em 2em rgba(0, 0, 0, 0.55);
+      z-index: 1000;
+      max-height: 18em;
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border-bright) transparent;
+    }
+
+    .cselect-option {
+      padding: 0.7em 0.9em;
+      font-family: var(--sans);
+      font-size: 1.2em;
+      color: var(--text-2);
+      cursor: pointer;
+      transition: background 0.1s, color 0.1s;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .cselect-option:last-child { border-bottom: none; }
+    .cselect-option:hover      { background: var(--accent-dim); color: var(--text); }
+    .cselect-option.active     { color: var(--accent); background: var(--accent-dim); }
+
+    /* ── CUSTOM STEPPER ── */
+    .cstepper {
+      flex: 1;
+      display: flex;
+      align-items: stretch;
+      background: var(--bg);
+      border: 1px solid var(--border-bright);
+      border-radius: 0.3em;
+      overflow: hidden;
+      transition: border-color 0.15s;
+    }
+
+    .cstepper:focus-within { border-color: var(--accent); }
+
+    .cstepper-btn {
+      background: var(--panel-2);
+      border: none;
+      color: var(--text-2);
+      font-size: 1.3em;
+      font-weight: 300;
+      width: 2.4em;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: background 0.15s, color 0.15s;
+      border-right: 1px solid var(--border-bright);
+      user-select: none;
+    }
+
+    .cstepper-btn:last-child   { border-right: none; border-left: 1px solid var(--border-bright); }
+    .cstepper-btn:hover:not(:disabled) { background: var(--border); color: var(--accent); }
+    .cstepper-btn:disabled     { opacity: 0.3; cursor: not-allowed; }
+
+    .cstepper-val {
+      flex: 1;
+      text-align: center;
+      font-family: var(--mono);
+      font-size: 1.2em;
+      color: var(--text);
+      padding: 0.6em 0.4em;
+      background: transparent;
+      border: none;
+      outline: none;
+      min-width: 0;
+      cursor: text;
+    }
+
+    /* Select-all on focus so typing immediately replaces the old value */
+    .cstepper-val:focus { color: var(--accent); }
 
     /* ── BLOCK FOOTER ── */
     .meter-block-footer {
@@ -152,7 +251,6 @@
     .save-status        { font-family: var(--mono); font-size: 1em; letter-spacing: 0.06em; color: var(--text-3); flex: 1; transition: color 0.2s; }
     .save-status.saved  { color: var(--green); }
     .save-status.error  { color: var(--red); }
-
 
     /* ── FOOTER NOTE ── */
     .footer-note {
@@ -233,7 +331,7 @@
     const $ = id => document.getElementById(id);
     const FPS_OPTIONS = [1, 2, 3, 5, 10]; // index 0–4, matches transmitter
 
-    let allSettings  = {}; // full settings blob from ESP32
+    let allSettings    = {}; // full settings blob from ESP32
     let activeMeterIds = new Set(); // meters seen since boot
     let availableImages = []; // .webp files from Storage
 
@@ -259,33 +357,157 @@
       return `<span class="meter-thumb-fallback">${initials}</span>`;
     }
 
-    /* ── BUILD IMAGE OPTIONS ── */
-    function imageOptions(selected) {
-      let html = `<option value="">— None —</option>`;
-      availableImages.forEach(f => {
-        const sel = f === selected ? ' selected' : '';
-        html += `<option value="${f}"${sel}>${f}</option>`;
-      });
-      return html;
+    /* ═══════════════════════════════════════════════════════════
+       CUSTOM SELECT
+       ─────────────────────────────────────────────────────────
+       buildCselect(hiddenId, options, selectedValue, onchangeExpr)
+         options: [{value, label}]
+         onchangeExpr: string to eval on pick, e.g. "onImageChange(1)"
+       ═══════════════════════════════════════════════════════════ */
+    function buildCselect(hiddenId, options, selectedValue, onchangeExpr) {
+      const sel = options.find(o => String(o.value) === String(selectedValue));
+      const selectedLabel = sel ? sel.label : (options[0] ? options[0].label : '—');
+
+      const optionRows = options.map(o => {
+        const isActive = String(o.value) === String(selectedValue);
+        return `<div class="cselect-option${isActive ? ' active' : ''}" data-value="${o.value}"
+                     onclick="cselectPick(this,'${onchangeExpr}')">${o.label}</div>`;
+      }).join('');
+
+      return `<div class="cselect">
+        <input type="hidden" id="${hiddenId}" value="${selectedValue}">
+        <button class="cselect-trigger" type="button"
+                onclick="cselectToggle(this.closest('.cselect'))">
+          <span class="cselect-label">${selectedLabel}</span>
+          <svg class="cselect-arrow" viewBox="0 0 10 6" fill="none">
+            <path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5"
+                  stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <div class="cselect-panel hidden">
+          ${optionRows}
+        </div>
+      </div>`;
     }
 
-    /* ── BUILD FPS OPTIONS ── */
-    function fpsOptions(selectedIdx) {
-      return FPS_OPTIONS.map((fps, idx) => {
-        const sel = idx === selectedIdx ? ' selected' : '';
-        return `<option value="${idx}"${sel}>${fps} Hz</option>`;
-      }).join('');
+    function cselectClose() {
+      document.querySelectorAll('.cselect.open').forEach(s => {
+        s.classList.remove('open');
+        s.querySelector('.cselect-panel').classList.add('hidden');
+      });
+    }
+
+    function cselectToggle(wrapper) {
+      const panel   = wrapper.querySelector('.cselect-panel');
+      const trigger = wrapper.querySelector('.cselect-trigger');
+      const isOpen  = wrapper.classList.contains('open');
+
+      cselectClose(); // close any other open select first
+
+      if (!isOpen) {
+        wrapper.classList.add('open');
+        panel.classList.remove('hidden');
+
+        // Position panel using fixed coords so it escapes overflow:hidden parents
+        const rect       = trigger.getBoundingClientRect();
+        panel.style.top  = `${rect.bottom + 4}px`;
+        panel.style.left = `${rect.left}px`;
+        panel.style.width = `${rect.width}px`;
+      }
+    }
+
+    function cselectPick(option, onchangeExpr) {
+      const wrapper = option.closest('.cselect');
+      const panel   = wrapper.querySelector('.cselect-panel');
+      const hidden  = wrapper.querySelector('input[type="hidden"]');
+      const label   = wrapper.querySelector('.cselect-label');
+
+      wrapper.querySelectorAll('.cselect-option').forEach(o => o.classList.remove('active'));
+      option.classList.add('active');
+      hidden.value      = option.dataset.value;
+      label.textContent = option.textContent;
+
+      wrapper.classList.remove('open');
+      panel.classList.add('hidden');
+
+      if (onchangeExpr) eval(onchangeExpr);
+    }
+
+    // Close open selects when clicking outside or scrolling
+    document.addEventListener('click',  e => { if (!e.target.closest('.cselect')) cselectClose(); }, true);
+    document.addEventListener('scroll', () => cselectClose(), true);
+
+    /* ═══════════════════════════════════════════════════════════
+       CUSTOM STEPPER
+       ─────────────────────────────────────────────────────────
+       buildCstepper(hiddenId, value, min, max, onchangeExpr)
+       ═══════════════════════════════════════════════════════════ */
+    function buildCstepper(hiddenId, value, min, max, onchangeExpr) {
+      const atMin = value <= min;
+      const atMax = value >= max;
+      return `<div class="cstepper" data-min="${min}" data-max="${max}">
+        <input type="hidden" id="${hiddenId}" value="${value}">
+        <button class="cstepper-btn" type="button"
+                onclick="cstepperAdj(this,-1,'${onchangeExpr}')"
+                ${atMin ? 'disabled' : ''}>−</button>
+        <input class="cstepper-val" type="text" inputmode="numeric"
+               value="${value}"
+               onfocus="this.select()"
+               onblur="cstepperInput(this,'${onchangeExpr}')"
+               onkeydown="if(event.key==='Enter')this.blur();if(event.key==='ArrowUp'){event.preventDefault();cstepperAdj(this.closest('.cstepper').querySelectorAll('.cstepper-btn')[1],+1,'${onchangeExpr}')}if(event.key==='ArrowDown'){event.preventDefault();cstepperAdj(this.closest('.cstepper').querySelectorAll('.cstepper-btn')[0],-1,'${onchangeExpr}')}">
+        <button class="cstepper-btn" type="button"
+                onclick="cstepperAdj(this,+1,'${onchangeExpr}')"
+                ${atMax ? 'disabled' : ''}>+</button>
+      </div>`;
+    }
+
+    function cstepperSetVal(wrapper, val, onchangeExpr) {
+      const hidden  = wrapper.querySelector('input[type="hidden"]');
+      const display = wrapper.querySelector('.cstepper-val');
+      const min     = parseInt(wrapper.dataset.min, 10);
+      const max     = parseInt(wrapper.dataset.max, 10);
+
+      val = Math.max(min, Math.min(max, val));
+      hidden.value  = val;
+      display.value = val;
+
+      const [btnMinus, btnPlus] = wrapper.querySelectorAll('.cstepper-btn');
+      btnMinus.disabled = val <= min;
+      btnPlus.disabled  = val >= max;
+
+      if (onchangeExpr) eval(onchangeExpr);
+    }
+
+    function cstepperAdj(btn, delta, onchangeExpr) {
+      const wrapper = btn.closest('.cstepper');
+      const hidden  = wrapper.querySelector('input[type="hidden"]');
+      cstepperSetVal(wrapper, parseInt(hidden.value, 10) + delta, onchangeExpr);
+    }
+
+    function cstepperInput(input, onchangeExpr) {
+      const wrapper = input.closest('.cstepper');
+      const hidden  = wrapper.querySelector('input[type="hidden"]');
+      let val = parseInt(input.value, 10);
+      if (isNaN(val)) val = parseInt(hidden.value, 10); // revert if not a number
+      cstepperSetVal(wrapper, val, onchangeExpr);
     }
 
     /* ── RENDER ONE METER BLOCK ── */
     function renderMeterBlock(id, isActive, cfg) {
-      const name     = cfg.name     || '';
-      const image    = cfg.image    || '';
-      const fpsIdx   = (cfg.fps !== undefined) ? cfg.fps : 2; // default index 2 = 3 Hz
+      const name   = cfg.name  || '';
+      const image  = cfg.image || '';
+      const fpsIdx = (cfg.fps !== undefined) ? cfg.fps : 2; // default index 2 = 3 Hz
 
       const displayName = name || 'UNKNOWN';
-      const badgeClass  = isActive ? 'active' : 'inactive';
+      const badgeClass  = isActive ? 'active'  : 'inactive';
       const badgeLabel  = isActive ? 'Active'  : 'Stored';
+
+      // Build option lists for the custom selects
+      const imageOpts = [
+        { value: '', label: '— None —' },
+        ...availableImages.map(f => ({ value: f, label: f }))
+      ];
+      const fpsOpts = FPS_OPTIONS.map((fps, idx) => ({ value: idx, label: `${fps} Hz` }));
 
       const block = document.createElement('div');
       block.className   = 'meter-block';
@@ -304,7 +526,7 @@
           </span>
           <button class="btn-icon danger" onclick="deleteMeter(${id})" title="Delete config">
             <svg viewBox="0 0 16 16" fill="none">
-              <path d="M3 4h10M6 4V3h4v1M5 4l.5 9h5L11 4" stroke="currentColor" 
+              <path d="M3 4h10M6 4V3h4v1M5 4l.5 9h5L11 4" stroke="currentColor"
                     stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
           </button>
@@ -312,31 +534,25 @@
         <div class="meter-fields">
           <div class="field-row">
             <span class="field-label">Name</span>
-            <input  type="text"
-                    class="field-input"
-                    id="name-${id}"
-                    placeholder="UNKNOWN"
-                    maxlength="32"
-                    value="${name}"
-                    oninput="onFieldChange(${id})">
+            <input type="text"
+                   class="field-input"
+                   id="name-${id}"
+                   placeholder="UNKNOWN"
+                   maxlength="32"
+                   value="${name}"
+                   oninput="onFieldChange(${id})">
           </div>
           <div class="field-row">
             <span class="field-label">Image</span>
-            <select class="field-select" id="image-${id}" onchange="onImageChange(${id})">
-              ${imageOptions(image)}
-            </select>
+            ${buildCselect(`image-${id}`, imageOpts, image, `onImageChange(${id})`)}
           </div>
           <div class="field-row">
             <span class="field-label">Meter ID</span>
-            <input type="number" class="field-input" id="newid-${id}" 
-                  min="0" max="31" value="${id}" 
-                  oninput="onFieldChange(${id})">
+            ${buildCstepper(`newid-${id}`, id, 0, 31, `onFieldChange(${id})`)}
           </div>
           <div class="field-row">
-            <span class="field-label">Refresh Rate</span>
-            <select class="field-select" id="fps-${id}" onchange="onFieldChange(${id})">
-              ${fpsOptions(fpsIdx)}
-            </select>
+            <span class="field-label">Refresh</span>
+            ${buildCselect(`fps-${id}`, fpsOpts, fpsIdx, `onFieldChange(${id})`)}
           </div>
         </div>
         <div class="meter-block-footer">
@@ -359,26 +575,20 @@
       onFieldChange(id);
       const img  = $(`image-${id}`).value;
       const name = $(`name-${id}`).value.trim();
-      const thumb = $(`thumb-${id}`);
-      const initials = (name || 'UNKNOWN').replace(/[^A-Z0-9]/gi, '').slice(0, 2).toUpperCase() || '??';
-      thumb.innerHTML = thumbHtml(img, name || 'UNKNOWN');
+      $(`thumb-${id}`).innerHTML = thumbHtml(img, name || 'UNKNOWN');
     }
 
     function rebuildBlock(oldId, newId) {
-      // Grab the migrated config from allSettings (already moved by the setid endpoint)
       const cfg    = allSettings.meters[newId] || {};
       const active = activeMeterIds.has(newId);
 
-      // Replace the old block in the DOM with a new one under the new ID
       const oldBlock = document.querySelector(`[data-mid="${oldId}"]`);
       const newBlock = renderMeterBlock(newId, active, cfg);
       oldBlock.replaceWith(newBlock);
 
-      // Clean up allSettings reference for old ID
       delete allSettings.meters[oldId];
       activeMeterIds.delete(oldId);
 
-      // Immediately save name/image/fps under the new ID
       saveMeter(newId);
     }
 
@@ -394,7 +604,6 @@
       const fpsChanged = allSettings.meters[id] && allSettings.meters[id].fps !== fpsIdx;
       const idChanged  = newId !== id;
 
-      // POST to /update whenever ID or FPS changed (RP2040 needs to know)
       if (idChanged || fpsChanged) {
         const r = await fetch('/api/meter/update', {
           method: 'POST',
@@ -410,8 +619,6 @@
         }
 
         if (idChanged) {
-          // Flush the current field values into allSettings under the new ID BEFORE rebuilding,
-          // so rebuildBlock picks up the name, image, and fps the user just typed.
           allSettings.meters[newId] = {
             ...(allSettings.meters[id] || {}),
             name,
@@ -423,11 +630,10 @@
         }
       }
 
-      btn.disabled       = true;
-      statusEl.className = 'save-status';
+      btn.disabled         = true;
+      statusEl.className   = 'save-status';
       statusEl.textContent = 'Saving…';
 
-      // Merge into full settings (preserving theme/zoomIndex from meter.html)
       if (!allSettings.meters)     allSettings.meters     = {};
       if (!allSettings.meters[id]) allSettings.meters[id] = {};
 
@@ -445,10 +651,8 @@
         if (d.status === 'success') {
           statusEl.className   = 'save-status saved';
           statusEl.textContent = '✓ Saved';
-          // Update display name in header
           const displayName = name || 'UNKNOWN';
           $(`display-name-${id}`).textContent = displayName;
-          // Update thumbnail initials if no image
           if (!image) {
             const initials = displayName.replace(/[^A-Z0-9]/gi,'').slice(0,2).toUpperCase() || '??';
             $(`thumb-${id}`).innerHTML = `<span class="meter-thumb-fallback">${initials}</span>`;
@@ -477,7 +681,6 @@
         if (d.status === 'success') {
           document.querySelector(`[data-mid="${id}"]`).remove();
           delete allSettings.meters[id];
-          // Show empty state if no blocks remain
           if ($('meter-blocks').children.length === 0) {
             $('empty-state').classList.remove('hidden');
           }
@@ -491,26 +694,21 @@
 
     /* ── INIT ── */
     async function init() {
-      // Parallel fetch: settings, system info, available image files
       const [settingsRes, systemRes, filesRes] = await Promise.allSettled([
         fetch('/api/settings').then(r => r.json()),
         fetch('/api/system').then(r => r.json()),
         fetch('/api/files/meters').then(r => r.json())
       ]);
 
-      // Process settings
       allSettings = (settingsRes.status === 'fulfilled') ? settingsRes.value : {};
       if (!allSettings.meters) allSettings.meters = {};
 
-      // Process active meters
       if (systemRes.status === 'fulfilled') {
         (systemRes.value.meters || []).forEach(m => activeMeterIds.add(m.id));
       }
 
-      // Process image list
       availableImages = (filesRes.status === 'fulfilled') ? filesRes.value : [];
 
-      // Build merged list: union of active + stored meter IDs
       const storedIds = Object.keys(allSettings.meters).map(Number);
       const allIds    = [...new Set([...activeMeterIds, ...storedIds])].sort((a, b) => a - b);
 
