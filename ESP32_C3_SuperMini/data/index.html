@@ -190,105 +190,6 @@
     .btn-outline.danger:hover  { background: rgba(255,85,85,0.18); border-color: rgba(255,85,85,0.45); }
     .btn-outline.warning:hover { background: var(--accent-glow); border-color: var(--accent); }
 
-    /* ── MODAL ── */
-    .modal-overlay {
-      display: none;
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,0.75);
-      z-index: 100;
-      align-items: center;
-      justify-content: center;
-      padding: 2em;
-    }
-
-    .modal-overlay.visible { display: flex; }
-
-    .modal {
-      background: var(--panel);
-      border: 1px solid var(--border-bright);
-      border-radius: 0.4em;
-      width: 100%;
-      max-width: 34em;
-      overflow: hidden;
-      box-shadow: 0 2.4em 6.4em rgba(0,0,0,0.7);
-      animation: modal-in 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275) both;
-    }
-
-    @keyframes modal-in {
-      from { transform: scale(0.93); opacity: 0; }
-      to   { transform: scale(1);    opacity: 1; }
-    }
-
-    .modal-header {
-      background: var(--panel-2);
-      border-bottom: 1px solid var(--border-bright);
-      padding: 1.4em 1.6em;
-      display: flex;
-      align-items: center;
-      gap: 1em;
-    }
-
-    .modal-icon {
-      width: 2.8em;
-      height: 2.8em;
-      border-radius: 0.3em;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      flex-shrink: 0;
-    }
-
-    .modal-icon.danger  { background: var(--red-dim);   border: 1px solid rgba(255,85,85,0.25); color: var(--red); }
-    .modal-icon.warning { background: var(--accent-dim); border: 1px solid var(--accent-glow);   color: var(--accent); }
-    .modal-icon svg     { width: 1.4em; height: 1.4em; }
-
-    .modal-title { font-family: var(--mono); font-size: 1.2em; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
-    .modal-title.danger  { color: var(--red); }
-    .modal-title.warning { color: var(--accent); }
-
-    .modal-body { padding: 1.8em 1.6em; }
-    .modal-body p      { font-size: 1.3em; color: var(--text-2); line-height: 1.6; margin-bottom: 1.6em; }
-    .modal-body strong { color: var(--text); font-weight: 600; }
-
-    .modal-actions { display: flex; gap: 0.8em; }
-
-    .btn-cancel {
-      flex: 1;
-      font-family: var(--mono);
-      font-size: 1.2em;
-      font-weight: 600;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-      color: var(--text-2);
-      background: var(--panel-2);
-      border: 1px solid var(--border-bright);
-      border-radius: 0.3em;
-      padding: 1em;
-      cursor: pointer;
-      transition: background 0.15s;
-    }
-
-    .btn-cancel:hover { background: var(--border); }
-
-    .btn-confirm {
-      flex: 1;
-      font-family: var(--mono);
-      font-size: 1.2em;
-      font-weight: 600;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-      border: none;
-      border-radius: 0.3em;
-      padding: 1em;
-      cursor: pointer;
-      transition: opacity 0.15s;
-    }
-
-    .btn-confirm.danger  { color: var(--bg); background: var(--red); }
-    .btn-confirm.warning { color: var(--bg); background: var(--accent); }
-    .btn-confirm:hover   { opacity: 0.88; }
-
     /* ── RESET STEPS ── */
     .reset-steps { display: flex; flex-direction: column; }
 
@@ -539,8 +440,7 @@
           <span class="modal-title danger">Confirm Wi-Fi Reset</span>
         </div>
         <div class="modal-body">
-          <p>This will <strong>erase the saved network credentials</strong> and reboot the device into setup
-            mode. You will need to configure a new network connection.</p>
+          <p>This will <strong>erase the saved network credentials</strong> and reboot the device into setup mode. You will need to configure a new network connection.</p>
           <div class="modal-actions">
             <button class="btn-cancel" onclick="closeResetModal()">Cancel</button>
             <button class="btn-confirm danger" onclick="executeReset()">Reset</button>
@@ -551,8 +451,8 @@
       <!-- STEP 2: Progress + Instructions -->
       <div id="step-resetting" class="hidden">
         <div class="modal-header">
-          <div class="modal-icon">
-            <span class="spinner-inline danger" style="margin:0"></span>
+          <div class="modal-icon danger">
+            <span class="spinner-inline" style="margin:0"></span>
           </div>
           <span class="modal-title danger">Wiping Credentials...</span>
         </div>
@@ -604,8 +504,8 @@
       <!-- STEP 2: Restarting -->
       <div id="restart-step-restarting" class="hidden">
         <div class="modal-header">
-          <div class="modal-icon">
-            <span class="spinner-inline warning" style="margin:0"></span>
+          <div class="modal-icon warning">
+            <span class="spinner-inline" style="margin:0"></span>
           </div>
           <span class="modal-title warning">Restarting...</span>
         </div>
@@ -616,7 +516,6 @@
 
     </div>
   </div>
-
 
   <script>
     /* ── APP LOGIC ────────────────────────────────────────────────────── */

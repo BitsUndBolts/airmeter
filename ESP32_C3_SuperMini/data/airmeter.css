@@ -426,3 +426,174 @@ body {
   0%, 100% { transform: scale(1); opacity: 1; }
   50%       { transform: scale(1.1); }
 }
+
+/* ── UNIFIED MODAL SYSTEM ── */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2em;
+  z-index: 300;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s ease;
+}
+
+.modal-overlay.visible {
+  opacity: 1;
+  pointer-events: all;
+}
+
+.modal {
+  background: var(--panel);
+  border: 1px solid var(--border-bright);
+  border-radius: 0.4em;
+  width: min(92vw, 34em);
+  overflow: hidden;
+  box-shadow: 0 2.4em 6.4em rgba(0, 0, 0, 0.7);
+  display: flex;
+  flex-direction: column;
+  transform: scale(0.95) translateY(0.5em);
+  transition: transform 0.18s ease;
+}
+
+.modal-overlay.visible .modal {
+  transform: scale(1) translateY(0);
+}
+
+.modal-header {
+  background: var(--panel-2);
+  border-bottom: 1px solid var(--border-bright);
+  padding: 1.4em 1.6em;
+  display: flex;
+  align-items: center;
+  gap: 1em;
+}
+
+.modal-icon {
+  width: 2.8em;
+  height: 2.8em;
+  border-radius: 0.3em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: var(--panel-3, rgba(255,255,255,0.05));
+  border: 1px solid var(--border-bright);
+  color: var(--text);
+}
+
+.modal-icon.danger {
+  background: var(--red-dim);
+  border: 1px solid rgba(255, 85, 85, 0.25);
+  color: var(--red);
+}
+
+.modal-icon.warning {
+  background: var(--accent-dim);
+  border: 1px solid var(--accent-glow);
+  color: var(--accent);
+}
+
+.modal-icon svg {
+  width: 1.4em;
+  height: 1.4em;
+}
+
+.modal-title {
+  font-family: var(--mono);
+  font-size: 1.2em;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+
+.modal-title.danger { color: var(--red); }
+.modal-title.warning { color: var(--accent); }
+
+.modal-body {
+  padding: 1.8em 1.6em;
+  font-size: 1.2em;
+  color: var(--text-2);
+  line-height: 1.6;
+}
+
+.modal-body p {
+  margin-bottom: 1.6em;
+  font-size: inherit;
+  color: inherit;
+}
+
+.modal-body p:last-child {
+  margin-bottom: 0;
+}
+
+.modal-filename {
+  font-family: var(--mono);
+  color: var(--text);
+  background: var(--panel-2);
+  border: 1px solid var(--border-bright);
+  border-radius: 0.25em;
+  padding: 0.15em 0.45em;
+  font-size: 0.95em;
+  word-break: break-all;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 0.8em;
+  margin-top: 1.6em;
+}
+
+.btn-cancel,
+.btn-confirm {
+  flex: 1;
+  font-family: var(--mono);
+  font-size: 1.1em;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0.9em 1.4em;
+  border-radius: 0.3em;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: center;
+}
+
+.btn-cancel {
+  color: var(--text-2);
+  background: var(--panel-2);
+  border: 1px solid var(--border-bright);
+}
+
+.btn-cancel:hover {
+  color: var(--text);
+  background: var(--border);
+  border-color: var(--text-2);
+}
+
+.btn-confirm {
+  border: none;
+  color: #fff;
+  background: var(--border-bright);
+}
+
+.btn-confirm.danger {
+  color: var(--bg, #fff);
+  background: var(--red);
+}
+
+.btn-confirm.warning {
+  color: var(--bg, #fff);
+  background: var(--accent);
+}
+
+.btn-confirm:hover {
+  opacity: 0.88;
+}
