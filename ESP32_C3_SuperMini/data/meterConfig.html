@@ -625,6 +625,8 @@
             name,
             image
           };
+          activeMeters.set(newId, { ...activeMeters.get(id) });
+          activeMeters.delete(id);
           rebuildBlock(id, newId);
           return;
         }
