@@ -839,20 +839,20 @@
             if (!themeSelect.contains(e.target)) themeSelect.classList.remove('open');
         });
 
-        // ── Resolve meter ID from URL (?id=X) ────────────────────────────
-        const METER_ID = (() => {
-            const v = new URLSearchParams(window.location.search).get('id');
+        // ── Resolve channel from URL (?channel=X) ────────────────────────────
+        const CHANNEL = (() => {
+            const v = new URLSearchParams(window.location.search).get('channel');
             const n = parseInt(v, 10);
             return (!isNaN(n) && n >= 0 && n <= 31) ? n : null;
         })();
 
-        if (METER_ID === null) {
-            // No valid ID → redirect home
+        if (CHANNEL === null) {
+            // No valid channel → redirect home
             window.location.href = '/';
         }
 
         // Update page title once we know the ID
-        document.title = `AirMeter · Meter ${METER_ID}`;
+        document.title = `AirMeter · CH: ${CHANNEL}`;
 
         // ── Per-meter settings helpers ────────────────────────────────────
         function loadSettings() {
@@ -860,7 +860,7 @@
                 .then(res => res.json())
                 .then(data => {
                     const meters    = data.meters || {};
-                    const cfg       = meters[METER_ID] || {};
+                    const cfg       = meters[CHANNEL] || {};
                     const theme     = (cfg.theme in THEMES) ? cfg.theme : 'Classic';
                     const zoomIndex = cfg.zoomIndex ?? ZOOM_LEVELS.indexOf(100);
 
@@ -882,9 +882,9 @@
                 .then(r => r.json())
                 .then(data => {
                     if (!data.meters) data.meters = {};
-                    if (!data.meters[METER_ID]) data.meters[METER_ID] = {};
-                    data.meters[METER_ID].theme     = currentTheme;
-                    data.meters[METER_ID].zoomIndex = currentZoomIndex;
+                    if (!data.meters[CHANNEL]) data.meters[CHANNEL] = {};
+                    data.meters[CHANNEL].theme     = currentTheme;
+                    data.meters[CHANNEL].zoomIndex = currentZoomIndex;
                     return fetch('/api/settings', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -907,12 +907,12 @@
             if (t) document.documentElement.style.setProperty('--lcd-off', t.on);
         }
 
-        // ── SSE — filtered to this meter's ID only ────────────────────────
+        // ── SSE — subscribe to specific channel ────────────────────────
         if ('EventSource' in window) {
             const source = new EventSource('/events');
 
-            // We only subscribe to our METER_ID stream
-            source.addEventListener(`meter-data-${METER_ID}`, function (e) {
+            // We only subscribe to our CHANNEL stream
+            source.addEventListener(`meter-data-${CHANNEL}`, function (e) {
                 try {
                     const data = JSON.parse(e.data);
                     updateMultimeterDisplay(data.lcd);

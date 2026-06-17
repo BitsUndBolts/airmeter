@@ -46,7 +46,7 @@
 // Transmission Protocol - Receiving:
 //   [ 0xAA ][ 0x55 ]          — 2-byte preamble (sync marker)
 //   [ 0x02 ]                  — payload length (2 bytes); acts as implicit format tag
-//   [ METER_ID ]              — Identifier for the RP2040 if this packet is meant for it
+//   [ CHANNEL ]               — Identifier for the RP2040 if this packet is meant for it
 //   [ DATA_BYTE ]             — bits 7-5: fps index (0-7), bits 4-0: meter ID (0-31). This is for update purposes
 //   [ CRC8  ]                 — CRC-8 (Dallas/Maxim) over bytes 2-4 (LEN through SHARED_BYTE)
 //
@@ -121,7 +121,7 @@ const int HC12_BAUD   = 9600;
 const uint8_t PREAMBLE_1  = 0x55;
 const uint8_t PREAMBLE_2  = 0xAA;
 const uint8_t PAYLOAD_LEN_TX = 0x09;  // 9 payload bytes: 1 META + 4 COM rows × 2 bytes
-const uint8_t PAYLOAD_LEN_RX = 0x02;  // 2 payload bytes: METER_ID + DATA_BYTE
+const uint8_t PAYLOAD_LEN_RX = 0x02;  // 2 payload bytes: CHANNEL + DATA_BYTE
 
 // =============================================================================
 // PACKET RECEIVE STATE MACHINE
@@ -141,10 +141,10 @@ uint8_t rx_payload_idx = 0;
 unsigned long rx_error_count = 0;
 
 
-// Meter identity — loaded from EEPROM on boot, configurable at runtime via
-// the ESP32 web UI. Defaults to 0 if no saved value exists.
+// Meter protocol channel — loaded from EEPROM on boot, configurable at
+// runtime via the ESP32 web UI. Defaults to 0 if no saved value exists.
 // Valid range: 0-31 (5 bits, packed into the META byte low bits).
-uint8_t METER_ID = 0;
+uint8_t CHANNEL = 0;
 
 
 // COM line settle delay in microseconds. After a COM pin is detected HIGH,
@@ -200,7 +200,7 @@ static_assert(FRAME_RATE_COUNT <= 8,
 const int EEPROM_ADDR_FRAME_INDEX = 0;
 const int EEPROM_MAGIC_ADDR       = 1;    // Address used to detect initialised EEPROM
 const uint8_t EEPROM_MAGIC_VALUE  = 0xA5; // Sentinel — if present, EEPROM data is valid
-const int EEPROM_ADDR_METER_ID    = 2;
+const int EEPROM_ADDR_CHANNEL     = 2;
 
 // Active frame rate index and interval. Set during setup and updated on button press.
 int           frameRateIndex    = FRAME_RATE_DEFAULT_INDEX;
@@ -277,8 +277,8 @@ Adafruit_NeoPixel rgb_led(1, LED_PIN, NEO_GRB + NEO_KHZ800);
 // SECTION 9 — HELPER FUNCTIONS
 // =============================================================================
 
-uint8_t makeMetaByte(uint8_t fps_idx, uint8_t meter_id) {
-  return ((fps_idx & 0x07) << 5) | (meter_id & 0x1F);
+uint8_t makeMetaByte(uint8_t fps_idx, uint8_t channel) {
+  return ((fps_idx & 0x07) << 5) | (channel & 0x1F);
 }
 
 // Flash the LED a given number of times in blue to confirm a frame rate change.
@@ -309,12 +309,12 @@ uint8_t calculate_crc8(uint8_t *data, uint8_t len) {
   return crc;
 }
 
-void applyNewConfiguration(uint8_t new_id, uint8_t new_fps_idx) {
+void applyNewConfiguration(uint8_t new_channel, uint8_t new_fps_idx) {
   bool changed = false;
 
-  if (new_id != METER_ID && new_id <= 31) {
-    METER_ID = new_id;
-    EEPROM.write(EEPROM_ADDR_METER_ID, METER_ID);
+  if (new_channel != CHANNEL && new_channel <= 31) {
+    CHANNEL = new_channel;
+    EEPROM.write(EEPROM_ADDR_CHANNEL, CHANNEL);
     changed = true;
   }
 
@@ -333,20 +333,20 @@ void applyNewConfiguration(uint8_t new_id, uint8_t new_fps_idx) {
 }
 
 void decodeConfigPacket(const uint8_t* payload) {
-  const uint8_t current_id = payload[0];
-  if (current_id != METER_ID) return;
+  const uint8_t current_channel = payload[0];
+  if (current_channel != CHANNEL) return;
 
-  // Extract shared fields: frequency (bits 7-5) | new_id (bits 4-0)
+  // Extract shared fields: frequency (bits 7-5) | new_channel (bits 4-0)
   const uint8_t shared_byte = payload[1];
   const uint8_t frequency   = (shared_byte >> 5) & 0x07;
-  const uint8_t new_id      = shared_byte & 0x1F;
+  const uint8_t new_channel = shared_byte & 0x1F;
 
   // Print debug confirmation over USB serial
-  Serial.printf("[ESP32 -> RP2040] Target ID: %u | New ID: %u | Freq Index: %u\n", 
-                current_id, new_id, frequency);
+  Serial.printf("[ESP32 -> RP2040] Current Channel: %u | New Channel: %u | Freq Index: %u\n", 
+                current_channel, new_channel, frequency);
 
 
-  applyNewConfiguration(new_id, frequency);
+  applyNewConfiguration(new_channel, frequency);
 }
 
 void processIncomingESP32() {
@@ -437,13 +437,13 @@ void setup() {
   EEPROM.begin(256);
   if (EEPROM.read(EEPROM_MAGIC_ADDR) == EEPROM_MAGIC_VALUE) {
     uint8_t savedFpsIdx = EEPROM.read(EEPROM_ADDR_FRAME_INDEX);
-    uint8_t savedId = EEPROM.read(EEPROM_ADDR_METER_ID);
+    uint8_t savedChannel = EEPROM.read(EEPROM_ADDR_CHANNEL);
     
     if (savedFpsIdx < FRAME_RATE_COUNT) {
       frameRateIndex = savedFpsIdx;
       txIntervalMs   = FRAME_INTERVALS[frameRateIndex];
     }
-    if (savedId <= 31) METER_ID = savedId;
+    if (savedChannel <= 31) CHANNEL = savedChannel;
   }
 
   // Seed activity timer so the sleep timeout does not trigger immediately
@@ -534,7 +534,7 @@ void loop() {
   // PHASE 3: Process incoming config packets from ESP32
   //
   // Receive and decode configuration commands sent by the ESP32 web UI over
-  // the HC-12 reverse channel. Valid packets update METER_ID and/or
+  // the HC-12 reverse channel. Valid packets update CHANNEL and/or
   // frameRateIndex and persist both to EEPROM immediately.
   // ---------------------------------------------------------------------------
   processIncomingESP32();
@@ -572,10 +572,10 @@ void loop() {
     tx_packet[2]  = PAYLOAD_LEN_TX;                    // Payload length
     tx_packet[3]  = sequence_number++;                 // Rolling sequence number
 
-    // META byte: upper 3 bits = current fps index, lower 5 bits = meter ID.
+    // META byte: upper 3 bits = current fps index, lower 5 bits = CHANNEL.
     // Lets the receiver display the active frame rate and route packets from
     // multiple meters to separate UI panels without any extra protocol overhead.
-    tx_packet[4]  = makeMetaByte(frameRateIndex, METER_ID);    // [F2 F1 F0 | M4 M3 M2 M1 M0]
+    tx_packet[4]  = makeMetaByte(frameRateIndex, CHANNEL);    // [F2 F1 F0 | M4 M3 M2 M1 M0]
 
     tx_packet[5]  = (tx_matrix[0] >> 8) & 0xFF;       // COM0 high byte (bit15 = buzzer)
     tx_packet[6]  =  tx_matrix[0]       & 0xFF;        // COM0 low byte

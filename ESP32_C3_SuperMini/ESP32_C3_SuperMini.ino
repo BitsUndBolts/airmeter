@@ -36,68 +36,68 @@ struct MeterData {
 std::map<uint8_t, MeterData> meterRegistry;
 
 // =============================================================================
-// ID-CHANGE COOL-OFF
+// CHANNEL-CHANGE COOL-OFF
 //
-// When an ID is renamed via /api/meter/update, packets already in flight
+// When a CHANNEL is changed via /api/meter/update, packets already in flight
 // (or sitting in the RP2040's UART buffer) may still arrive tagged with the
-// OLD id for a short while after the rename command goes out. Without this
+// OLD channel for a short while after the rename command goes out. Without this
 // guard, decodePacket() would treat that straggler as a brand-new meter and
-// silently re-create meterRegistry[oldId].
+// silently re-create meterRegistry[oldChannel].
 //
-// We track a short list of "recently retired" IDs with an expiry timestamp.
-// Packets for an ID still in this list are dropped (not re-registered)
-// until the cool-off window elapses — after which the ID is open again for
+// We track a short list of "recently retired" Channels with an expiry timestamp.
+// Packets for a Channel still in this list are dropped (not re-registered)
+// until the cool-off window elapses — after which the Channel is open again for
 // genuine re-registration (e.g. a different physical meter later reusing
-// that ID, or wrap-around re-use).
+// that Channel, or wrap-around re-use).
 // =============================================================================
 
-struct IdCooloff {
-  uint8_t        id        = 0xFF;  // 0xFF == slot unused
+struct ChannelCooloff {
+  uint8_t        channel   = 0xFF;  // 0xFF == slot unused
   unsigned long  expiresAt = 0;
 };
 
 static const uint8_t COOLOFF_SLOTS = 8; // generous headroom for rapid re-renames
-static IdCooloff idCooloffList[COOLOFF_SLOTS];
+static ChannelCooloff channelCooloffList[COOLOFF_SLOTS];
 
-static const unsigned long ID_COOLOFF_MS = 5000; // 5s window
+static const unsigned long CHANNEL_COOLOFF_MS = 5000; // 5s window
 
-// Mark `id` as retired for ID_COOLOFF_MS. If the list is full, overwrite the
+// Mark `channel` as retired for CHANNEL_COOLOFF_MS. If the list is full, overwrite the
 // slot with the soonest expiry (oldest/least relevant entry).
-void startIdCooloff(uint8_t id) {
+void startChannelCooloff(uint8_t channel) {
   const unsigned long now = millis();
   int freeSlot = -1;
   int oldestSlot = 0;
 
   for (int i = 0; i < COOLOFF_SLOTS; i++) {
-    if (idCooloffList[i].id == id) {
+    if (channelCooloffList[i].channel == channel) {
       // Already cooling off (e.g. re-renamed again quickly) — just refresh it.
-      idCooloffList[i].expiresAt = now + ID_COOLOFF_MS;
+      channelCooloffList[i].expiresAt = now + CHANNEL_COOLOFF_MS;
       return;
     }
-    if (idCooloffList[i].id == 0xFF && freeSlot == -1) {
+    if (channelCooloffList[i].channel == 0xFF && freeSlot == -1) {
       freeSlot = i;
     }
-    if (idCooloffList[i].expiresAt < idCooloffList[oldestSlot].expiresAt) {
+    if (channelCooloffList[i].expiresAt < channelCooloffList[oldestSlot].expiresAt) {
       oldestSlot = i;
     }
   }
 
   int slot = (freeSlot != -1) ? freeSlot : oldestSlot;
-  idCooloffList[slot].id        = id;
-  idCooloffList[slot].expiresAt = now + ID_COOLOFF_MS;
+  channelCooloffList[slot].channel        = channel;
+  channelCooloffList[slot].expiresAt = now + CHANNEL_COOLOFF_MS;
 }
 
-// Returns true if `id` is currently within its cool-off window.
+// Returns true if `channel` is currently within its cool-off window.
 // Lazily expires entries it walks past, so no separate cleanup task is needed.
-bool isIdCoolingOff(uint8_t id) {
+bool isChannelCoolingOff(uint8_t channel) {
   const unsigned long now = millis();
   for (int i = 0; i < COOLOFF_SLOTS; i++) {
-    if (idCooloffList[i].id == id) {
-      if ((long)(idCooloffList[i].expiresAt - now) > 0) {
+    if (channelCooloffList[i].channel == channel) {
+      if ((long)(channelCooloffList[i].expiresAt - now) > 0) {
         return true;
       }
       // Expired — free the slot.
-      idCooloffList[i].id = 0xFF;
+      channelCooloffList[i].channel = 0xFF;
       return false;
     }
   }
@@ -237,7 +237,7 @@ uint8_t calculate_crc8(const uint8_t* data, uint8_t len) {
 // =============================================================================
 // PACKET DECODER
 // Unpacks 9 payload bytes into:
-//   - 8-bit FPS INDEX and METER_ID
+//   - 8-bit FPS INDEX and CHANNEL
 //   - 60-bit LCD string  (COM0[15] + COM1[15] + COM2[15] + COM3[15])
 //   - buzzer flag        (bit 15 of COM0)
 // Broadcasts result immediately over SSE.
@@ -247,14 +247,14 @@ void decodePacket(const uint8_t* payload) {
   // Extract META fields from byte 0
   const uint8_t meta_byte = payload[0];
   const uint8_t fps_index = (meta_byte >> 5) & 0x07;
-  const uint8_t meter_id  = meta_byte & 0x1F;
+  const uint8_t channel  = meta_byte & 0x1F;
 
-  // This ID was just renamed away from — almost certainly a straggler packet
-  // sent under the old ID before the RP2040 applied the rename. Drop it
-  // silently rather than re-registering meterRegistry[meter_id].
-  if (isIdCoolingOff(meter_id)) {
+  // This Channel was just freed — almost certainly a straggler packet
+  // sent under the old channel before the RP2040 applied the change. Drop it
+  // silently rather than re-registering meterRegistry[channel].
+  if (isChannelCoolingOff(channel)) {
 #ifdef DEBUG_LCD_VISUAL
-    Serial.printf("[COOLOFF] Dropped packet for retired meter ID %u\n", meter_id);
+    Serial.printf("[COOLOFF] Dropped packet for retired channel %u\n", channel);
 #endif
     return;
   }
@@ -283,20 +283,20 @@ void decodePacket(const uint8_t* payload) {
   }
 
   // Track per-meter last-seen timestamp and fps_index
-  meterRegistry[meter_id].lastSeen     = millis();
-  meterRegistry[meter_id].lastFpsIndex = fps_index;
+  meterRegistry[channel].lastSeen     = millis();
+  meterRegistry[channel].lastFpsIndex = fps_index;
 
-  // Broadcast over SSE — meterId is now encoded in the event name
-  // (meter-data-<id>) instead of the payload, since each stream
+  // Broadcast over SSE — CHANNEL is now encoded in the event name
+  // (meter-data-<channel>) instead of the payload, since each stream
   // only ever carries one meter's data.
   char jsonPayload[120];
   snprintf(jsonPayload, sizeof(jsonPayload),
            "{\"lcd\":\"%s\",\"buzzer\":%d,\"fpsIdx\":%u}", 
            bitString, buzzer_status, fps_index);
 
-  // Separate SSE event names per METER ID
+  // Separate SSE event names per CHANNEL
   char eventName[16];
-  snprintf(eventName, sizeof(eventName), "meter-data-%u", meter_id);
+  snprintf(eventName, sizeof(eventName), "meter-data-%u", channel);
   events.send(jsonPayload, eventName);
 
   // Debug: 4-row visual display (1 buzzer prefix + 15 SEG bits per COM row)
@@ -312,8 +312,8 @@ void decodePacket(const uint8_t* payload) {
     if (c < 3) visual += '\n';
   }
 
-  Serial.printf("[HC12] Packet #%lu | SEQ:%u | Meter ID:%u | FPS Idx:%u | Buzzer:%d\n%s\n",
-                rx_packet_count, rx_seq, meter_id, fps_index, buzzer_status, visual.c_str());
+  Serial.printf("[HC12] Packet #%lu | SEQ:%u | Channel:%u | FPS Idx:%u | Buzzer:%d\n%s\n",
+                rx_packet_count, rx_seq, channel, fps_index, buzzer_status, visual.c_str());
 #endif
 }
 
@@ -586,8 +586,8 @@ void setupWebServer() {
     
     for (auto const& kv : meterRegistry) {
       JsonObject m = meters.add<JsonObject>();
-      m["id"]  = kv.first;
-      m["seen"] = (long)((now - kv.second.lastSeen) / 1000);
+      m["channel"] = kv.first;
+      m["seen"]    = (long)((now - kv.second.lastSeen) / 1000);
       m["fpsIdx"]  = kv.second.lastFpsIndex;
     }
 
@@ -854,7 +854,7 @@ void setupWebServer() {
     pendingReboot = true;
   });
 
-  // ── API: Meter Update (rename ID + set fps index, forwards config to RP2040) ────
+  // ── API: Meter Update (change channel + set fps index, forwards config to RP2040) ────
   server.on("/api/meter/update", HTTP_POST, [](AsyncWebServerRequest* request) {}, NULL,
     [](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
       JsonDocument doc;
@@ -863,15 +863,15 @@ void setupWebServer() {
         return;
       }
 
-      if (!doc["oldId"].is<uint8_t>() || doc["oldId"].as<uint8_t>() > 31 ||
-          !doc["newId"].is<uint8_t>() || doc["newId"].as<uint8_t>() > 31 ||
+      if (!doc["oldChannel"].is<uint8_t>() || doc["oldChannel"].as<uint8_t>() > 31 ||
+          !doc["newChannel"].is<uint8_t>() || doc["newChannel"].as<uint8_t>() > 31 ||
           !doc["fpsIdx"].is<uint8_t>() || doc["fpsIdx"].as<uint8_t>() > 7) {
         request->send(400, "application/json",
                       "{\"status\":\"error\",\"message\":\"Invalid field value\"}");
         return;
       }
-      const uint8_t oldId  = doc["oldId"].as<uint8_t>();
-      const uint8_t newId  = doc["newId"].as<uint8_t>();
+      const uint8_t oldChannel  = doc["oldChannel"].as<uint8_t>();
+      const uint8_t newChannel  = doc["newChannel"].as<uint8_t>();
       const uint8_t fpsIdx = doc["fpsIdx"].as<uint8_t>();
 
       // 1. Rename in settings: load, move key, save
@@ -879,8 +879,8 @@ void setupWebServer() {
       JsonDocument cfg;
       deserializeJson(cfg, raw);
 
-      const String oldKey = String(oldId);
-      const String newKey = String(newId);
+      const String oldKey = String(oldChannel);
+      const String newKey = String(newChannel);
       if (cfg["meters"][oldKey]) {
         cfg["meters"][newKey] = cfg["meters"][oldKey];
         cfg["meters"].remove(oldKey.c_str());
@@ -889,23 +889,23 @@ void setupWebServer() {
       }
 
       // 2. Move runtime last-seen entry
-      if (meterRegistry.count(oldId)) {
-        meterRegistry[newId] = meterRegistry[oldId];
-        meterRegistry.erase(oldId);
+      if (meterRegistry.count(oldChannel)) {
+        meterRegistry[newChannel] = meterRegistry[oldChannel];
+        meterRegistry.erase(oldChannel);
       }
 
-      // 3. Start the cool-off window for oldId. Any packet still arriving
-      //    tagged with oldId over the next ID_COOLOFF_MS ms is assumed to be
+      // 3. Start the cool-off window for oldChannel. Any packet still arriving
+      //    tagged with oldChannel over the next CHANNEL_COOLOFF_MS ms is assumed to be
       //    a straggler sent before the RP2040 applied the rename, and will
-      //    be dropped instead of re-registering meterRegistry[oldId].
-      startIdCooloff(oldId);
+      //    be dropped instead of re-registering meterRegistry[oldChannel].
+      startChannelCooloff(oldChannel);
 
-      // If newId was itself recently retired (e.g. quick chained renames
-      // reusing an ID), clear that cool-off so the just-renamed meter's
-      // own packets aren't dropped under its new ID.
+      // If newChannel was itself recently retired (e.g. quick chained changes
+      // and reusing a channel), clear that cool-off so the just-renamed meter's
+      // own packets aren't dropped under its new Channel.
       for (int i = 0; i < COOLOFF_SLOTS; i++) {
-        if (idCooloffList[i].id == newId) {
-          idCooloffList[i].id = 0xFF;
+        if (channelCooloffList[i].channel == newChannel) {
+          channelCooloffList[i].channel = 0xFF;
           break;
         }
       }
@@ -915,8 +915,8 @@ void setupWebServer() {
       tx[0] = 0xAA;                              // Preamble 1 (flipped for ESP→RP direction)
       tx[1] = 0x55;                              // Preamble 2
       tx[2] = 0x02;                              // Payload length
-      tx[3] = oldId;                             // Target: who should act on this
-      tx[4] = ((fpsIdx & 0x07) << 5) | (newId & 0x1F);  // DATA_BYTE: fpsIdx|newId
+      tx[3] = oldChannel;                             // Target: who should act on this
+      tx[4] = ((fpsIdx & 0x07) << 5) | (newChannel & 0x1F);  // DATA_BYTE: fpsIdx|newChannel
 
       uint8_t crc_input[3] = { tx[2], tx[3], tx[4] };
       tx[5] = calculate_crc8(crc_input, 3);
@@ -936,23 +936,23 @@ void setupWebServer() {
         return;
       }
 
-      if (!doc["id"].is<uint8_t>() || doc["id"].as<uint8_t>() > 31) {
+      if (!doc["channel"].is<uint8_t>() || doc["channel"].as<uint8_t>() > 31) {
         request->send(400, "application/json",
-                      "{\"status\":\"error\",\"message\":\"Invalid meter ID\"}");
+                      "{\"status\":\"error\",\"message\":\"Invalid channel\"}");
         return;
       }
-      const uint8_t meterId = doc["id"].as<uint8_t>();
+      const uint8_t channel = doc["channel"].as<uint8_t>();
 
       // Remove from stored settings
       String raw = loadSettings();
       JsonDocument cfg;
       deserializeJson(cfg, raw);
-      cfg["meters"].remove(String(meterId).c_str());
+      cfg["meters"].remove(String(channel).c_str());
       String out; serializeJson(cfg, out);
       saveSettings(out.c_str());
 
       // Remove from runtime stored meter data (won't show on dashboard anymore)
-      meterRegistry.erase(meterId);
+      meterRegistry.erase(channel);
 
       request->send(200, "application/json", "{\"status\":\"success\"}");
     }

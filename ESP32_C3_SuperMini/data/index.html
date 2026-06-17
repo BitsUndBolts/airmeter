@@ -156,9 +156,10 @@
     .meter-card:hover .nav-arrow { transform: translateX(0.2em); color: var(--accent); }
     .meter-card:active           { transform: scale(0.995); }
 
+    .meter-card .meter-thumb          { width: 3.6em; height: 3.6em; }
     .meter-card .meter-thumb-fallback { font-size: 3em; }
 
-    .meter-id-badge {
+    .channel-badge {
       font-family: var(--mono);
       font-size: 0.85em;
       font-weight: 600;
@@ -222,8 +223,8 @@
           </svg>
         </div>
         <div class="nav-text">
-          <div class="nav-title">Meter Config</div>
-          <div class="nav-desc">Name, image &amp; update rate per meter ID</div>
+          <div class="nav-title">Meter Configuration</div>
+          <div class="nav-desc">Name, image &amp; update rate, and channel</div>
         </div>
         <svg class="nav-arrow" viewBox="0 0 16 16" fill="none">
           <path d="M6 3l5 5-5 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
@@ -466,7 +467,7 @@
       return 1;
     }
 
-    // Meter configs from settings (name, image per meter ID)
+    // Meter configs from settings (name and image)
     let meterConfigs = {};
 
     function dotClass(seen) {
@@ -490,7 +491,7 @@
       return `Last seen ${days}d ago`;
     }
 
-    function buildMeterCard(meterId, seen, cfg) {
+    function buildMeterCard(channel, seen, cfg) {
       const name  = cfg?.name  || 'UNKNOWN';
       const image = cfg?.image || null;
       const dot   = dotClass(seen);
@@ -502,7 +503,7 @@
       const initials = name.replace(/[^A-Z0-9]/gi, '').slice(0, 2).toUpperCase() || '??';
 
       return `
-        <a href="/meter?id=${meterId}" class="meter-card">
+        <a href="/meter?channel=${channel}" class="meter-card">
           <div class="meter-thumb">
             ${imgHtml}
             <span class="meter-thumb-fallback" style="${fallbackStyle}">${initials}</span>
@@ -514,7 +515,7 @@
               <span>${formatLastSeen(seen)}</span>
             </div>
           </div>
-          <span class="meter-id-badge">ID ${meterId}</span>
+          <span class="channel-badge">CH ${channel}</span>
           <svg class="nav-arrow" viewBox="0 0 16 16" fill="none">
             <path d="M6 3l5 5-5 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
           </svg>
@@ -539,19 +540,19 @@
       label.style.display = '';
       empty.style.display = 'none';
 
-      // Build a set of current meter IDs
-      const incoming = new Set(activeMeters.map(m => m.id));
+      // Build a set of current channels
+      const incoming = new Set(activeMeters.map(m => m.channel));
 
-      // Remove cards for meters no longer in the list
-      container.querySelectorAll('[data-meter-id]').forEach(el => {
-        if (!incoming.has(parseInt(el.dataset.meterId))) el.remove();
+      // Remove cards for channels no longer in the list
+      container.querySelectorAll('[data-channel]').forEach(el => {
+        if (!incoming.has(parseInt(el.dataset.channel))) el.remove();
       });
 
       // Update or insert each meter card
-      activeMeters.forEach(({ id, seen }) => {
-        const cfg      = meterConfigs[id] || {};
-        const html     = buildMeterCard(id, seen, cfg);
-        const existing = container.querySelector(`[data-meter-id="${id}"]`);
+      activeMeters.forEach(({ channel, seen }) => {
+        const cfg      = meterConfigs[channel] || {};
+        const html     = buildMeterCard(channel, seen, cfg);
+        const existing = container.querySelector(`[data-channel="${channel}"]`);
 
         if (existing) {
           // Patch just the dot and seen text without full re-render
@@ -566,7 +567,7 @@
           }
         } else {
           const wrapper = document.createElement('div');
-          wrapper.dataset.meterId = id;
+          wrapper.dataset.channel = channel;
           wrapper.innerHTML = html;
           container.appendChild(wrapper);
         }

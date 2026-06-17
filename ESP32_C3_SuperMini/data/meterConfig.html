@@ -13,8 +13,9 @@
     .empty-state { padding: 3em 2em; }
 
     /* ── METER THUMB SIZE ── */
-    .meter-thumb img { height: 4em; padding-left: 0; }
-    .meter-block .meter-thumb-fallback { font-size: 3em; }
+    .meter-thumb img                    { height: 4em; padding-left: 0; }
+    .meter-block .meter-thumb           { width: 3.2em; height: 3.2em; }
+    .meter-block .meter-thumb-fallback  { font-size: 3em; }
 
     /* ── SPINNER OVERRIDE (smaller on this page) ── */
     .spinner-inline {
@@ -493,10 +494,10 @@
     }
 
     /* ── RENDER ONE METER BLOCK ── */
-    function renderMeterBlock(id, cfg) {
+    function renderMeterBlock(channel, cfg) {
       const name   = cfg.name  || '';
       const image  = cfg.image || '';
-      const meterData = activeMeters.get(id);
+      const meterData = activeMeters.get(channel);
       const fpsIdx = meterData?.fpsIdx ?? 2; // default index 2 = 3 Hz
       const isActive = (meterData !== undefined && meterData.seen < 5);
 
@@ -513,20 +514,20 @@
 
       const block = document.createElement('div');
       block.className   = 'meter-block';
-      block.dataset.mid = id;
+      block.dataset.channel = channel;
       block.innerHTML = `
         <div class="meter-block-header">
-          <div class="meter-thumb" id="thumb-${id}">
+          <div class="meter-thumb" id="thumb-${channel}">
             ${thumbHtml(image, displayName)}
           </div>
           <div class="meter-block-title">
-            <div class="meter-block-name" id="display-name-${id}">${displayName}</div>
-            <div class="meter-block-sub">ID · ${id}</div>
+            <div class="meter-block-name" id="display-name-${channel}">${displayName}</div>
+            <div class="meter-block-sub">Channel · ${channel}</div>
           </div>
           <span class="meter-active-badge ${badgeClass}">
             <span class="dot"></span>${badgeLabel}
           </span>
-          <button class="btn-icon danger" onclick="deleteMeter(${id})" title="Delete config">
+          <button class="btn-icon danger" onclick="deleteMeter(${channel})" title="Delete config">
             <svg viewBox="0 0 16 16" fill="none">
               <path d="M3 4h10M6 4V3h4v1M5 4l.5 9h5L11 4" stroke="currentColor"
                     stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
@@ -538,96 +539,96 @@
             <span class="field-label">Name</span>
             <input type="text"
                    class="field-input"
-                   id="name-${id}"
+                   id="name-${channel}"
                    placeholder="UNKNOWN"
                    maxlength="32"
                    value="${name}"
-                   oninput="onFieldChange(${id})">
+                   oninput="onFieldChange(${channel})">
           </div>
           <div class="field-row">
             <span class="field-label">Image</span>
-            ${buildCselect(`image-${id}`, imageOpts, image, `onImageChange(${id})`)}
+            ${buildCselect(`image-${channel}`, imageOpts, image, `onImageChange(${channel})`)}
           </div>
           <div class="field-row">
-            <span class="field-label">Meter ID</span>
-            ${buildCstepper(`newid-${id}`, id, 0, 31, `onFieldChange(${id})`)}
+            <span class="field-label">Channel</span>
+            ${buildCstepper(`newChannel-${channel}`, channel, 0, 31, `onFieldChange(${channel})`)}
           </div>
           <div class="field-row">
             <span class="field-label">Refresh</span>
-            ${buildCselect(`fps-${id}`, fpsOpts, fpsIdx, `onFieldChange(${id})`)}
+            ${buildCselect(`fps-${channel}`, fpsOpts, fpsIdx, `onFieldChange(${channel})`)}
           </div>
         </div>
         <div class="meter-block-footer">
-          <span class="save-status" id="status-${id}"></span>
-          <button class="btn btn-md btn-accent" id="save-${id}" onclick="saveMeter(${id})" disabled>Save</button>
+          <span class="save-status" id="status-${channel}"></span>
+          <button class="btn btn-md btn-accent" id="save-${channel}" onclick="saveMeter(${channel})" disabled>Save</button>
         </div>
       `;
       return block;
     }
 
     /* ── FIELD CHANGE: enable save ── */
-    function onFieldChange(id) {
-      $(`save-${id}`).disabled = false;
-      $(`status-${id}`).className = 'save-status';
-      $(`status-${id}`).textContent = '';
+    function onFieldChange(channel) {
+      $(`save-${channel}`).disabled = false;
+      $(`status-${channel}`).className = 'save-status';
+      $(`status-${channel}`).textContent = '';
     }
 
     /* ── IMAGE CHANGE: also update thumbnail preview ── */
-    function onImageChange(id) {
-      onFieldChange(id);
-      const img  = $(`image-${id}`).value;
-      const name = $(`name-${id}`).value.trim();
-      $(`thumb-${id}`).innerHTML = thumbHtml(img, name || 'UNKNOWN');
+    function onImageChange(channel) {
+      onFieldChange(channel);
+      const img  = $(`image-${channel}`).value;
+      const name = $(`name-${channel}`).value.trim();
+      $(`thumb-${channel}`).innerHTML = thumbHtml(img, name || 'UNKNOWN');
     }
 
-    function rebuildBlock(oldId, newId) {
-      const cfg    = allSettings.meters[newId] || {};
+    function rebuildBlock(oldChannel, newChannel) {
+      const cfg    = allSettings.meters[newChannel] || {};
 
-      const oldBlock = document.querySelector(`[data-mid="${oldId}"]`);
-      const newBlock = renderMeterBlock(newId, cfg);
+      const oldBlock = document.querySelector(`[data-channel="${oldChannel}"]`);
+      const newBlock = renderMeterBlock(newChannel, cfg);
       oldBlock.replaceWith(newBlock);
 
-      delete allSettings.meters[oldId];
-      activeMeters.delete(oldId);
+      delete allSettings.meters[oldChannel];
+      activeMeters.delete(oldChannel);
 
-      saveMeter(newId);
+      saveMeter(newChannel);
     }
 
     /* ── SAVE ONE METER ── */
-    async function saveMeter(id) {
-      const btn      = $(`save-${id}`);
-      const statusEl = $(`status-${id}`);
-      const name     = $(`name-${id}`).value.trim();
-      const image    = $(`image-${id}`).value;
-      const newId    = parseInt($(`newid-${id}`).value, 10);
-      const fpsIdx   = parseInt($(`fps-${id}`).value, 10);
+    async function saveMeter(channel) {
+      const btn      = $(`save-${channel}`);
+      const statusEl = $(`status-${channel}`);
+      const name     = $(`name-${channel}`).value.trim();
+      const image    = $(`image-${channel}`).value;
+      const newChannel = parseInt($(`newChannel-${channel}`).value, 10);
+      const fpsIdx     = parseInt($(`fps-${channel}`).value, 10);
 
-      const idChanged  = newId !== id;
-      const fpsChanged = (activeMeters.get(id)?.fpsIdx ?? -1) !== fpsIdx;
+      const channelChanged = newChannel !== channel;
+      const fpsChanged     = (activeMeters.get(channel)?.fpsIdx ?? -1) !== fpsIdx;
 
-      if (idChanged || fpsChanged) {
+      if (channelChanged || fpsChanged) {
         const r = await fetch('/api/meter/update', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ oldId: id, newId: idChanged ? newId : id, fpsIdx })
+          body: JSON.stringify({ oldChannel: channel, newChannel: channelChanged ? newChannel : channel, fpsIdx })
         }).then(r => r.json());
 
         if (r.status !== 'success') {
           statusEl.className   = 'save-status error';
-          statusEl.textContent = idChanged ? '✗ ID change failed' : '✗ Update failed';
+          statusEl.textContent = channelChanged ? '✗ Channel change failed' : '✗ Update failed';
           btn.disabled = false;
           return;
         }
 
-        if (idChanged) {
-          allSettings.meters[newId] = {
-            ...(allSettings.meters[id] || {}),
+        if (channelChanged) {
+          allSettings.meters[newChannel] = {
+            ...(allSettings.meters[channel] || {}),
             name,
             image
           };
-          activeMeters.set(newId, { ...activeMeters.get(id) });
-          activeMeters.delete(id);
-          rebuildBlock(id, newId);
+          activeMeters.set(newChannel, { ...activeMeters.get(channel) });
+          activeMeters.delete(channel);
+          rebuildBlock(channel, newChannel);
           return;
         }
       }
@@ -636,11 +637,11 @@
       statusEl.className   = 'save-status';
       statusEl.textContent = 'Saving…';
 
-      if (!allSettings.meters)     allSettings.meters     = {};
-      if (!allSettings.meters[id]) allSettings.meters[id] = {};
+      if (!allSettings.meters)          allSettings.meters          = {};
+      if (!allSettings.meters[channel]) allSettings.meters[channel] = {};
 
-      allSettings.meters[id].name  = name;
-      allSettings.meters[id].image = image;
+      allSettings.meters[channel].name  = name;
+      allSettings.meters[channel].image = image;
 
       fetch('/api/settings', {
         method: 'POST',
@@ -653,12 +654,12 @@
           statusEl.className   = 'save-status saved';
           statusEl.textContent = '✓ Saved';
           const displayName = name || 'UNKNOWN';
-          $(`display-name-${id}`).textContent = displayName;
+          $(`display-name-${channel}`).textContent = displayName;
           if (!image) {
             const initials = displayName.replace(/[^A-Z0-9]/gi,'').slice(0,2).toUpperCase() || '??';
-            $(`thumb-${id}`).innerHTML = `<span class="meter-thumb-fallback">${initials}</span>`;
+            $(`thumb-${channel}`).innerHTML = `<span class="meter-thumb-fallback">${initials}</span>`;
           }
-          showToast(`Meter ${id} saved`, 'success');
+          showToast(`Channel ${channel} saved`, 'success');
         } else {
           throw new Error('Save returned non-success');
         }
@@ -671,21 +672,21 @@
       });
     }
 
-    function deleteMeter(id) {
+    function deleteMeter(channel) {
       fetch('/api/meter/delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id })
+        body: JSON.stringify({ channel })
       })
       .then(r => r.json())
       .then(d => {
         if (d.status === 'success') {
-          document.querySelector(`[data-mid="${id}"]`).remove();
-          delete allSettings.meters[id];
+          document.querySelector(`[data-channel="${channel}"]`).remove();
+          delete allSettings.meters[channel];
           if ($('meter-blocks').children.length === 0) {
             $('empty-state').classList.remove('hidden');
           }
-          showToast(`Meter ${id} deleted`, 'success');
+          showToast(`Channel ${channel} deleted`, 'success');
         } else {
           showToast('Delete failed', 'fail');
         }
@@ -706,27 +707,27 @@
 
       if (systemRes.status === 'fulfilled') {
         (systemRes.value.meters || []).forEach(m => {
-          const { id, ...data } = m; 
-          activeMeters.set(id, data);
+          const { channel, ...data } = m; 
+          activeMeters.set(channel, data);
         });
       }
 
       availableImages = (filesRes.status === 'fulfilled') ? filesRes.value : [];
 
-      const storedIds = Object.keys(allSettings.meters).map(Number);
-      const allIds = [...new Set([...activeMeters.keys(), ...storedIds])].sort((a, b) => a - b);
+      const storedChannels = Object.keys(allSettings.meters).map(Number);
+      const allChannels = [...new Set([...activeMeters.keys(), ...storedChannels])].sort((a, b) => a - b);
 
       $('loading-state').classList.add('hidden');
 
-      if (allIds.length === 0) {
+      if (allChannels.length === 0) {
         $('empty-state').classList.remove('hidden');
         return;
       }
 
       const container = $('meter-blocks');
-      allIds.forEach(id => {
-        const cfg    = allSettings.meters[id] || {};
-        container.appendChild(renderMeterBlock(id, cfg));
+      allChannels.forEach(channel => {
+        const cfg    = allSettings.meters[channel] || {};
+        container.appendChild(renderMeterBlock(channel, cfg));
       });
     }
 
