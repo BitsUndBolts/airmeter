@@ -497,7 +497,7 @@
       const name   = cfg.name  || '';
       const image  = cfg.image || '';
       const meterData = activeMeters.get(id);
-      const fpsIdx = meterData?.fpsIdx ?? cfg?.fps ?? 2; // default index 2 = 3 Hz
+      const fpsIdx = meterData?.fpsIdx ?? 2; // default index 2 = 3 Hz
       const isActive = (meterData !== undefined && meterData.seen < 5);
 
       const displayName = name || 'UNKNOWN';
@@ -602,11 +602,8 @@
       const newId    = parseInt($(`newid-${id}`).value, 10);
       const fpsIdx   = parseInt($(`fps-${id}`).value, 10);
 
-      const baselineFps = activeMeters.get(id)?.fpsIdx 
-                 ?? allSettings.meters?.[id]?.fps 
-                 ?? 2;
-      const fpsChanged = fpsIdx !== baselineFps;
       const idChanged  = newId !== id;
+      const fpsChanged = (activeMeters.get(id)?.fpsIdx ?? -1) !== fpsIdx;
 
       if (idChanged || fpsChanged) {
         const r = await fetch('/api/meter/update', {
@@ -626,8 +623,7 @@
           allSettings.meters[newId] = {
             ...(allSettings.meters[id] || {}),
             name,
-            image,
-            fps: fpsIdx
+            image
           };
           rebuildBlock(id, newId);
           return;
@@ -643,7 +639,6 @@
 
       allSettings.meters[id].name  = name;
       allSettings.meters[id].image = image;
-      allSettings.meters[id].fps   = fpsIdx;
 
       fetch('/api/settings', {
         method: 'POST',
