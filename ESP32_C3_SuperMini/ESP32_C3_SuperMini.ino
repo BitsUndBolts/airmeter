@@ -36,6 +36,75 @@ struct MeterData {
 std::map<uint8_t, MeterData> meterRegistry;
 
 // =============================================================================
+// ID-CHANGE COOL-OFF
+//
+// When an ID is renamed via /api/meter/update, packets already in flight
+// (or sitting in the RP2040's UART buffer) may still arrive tagged with the
+// OLD id for a short while after the rename command goes out. Without this
+// guard, decodePacket() would treat that straggler as a brand-new meter and
+// silently re-create meterRegistry[oldId].
+//
+// We track a short list of "recently retired" IDs with an expiry timestamp.
+// Packets for an ID still in this list are dropped (not re-registered)
+// until the cool-off window elapses — after which the ID is open again for
+// genuine re-registration (e.g. a different physical meter later reusing
+// that ID, or wrap-around re-use).
+// =============================================================================
+
+struct IdCooloff {
+  uint8_t        id        = 0xFF;  // 0xFF == slot unused
+  unsigned long  expiresAt = 0;
+};
+
+static const uint8_t COOLOFF_SLOTS = 8; // generous headroom for rapid re-renames
+static IdCooloff idCooloffList[COOLOFF_SLOTS];
+
+static const unsigned long ID_COOLOFF_MS = 5000; // 5s window
+
+// Mark `id` as retired for ID_COOLOFF_MS. If the list is full, overwrite the
+// slot with the soonest expiry (oldest/least relevant entry).
+void startIdCooloff(uint8_t id) {
+  const unsigned long now = millis();
+  int freeSlot = -1;
+  int oldestSlot = 0;
+
+  for (int i = 0; i < COOLOFF_SLOTS; i++) {
+    if (idCooloffList[i].id == id) {
+      // Already cooling off (e.g. re-renamed again quickly) — just refresh it.
+      idCooloffList[i].expiresAt = now + ID_COOLOFF_MS;
+      return;
+    }
+    if (idCooloffList[i].id == 0xFF && freeSlot == -1) {
+      freeSlot = i;
+    }
+    if (idCooloffList[i].expiresAt < idCooloffList[oldestSlot].expiresAt) {
+      oldestSlot = i;
+    }
+  }
+
+  int slot = (freeSlot != -1) ? freeSlot : oldestSlot;
+  idCooloffList[slot].id        = id;
+  idCooloffList[slot].expiresAt = now + ID_COOLOFF_MS;
+}
+
+// Returns true if `id` is currently within its cool-off window.
+// Lazily expires entries it walks past, so no separate cleanup task is needed.
+bool isIdCoolingOff(uint8_t id) {
+  const unsigned long now = millis();
+  for (int i = 0; i < COOLOFF_SLOTS; i++) {
+    if (idCooloffList[i].id == id) {
+      if ((long)(idCooloffList[i].expiresAt - now) > 0) {
+        return true;
+      }
+      // Expired — free the slot.
+      idCooloffList[i].id = 0xFF;
+      return false;
+    }
+  }
+  return false;
+}
+
+// =============================================================================
 // FIRMWARE METADATA
 // =============================================================================
 
@@ -179,6 +248,16 @@ void decodePacket(const uint8_t* payload) {
   const uint8_t meta_byte = payload[0];
   const uint8_t fps_index = (meta_byte >> 5) & 0x07;
   const uint8_t meter_id  = meta_byte & 0x1F;
+
+  // This ID was just renamed away from — almost certainly a straggler packet
+  // sent under the old ID before the RP2040 applied the rename. Drop it
+  // silently rather than re-registering meterRegistry[meter_id].
+  if (isIdCoolingOff(meter_id)) {
+#ifdef DEBUG_LCD_VISUAL
+    Serial.printf("[COOLOFF] Dropped packet for retired meter ID %u\n", meter_id);
+#endif
+    return;
+  }
 
   // Reconstruct the four 16-bit COM rows (skipping payload[0])
   uint16_t com[4];
@@ -813,6 +892,22 @@ void setupWebServer() {
       if (meterRegistry.count(oldId)) {
         meterRegistry[newId] = meterRegistry[oldId];
         meterRegistry.erase(oldId);
+      }
+
+      // 3. Start the cool-off window for oldId. Any packet still arriving
+      //    tagged with oldId over the next ID_COOLOFF_MS ms is assumed to be
+      //    a straggler sent before the RP2040 applied the rename, and will
+      //    be dropped instead of re-registering meterRegistry[oldId].
+      startIdCooloff(oldId);
+
+      // If newId was itself recently retired (e.g. quick chained renames
+      // reusing an ID), clear that cool-off so the just-renamed meter's
+      // own packets aren't dropped under its new ID.
+      for (int i = 0; i < COOLOFF_SLOTS; i++) {
+        if (idCooloffList[i].id == newId) {
+          idCooloffList[i].id = 0xFF;
+          break;
+        }
       }
 
       // Build the 6-byte config packet
