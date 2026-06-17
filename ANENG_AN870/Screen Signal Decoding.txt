@@ -53,7 +53,7 @@ COM3
 SEG0    A
 SEG1    u (micro)
 SEG2    k (kilo)
-SEG3    Farenheit
+SEG3    Fahrenheit
 SEG4    % Percentage
 SEG5    DIGIT4 D
 SEG6    DP-2000
