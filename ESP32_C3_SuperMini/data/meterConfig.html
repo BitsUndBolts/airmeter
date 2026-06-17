@@ -153,24 +153,6 @@
     .save-status.saved  { color: var(--green); }
     .save-status.error  { color: var(--red); }
 
-    .btn-save {
-      font-family: var(--mono);
-      font-size: 1.1em;
-      font-weight: 600;
-      letter-spacing: 0.07em;
-      text-transform: uppercase;
-      color: var(--bg);
-      background: var(--accent);
-      border: none;
-      border-radius: 0.3em;
-      padding: 0.65em 1.6em;
-      cursor: pointer;
-      transition: opacity 0.15s;
-    }
-
-    .btn-save:hover    { opacity: 0.88; }
-    .btn-save:active   { opacity: 0.75; }
-    .btn-save:disabled { opacity: 0.4; cursor: default; }
 
     /* ── FOOTER NOTE ── */
     .footer-note {
@@ -359,7 +341,7 @@
         </div>
         <div class="meter-block-footer">
           <span class="save-status" id="status-${id}"></span>
-          <button class="btn-save" id="save-${id}" onclick="saveMeter(${id})" disabled>Save</button>
+          <button class="btn btn-md btn-accent" id="save-${id}" onclick="saveMeter(${id})" disabled>Save</button>
         </div>
       `;
       return block;

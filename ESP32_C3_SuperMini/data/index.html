@@ -9,79 +9,6 @@
   <style>
     .card-header { justify-content: space-between; }
 
-    /* ── HERO ── */
-    .hero {
-      padding: 1.6em;
-      border-bottom: 1px solid var(--border);
-      display: flex;
-      align-items: center;
-      gap: 1.6em;
-    }
-
-    .logo-box {
-      height: 6em;
-      border-radius: 0.4em;
-      background: var(--panel-2);
-      border: 1px solid var(--border-bright);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      flex-shrink: 0;
-      overflow: hidden;
-      position: relative;
-    }
-
-    .logo-box img {
-      width: 5.4em;
-      height: 5.4em;
-      object-fit: contain;
-      border-radius: 0.2em;
-      opacity: 0;
-      transition: opacity 0.3s ease;
-    }
-
-    .logo-box img.loaded { opacity: 1; }
-
-    .logo-box::before {
-      content: '';
-      position: absolute;
-      width: 1.4em;
-      height: 1.4em;
-      border: 2px solid var(--border-bright);
-      border-top-color: var(--accent);
-      border-radius: 50%;
-      animation: spin 0.8s linear infinite;
-    }
-
-    .logo-box:has(img.loaded)::before { display: none; }
-
-    .logo-fallback {
-      font-family: var(--mono);
-      font-size: 1.6em;
-      font-weight: 600;
-      color: var(--accent);
-      letter-spacing: -0.02em;
-    }
-
-    .hero-label {
-      font-family: var(--mono);
-      font-size: 1em;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      color: var(--text-3);
-      margin-bottom: 0.3em;
-    }
-
-    .hero-title {
-      font-family: var(--sans);
-      font-size: 1.8em;
-      font-weight: 600;
-      color: var(--text);
-      letter-spacing: -0.01em;
-      margin-bottom: 0.22em;
-    }
-
-    .hero-sub { font-size: 1.2em; color: var(--text-2); line-height: 1.4; }
 
     /* ── NAV CARDS ── */
     .nav-section { padding: 0 1.2em; }
@@ -137,18 +64,6 @@
     .nav-card.meter:hover .nav-arrow  { transform: translateX(0.2em); color: var(--accent); }
     .nav-card.update:hover .nav-arrow { transform: translateX(0.2em); color: var(--blue); }
 
-    .nav-badge {
-      font-family: var(--mono);
-      font-size: 0.9em;
-      font-weight: 600;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      padding: 0.2em 0.6em;
-      border-radius: 0.2em;
-      flex-shrink: 0;
-    }
-
-    .badge-soon { background: rgba(74,81,88,0.5); color: var(--text-3); border: 1px solid var(--border); }
 
     /* ── DEVICE CONTROLS ── */
     .controls-section { padding: 0 1.2em 0.8em; }
@@ -169,26 +84,6 @@
     .control-title { font-size: 1.3em; font-weight: 600; color: var(--text-2); margin-bottom: 0.15em; }
     .control-desc  { font-size: 1.1em; color: var(--text-3); line-height: 1.4; }
 
-    .btn-outline {
-      width: 7em;
-      font-family: var(--mono);
-      font-size: 1.1em;
-      font-weight: 600;
-      letter-spacing: 0.07em;
-      text-transform: uppercase;
-      border-radius: 0.3em;
-      padding: 0.7em 1.2em;
-      cursor: pointer;
-      white-space: nowrap;
-      transition: background 0.15s, border-color 0.15s;
-      flex-shrink: 0;
-    }
-
-    .btn-outline.danger  { color: var(--red);    background: var(--red-dim);    border: 1px solid rgba(255,85,85,0.25); }
-    .btn-outline.warning { color: var(--accent); background: var(--accent-dim); border: 1px solid var(--accent-glow); }
-
-    .btn-outline.danger:hover  { background: rgba(255,85,85,0.18); border-color: rgba(255,85,85,0.45); }
-    .btn-outline.warning:hover { background: var(--accent-glow); border-color: var(--accent); }
 
     /* ── RESET STEPS ── */
     .reset-steps { display: flex; flex-direction: column; }
@@ -368,7 +263,7 @@
           <div class="control-title">Restart</div>
           <div class="control-desc">Reboot the device - all settings are kept</div>
         </div>
-        <button class="btn-outline warning" onclick="openRestartModal()">Restart</button>
+        <button class="btn btn-md btn-outline-warning" onclick="openRestartModal()">Restart</button>
       </div>
 
       <div class="control-row">
@@ -376,7 +271,7 @@
           <div class="control-title">Reset Wi-Fi</div>
           <div class="control-desc">Erase saved network &amp; reboot into setup mode</div>
         </div>
-        <button class="btn-outline danger" onclick="openResetModal()">Reset</button>
+        <button class="btn btn-md btn-outline-danger" onclick="openResetModal()">Reset</button>
       </div>
 
     </div>

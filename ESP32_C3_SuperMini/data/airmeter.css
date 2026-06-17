@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════
-   shared.css — AirMeter common styles
+   airmeter.css — AirMeter shared styles
    Linked by: index.html, files.html, meterConfig.html, setup.html
    ═══════════════════════════════════════════════════════════ */
 
@@ -342,6 +342,133 @@ body {
 
 .toast.success { border-color: rgba(61, 220, 132, 0.35); color: var(--green); }
 .toast.fail    { border-color: rgba(255, 85, 85, 0.35);  color: var(--red); }
+
+/* ═══════════════════════════════════════════════════════════
+   BUTTON SYSTEM
+   ─────────────────────────────────────────────────────────
+   Base:    .btn
+   Sizes:   .btn-sm  .btn-md  .btn-block
+   Fills:   .btn-accent  .btn-danger  .btn-success
+   Ghost:   .btn-ghost
+   Outline: .btn-outline-danger  .btn-outline-warning
+   Special: .btn-back  .btn-scan
+   Icon:    .btn-icon  (+ .danger  .blue  variants)
+   Modal:   .btn-cancel  .btn-confirm  (+ .danger  .warning)
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── Base ── */
+.btn {
+  font-family: var(--mono);
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  border: none;
+  border-radius: 0.3em;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5em;
+  white-space: nowrap;
+  text-decoration: none;
+  transition: opacity 0.15s, box-shadow 0.15s, background 0.15s,
+              border-color 0.15s, color 0.15s;
+}
+
+.btn:active:not(:disabled) { transform: scale(0.99); }
+.btn:disabled              { opacity: 0.4; cursor: not-allowed; }
+
+/* ── Sizes ── */
+.btn-sm { font-size: 1em;   padding: 0.5em 1em; }
+.btn-md { font-size: 1.1em; padding: 0.65em 1.6em; }
+
+/* Full-width CTA (sans font, larger — used in setup wizard and upload) */
+.btn-block {
+  display: flex;
+  width: 100%;
+  padding: 1.3em;
+  font-family: var(--sans);
+  font-size: 1.4em;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  text-transform: none;
+  justify-content: center;
+  text-align: center;
+  text-decoration: none;
+}
+
+.btn-block svg { width: 1.4em; height: 1.4em; flex-shrink: 0; }
+
+/* ── Color fills ── */
+.btn-accent  { background: var(--accent); color: var(--bg); }
+.btn-danger  { background: var(--red);   color: var(--bg); }
+.btn-success { background: var(--green); color: var(--bg); }
+
+.btn-accent:not(:disabled):hover  { opacity: 0.88; box-shadow: 0 0 2em var(--accent-glow); }
+.btn-danger:not(:disabled):hover  { opacity: 0.88; }
+.btn-success:not(:disabled):hover { opacity: 0.88; box-shadow: 0 0 2em rgba(61, 220, 132, 0.3); }
+
+/* ── Ghost (panel bg + border, secondary actions) ── */
+.btn-ghost {
+  background: var(--panel-2);
+  color: var(--text-2);
+  border: 1px solid var(--border-bright);
+}
+
+.btn-ghost:not(:disabled):hover {
+  background: var(--border);
+  color: var(--text);
+  border-color: var(--text-2);
+}
+
+/* ── Colored outlines (dim tinted bg, used in Device Controls) ── */
+.btn-outline-danger  { color: var(--red);    background: var(--red-dim);    border: 1px solid rgba(255, 85, 85, 0.25);  }
+.btn-outline-warning { color: var(--accent); background: var(--accent-dim); border: 1px solid var(--accent-glow);      }
+
+.btn-outline-danger:not(:disabled):hover  { background: rgba(255, 85, 85, 0.18);  border-color: rgba(255, 85, 85, 0.45); }
+.btn-outline-warning:not(:disabled):hover { background: var(--accent-glow);       border-color: var(--accent); }
+
+/* ── Back / text-link button (navigation, no background) ── */
+.btn-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6em;
+  font-family: var(--mono);
+  font-size: 1.1em;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.15s;
+}
+
+.btn-back:hover          { color: var(--accent); }
+.btn-back svg            { width: 1.4em; height: 1.4em; transition: transform 0.15s; }
+.btn-back:hover svg      { transform: translateX(-0.2em); }
+
+/* ── Scan button (small accent outline, Wi-Fi network scan) ── */
+.btn-scan {
+  font-family: var(--mono);
+  font-size: 1.1em;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  background: var(--accent-dim);
+  border: 1px solid rgba(245, 166, 35, 0.25);
+  border-radius: 0.3em;
+  padding: 0.5em 1em;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.btn-scan:not(:disabled):hover { background: rgba(245, 166, 35, 0.2); border-color: rgba(245, 166, 35, 0.45); }
+.btn-scan:disabled             { color: var(--text-3); background: transparent; border-color: var(--border); cursor: not-allowed; }
 
 /* ── ICON BUTTON (small square action buttons with color variants) ── */
 .btn-icon {

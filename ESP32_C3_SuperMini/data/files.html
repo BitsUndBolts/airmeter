@@ -9,21 +9,6 @@
   <style>
     .card-header { gap: 1em; }
 
-    /* ── HEADER ICON ── */
-    .header-icon {
-      width: 2.8em;
-      height: 2.8em;
-      border-radius: 0.3em;
-      background: var(--accent-dim);
-      border: 1px solid var(--accent-glow);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      flex-shrink: 0;
-      color: var(--accent);
-    }
-
-    .header-icon svg { width: 1.4em; height: 1.4em; }
 
     /* ── UPLOAD SECTION ── */
     .upload-section { padding: 0 1.2em 1.2em; display: flex; flex-direction: column; gap: 0.8em; }
@@ -192,30 +177,6 @@
     .overall-track  { height: 0.5em; background: var(--panel-2); border-radius: 99em; overflow: hidden; border: 1px solid var(--border); }
     .overall-bar    { height: 100%; width: 0%; border-radius: 99em; transition: width 0.2s ease; background: var(--accent); }
 
-    /* ── UPLOAD BUTTON ── */
-    .upload-btn {
-      width: 100%;
-      padding: 1.1em;
-      border: none;
-      border-radius: 0.4em;
-      font-family: var(--sans);
-      font-size: 1.3em;
-      font-weight: 600;
-      letter-spacing: 0.02em;
-      cursor: pointer;
-      transition: opacity 0.2s, box-shadow 0.15s, transform 0.1s;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 0.6em;
-      background: var(--accent);
-      color: #0a0c0e;
-    }
-
-    .upload-btn:disabled              { opacity: 0.3; cursor: not-allowed; }
-    .upload-btn:not(:disabled):hover  { box-shadow: 0 0 0 3px var(--accent-glow); }
-    .upload-btn:not(:disabled):active { transform: scale(0.995); }
-    .upload-btn svg                   { width: 1.4em; height: 1.4em; flex-shrink: 0; }
 
     /* ── REBOOT COUNTDOWN ── */
     .reboot-row         { display: none; justify-content: center; font-family: var(--mono); font-size: 1.1em; color: var(--text-3); padding: 0.4em 0; }
@@ -421,7 +382,7 @@
       </div>
 
       <!-- Upload button -->
-      <button class="upload-btn" id="uploadBtn" disabled>
+      <button class="btn btn-block btn-accent" id="uploadBtn" disabled>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
           <polyline points="17 8 12 3 7 8"/>

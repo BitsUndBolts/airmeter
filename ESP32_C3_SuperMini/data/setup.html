@@ -47,25 +47,6 @@
     .row          { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 1.4em; }
     .row h1       { margin-bottom: 0; }
 
-    /* ── SCAN BUTTON ── */
-    .btn-scan {
-      font-family: var(--mono);
-      font-size: 1.1em;
-      font-weight: 500;
-      letter-spacing: 0.08em;
-      color: var(--accent);
-      background: var(--accent-dim);
-      border: 1px solid rgba(245,166,35,0.25);
-      border-radius: 0.3em;
-      padding: 0.5em 1em;
-      cursor: pointer;
-      transition: background 0.15s, border-color 0.15s;
-      text-transform: uppercase;
-      white-space: nowrap;
-    }
-
-    .btn-scan:hover    { background: rgba(245,166,35,0.2); border-color: rgba(245,166,35,0.45); }
-    .btn-scan:disabled { color: var(--text-3); background: transparent; border-color: var(--border); cursor: not-allowed; }
 
     /* ── NETWORK LIST ── */
     .list-box {
@@ -128,58 +109,7 @@
     .net-item.selected .signal-bars span.lit      { background: var(--accent); }
     .net-item:not(.selected) .signal-bars span.lit { background: var(--text-2); }
 
-    /* ── PRIMARY BUTTON ── */
-    .btn {
-      display: block;
-      width: 100%;
-      padding: 1.3em;
-      border-radius: 0.3em;
-      font-family: var(--sans);
-      font-size: 1.4em;
-      font-weight: 600;
-      cursor: pointer;
-      border: none;
-      text-align: center;
-      text-decoration: none;
-      letter-spacing: 0.01em;
-      transition: opacity 0.15s, transform 0.1s, box-shadow 0.15s;
-    }
 
-    .btn:active:not(:disabled) { transform: scale(0.99); }
-
-    .btn-primary { background: var(--accent); color: #0a0c0e; }
-
-    .btn-primary:hover:not(:disabled) { box-shadow: 0 0 2em var(--accent-glow); }
-
-    .btn-primary:disabled {
-      background: var(--panel-2);
-      color: var(--text-3);
-      cursor: not-allowed;
-      border: 1px solid var(--border);
-    }
-
-    /* ── BACK BUTTON ── */
-    .btn-back {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.6em;
-      font-family: var(--mono);
-      font-size: 1.1em;
-      font-weight: 500;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      color: var(--text-2);
-      background: none;
-      border: none;
-      cursor: pointer;
-      padding: 0;
-      margin-bottom: 2em;
-      transition: color 0.15s;
-    }
-
-    .btn-back:hover     { color: var(--accent); }
-    .btn-back svg       { width: 1.4em; height: 1.4em; transition: transform 0.15s; }
-    .btn-back:hover svg { transform: translateX(-0.2em); }
 
     /* ── NETWORK BANNER ── */
     .banner {
@@ -355,8 +285,6 @@
     .migration-warning p        { font-family: var(--mono); font-size: 1.1em; color: var(--red); line-height: 1.5; letter-spacing: 0.02em; }
     .migration-warning strong   { color: var(--red); }
 
-    .btn-success { background: var(--green); color: #0a0c0e; }
-    .btn-success:hover:not(:disabled) { box-shadow: 0 0 2em rgba(61,220,132,0.3); }
 
     /* ── LIST PLACEHOLDER (scan loading/empty state) ── */
     .list-placeholder {
@@ -412,7 +340,7 @@
           Scanning for networks...
         </div>
       </div>
-      <button class="btn btn-primary" id="btn-next" disabled onclick="showScreen('scr-pass')">
+      <button class="btn btn-block btn-accent" id="btn-next" disabled onclick="showScreen('scr-pass')">
         Continue
       </button>
     </section>
@@ -460,7 +388,7 @@
         <span class="loading-text">Verifying credentials...</span>
       </div>
 
-      <button class="btn btn-primary" id="btn-submit" onclick="submitCredentials()">Connect to Network</button>
+      <button class="btn btn-block btn-accent" id="btn-submit" onclick="submitCredentials()">Connect to Network</button>
     </section>
 
     <!-- ── SCREEN 3: SUCCESS ── -->
@@ -496,7 +424,7 @@
         </p>
       </div>
 
-      <button id="btn-migrate" class="btn btn-primary" disabled>Initializing...</button>
+      <button id="btn-migrate" class="btn btn-block btn-accent" disabled>Initializing...</button>
     </section>
 
   </main>
@@ -663,7 +591,7 @@
             if (!res.ok) throw 0;
             $('migration-warning').classList.remove('visible');
             btn.disabled = false;
-            btn.className = 'btn btn-success';
+            btn.className = 'btn btn-block btn-success';
             btn.innerText = "Open Dashboard →";
             btn.onclick = () => window.location.href = "http://airmeter.local";
           })
