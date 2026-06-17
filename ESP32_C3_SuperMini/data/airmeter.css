@@ -269,20 +269,16 @@ body {
 
 /* ── METER THUMBNAIL ── */
 .meter-thumb {
-  border-radius: 0.3em;
-  background: var(--accent-dim);
-  border: 1px solid var(--accent-glow);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  overflow: hidden;
   position: relative;
 }
 
 .meter-thumb img {
-  width: 100%;
-  height: 100%;
+  height: 5em;
+  padding-left: 0.5em;
   object-fit: contain;
   opacity: 0;
   transition: opacity 0.3s ease;
