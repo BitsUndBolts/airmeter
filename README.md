@@ -6,6 +6,13 @@
 
 **Wireless LCD streaming for the ANENG AN870 multimeter - straight into OBS, your browser, or anywhere else you need live readings.**
 
+<br>
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
+[![YouTube](https://img.shields.io/badge/YouTube-Bits_und_Bolts-red?logo=youtube&logoColor=white)](https://www.youtube.com/@bitsundbolts)
+[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-support-FFDD00?logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/bitsundbolts)
+[![Patreon](https://img.shields.io/badge/Patreon-support-F96854?logo=patreon&logoColor=white)](https://www.patreon.com/BitsUndBolts)
+
 </div>
 
 ---
@@ -14,8 +21,8 @@
 
 - [What is this?](#what-is-this)
 - [The Backstory](#the-backstory)
-- [System Architecture](#system-architecture)
   - [1. The Probe & Segment Mapping](#1-the-probe--segment-mapping)
+- [System Architecture](#system-architecture)
   - [2. The Custom PCB & Comparators](#2-the-custom-pcb--comparators)
   - [3. The Transmitter Node (RP2040 Zero)](#3-the-transmitter-node-rp2040-zero)
   - [4. Power Delivery](#4-power-delivery)
@@ -31,6 +38,7 @@
 - [Repository Layout](#repository-layout)
 - [Getting Started](#getting-started)
 - [Roadmap / Ideas](#roadmap--ideas)
+- [Support This Project](#support-this-project)
 - [License](#license)
 
 ---
@@ -117,7 +125,7 @@ Once every segment was mapped, the rest of the project was "just" wiring: a comp
   └─────────────────┘      └──────────────────┘       │  frame data)│       │  5dBm / FU1     │     
                                                       └─────────────┘       └─────────────────┘  
 
-   ···▶   ···▶   ···▶    WIRELESS / RAIDO TRANSMISSION   ···▶   ···▶   ···▶
+   ···▶   ···▶   ···▶    WIRELESS / RADIO TRANSMISSION   ···▶   ···▶   ···▶
 
    ┌─────────────────┐       ┌────────────────────┐      ┌───────────────────┐
    │   HC-12 (RX)    │ ───▶ │  ESP32-C3 Bridge   │ ───▶ │  Browser / OBS UI │
@@ -235,89 +243,70 @@ Sent on-demand when a user changes a meter's channel or refresh rate in the web 
 
 The RP2040 only acts on a config packet if byte 3 matches its **current** channel; it then persists the new channel and FPS index to EEPROM and confirms with a 3-flash LED sequence.
 
+### CRC-8 Details
+
+Both packet types are checked with **CRC-8/MAXIM** (also known as the Dallas/Maxim 1-Wire CRC - the same algorithm used by 1-Wire devices like the DS18B20):
+
+- Polynomial: `x⁸ + x⁵ + x⁴ + 1` (`0x31`, or `0x8C` in reflected/bit-reversed form)
+- Initial value: `0x00`
+- Input and output reflected (LSB-first)
+
+Because it's a standard, widely implemented algorithm, any existing 1-Wire/Maxim CRC-8 routine - including the ones bundled with common `OneWire` libraries - can validate or generate it without needing project-specific code. The byte ranges covered for each packet type are noted in the tables above.
+
 ## LCD Segment Map
 
+Every one of the 60 controllable segments lives at a unique (COM, SEG) coordinate. The 15 SEG lines split into two groups: SEG0–SEG3 and SEG12–SEG14 drive mode/unit icons (READY, AC, REL, battery, and so on), while **SEG4–SEG11 drive the four 7-segment numeric digits** - two segments per COM row, per digit.
 
-(TODO: Expand the table below with all SEG lines)
-COM0
-SEG0    m
-SEG1    OHM
-SEG2    BUZZER
-SEG3    HOLD
-SEG4    DIGIT4 B
-SEG5    DIGIT4 A
-SEG6    DIGIT3 B 
-SEG7    DIGIT3 A
-SEG8    DIGIT2 A
-SEG9    DIGIT2 B
-SEG10   DIGIT1 B
-SEG11   DIGIT1 A
-SEG12   REL
-SEG13   APO
-SEG14   AUTO
+For the digit segments, this map uses the standard 7-segment lettering convention:
 
-COM1
-SEG0    F
-SEG1    Hz
-SEG2    MAX
-SEG3    DIODE
-SEG4    DIGIT4 G
-SEG5    DIGIT4 F
-SEG6    DIGIT3 G
-SEG7    DIGIT3 F
-SEG8    DIGIT2 G
-SEG9    DIGIT2 F
-SEG10   DIGIT1 G
-SEG11   DIGIT1 F
-SEG12   NULL
-SEG13   NEGATIVE SIGN
-SEG14   DC
+```
+   _A_
+  |   |
+ F|   |B
+  |_G_|
+  |   |
+ E|   |C
+  |___|
+    D
+```
+`A` = top, `B` = upper-right, `C` = lower-right, `D` = bottom, `E` = lower-left, `F` = upper-left, `G` = middle.
 
-COM2
-SEG0    V
-SEG1    n (nano)
-SEG2    M (Mega)
-SEG3    Celsius
-SEG4    DIGIT4 C
-SEG5    DIGIT4 E
-SEG6    DIGIT3 C
-SEG7    DIGIT3 E
-SEG8    DIGIT2 C
-SEG9    DIGIT2 E
-SEG10   DIGIT1 C
-SEG11   DIGIT1 E
-SEG12   DP-2
-SEG13   HALF-DIGIT - ONE in 19999
-SEG14   MIN
+### Full COM × SEG reference
 
-COM3
-SEG0    A
-SEG1    u (micro)
-SEG2    k (kilo)
-SEG3    Fahrenheit
-SEG4    % Percentage
-SEG5    DIGIT4 D
-SEG6    DP-2000
-SEG7    DIGIT3 D
-SEG8    DP-200
-SEG9    DIGIT2 D
-SEG10   DP-20
-SEG11   DIGIT1 D
-SEG12   Square Wave
-SEG13   Battery
-SEG14   AC & TRUE RMS (two symbols together)
+`Dx-Y` reads as "Digit x, segment Y" (e.g. `D4-B` = Digit 4's upper-right segment).
 
-Summary: 
-|  | SEG0 | SEG1 | SEG2 | SEG3 | SEG12 | SEG13 | SEG14 |
+| COM | SEG0 | SEG1 | SEG2 | SEG3 | SEG4 | SEG5 | SEG6 | SEG7 | SEG8 | SEG9 | SEG10 | SEG11 | SEG12 | SEG13 | SEG14 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| **COM0** | m | Ω | BUZZER | HOLD | D4-B | D4-A | D3-B | D3-A | D2-A | D2-B | D1-B | D1-A | REL | APO | AUTO |
+| **COM1** | F | Hz | MAX | DIODE | D4-G | D4-F | D3-G | D3-F | D2-G | D2-F | D1-G | D1-F | NULL | NEG (–) | DC |
+| **COM2** | V | n (nano) | M (mega) | °C | D4-C | D4-E | D3-C | D3-E | D2-C | D2-E | D1-C | D1-E | DP-2 | Half-digit "1"¹ | MIN |
+| **COM3** | A | µ (micro) | k (kilo) | °F | % | D4-D | DP-2000 | D3-D | DP-200 | D2-D | DP-20 | D1-D | Square Wave | Battery | AC + TRUE RMS² |
+
+¹ The half-digit that turns a 4-digit display into a 19999-count one.
+<br/>
+² AC and TRUE RMS share this single segment line and always light up together.
+
+### Digit segment quick-lookup (by 7-segment letter)
+
+The four digits each draw their A–G segments from a different mix of COM rows, so this view re-sorts the table above by digit - handy when you're tracing a wire and need to know "which (COM, SEG) pair drives segment B of digit 3?"
+
+| Digit | A | B | C | D | E | F | G |
 |---|---|---|---|---|---|---|---|
-| **COM0** | m | Ω | BUZZER | HOLD | REL | APO | AUTO |
-| **COM1** | F | Hz | MAX | DIODE | *(unused)* | NEGATIVE | DC |
-| **COM2** | V | n (nano) | M (Mega) | °C | DP‑2 | Half‑digit "1" | MIN |
-| **COM3** | A | µ (micro) | k (kilo) | °F | Square Wave | Battery | AC + TRUE RMS |
+| **Digit 1** | COM0 / SEG11 | COM0 / SEG10 | COM2 / SEG10 | COM3 / SEG11 | COM2 / SEG11 | COM1 / SEG11 | COM1 / SEG10 |
+| **Digit 2** | COM0 / SEG8 | COM0 / SEG9 | COM2 / SEG8 | COM3 / SEG9 | COM2 / SEG9 | COM1 / SEG9 | COM1 / SEG8 |
+| **Digit 3** | COM0 / SEG7 | COM0 / SEG6 | COM2 / SEG6 | COM3 / SEG7 | COM2 / SEG7 | COM1 / SEG7 | COM1 / SEG6 |
+| **Digit 4** | COM0 / SEG5 | COM0 / SEG4 | COM2 / SEG4 | COM3 / SEG5 | COM2 / SEG5 | COM1 / SEG5 | COM1 / SEG4 |
 
-(TODO: END)
+*Digit numbering reflects the order used while probing the glass - confirm which physical digit is "Digit 1" on your own unit before reusing this map on a different meter.*
 
-SEG4–SEG11 on every COM row map to the seven-segment elements (A–G) of the four numeric digits.
+### Decimal points
+
+| Label | Location | Likely meaning |
+|---|---|---|
+| DP-2 | COM2 / SEG12 | Decimal point for the 2.0000 full-scale range |
+| DP-20 | COM3 / SEG10 | Decimal point for the 20.000 full-scale range |
+| DP-200 | COM3 / SEG8 | Decimal point for the 200.00 full-scale range |
+| DP-2000 | COM3 / SEG6 | Decimal point for the 2000.0 full-scale range |
 
 ## Web Interface
 
@@ -342,19 +331,67 @@ The live meter view ([`meter.html`](./ESP32_C3_SuperMini/data/meter.html)) ships
 - 1× Arduino Uno (or any AVR board) - only needed temporarily, to program the HC-12 modules
 - 3.3V boost converter
 
+## Repository Layout
+
+*(Inferred from the files referenced throughout this README - rename/reorganize as needed to match what's actually committed.)*
+
+```
+AirMeter/
+├── AirMeter.png                 # Project logo
+├── LICENSE                      # MIT license
+├── PCB/
+│   └── PCB.jpg                  # Comparator PCB photo (add Gerbers/KiCad source + BOM here)
+├── Screens/                     # Screenshots used throughout this README
+├── RP2040_Zero/
+│   └── RP2040_Zero.ino          # Transmitter firmware: sampling, framing, HC-12 TX
+├── ESP32_C3_SuperMini/
+│   ├── ESP32_C3_SuperMini.ino   # Receiver/bridge firmware: HC-12 RX, Wi-Fi, SSE, OTA
+│   └── data/                    # Web UI, flashed to LittleFS
+│       ├── index.html           # Dashboard
+│       ├── meterConfig.html     # Per-meter configuration
+│       ├── meter.html           # Live recreated display (OBS source)
+│       ├── setup.html           # First-boot Wi-Fi wizard
+│       ├── files.html           # File manager / OTA uploader
+│       └── airmeter.css         # Shared styling
+└── Arduino_UNO_HT-12/
+    └── Arduino_UNO_HT-12.ino    # One-time utility to configure the HC-12 modules
+```
+
+## Getting Started
+
+*(This follows the same build order as the System Architecture section above - swap in your own IDE/board-manager specifics where noted.)*
+
+**Safety note:** disconnect the test probes from any circuit and remove the battery before opening the meter or soldering anything inside it.
+
+1. **Get the comparator PCB built.** Order the board and SMD parts per the BOM, then solder the five LMV339s and supporting passives.
+2. **Map your glass (skip this if you're using a stock AN870).** Use the probing sketch in [The Probe & Segment Mapping](#1-the-probe--segment-mapping) to confirm your unit's COM/SEG layout matches the [LCD Segment Map](#lcd-segment-map) - cheap multimeters sometimes share a glass design across firmware variants, but it's worth verifying before you commit to wiring.
+3. **Wire the PCB to the RP2040 Zero**, then flash [`RP2040_Zero.ino`](./RP2040_Zero/RP2040_Zero.ino).
+4. **Pre-configure the HC-12 pair** using [`Arduino_UNO_HT-12.ino`](./Arduino_UNO_HT-12/Arduino_UNO_HT-12.ino) so both radios agree on baud rate, channel, power, and mode (see [HC-12 Radio Configuration](#hc-12-radio-configuration)) - do this before final assembly, since the modules are easiest to reach on the bench.
+5. **Assemble the transmitter side**: comparator PCB, RP2040, HC-12, and the 3.3V boost converter, all powered from 2× AA cells, mounted inside the multimeter enclosure.
+6. **Flash the receiver ESP32-C3 SuperMini** with [`ESP32_C3_SuperMini.ino`](./ESP32_C3_SuperMini/ESP32_C3_SuperMini.ino), then upload the contents of [`data/`](./ESP32_C3_SuperMini/data) to LittleFS so the web UI is served from flash.
+7. **Power up the receiver and connect to its `AirMeter-Setup` Wi-Fi AP** (password `airmeter123`), then use the setup wizard to join it to your home network.
+8. **Open the dashboard** at `airmeter.local` (or the IP your router assigned it). The meter should auto-register the first time a packet arrives on its channel.
+9. **Fine-tune each meter** - name, face image, channel, refresh rate - from `meterConfig.html`.
+10. **Add `meter.html` as an OBS Browser Source** (or just open it in any browser) for the live, themeable, zoomable overlay.
+
+## Roadmap / Ideas
+
+*(A starter list to seed this section - replace with whatever you're actually planning next.)*
+
+- Encrypt or authenticate the HC-12 link, since anything else on the same channel/frequency can currently decode a meter's readings.
+- Package the live view as a native OBS plugin instead of a browser-source page.
+- Extend support to other DTM0660-driven multimeters that share the AN870's glass layout.
+- Add battery-level telemetry from the transmitter side.
+- Add data logging / CSV export to the web UI.
+
+## Support This Project
+
+If AirMeter saved you a weekend of reverse-engineering (or you just want to see more projects like it), here's where that goes:
+
+- **YouTube** - retro computing and hardware teardown videos: [youtube.com/@bitsundbolts](https://www.youtube.com/@bitsundbolts)
+- **Buy Me A Coffee** - one-off or ongoing support: [buymeacoffee.com/bitsundbolts](https://buymeacoffee.com/bitsundbolts)
+- **Patreon** - ongoing support: [patreon.com/BitsUndBolts](https://www.patreon.com/BitsUndBolts)
+
 ## License
 
 [`MIT`](./LICENSE) - Short and Simple.
-
-
-
-TODO - Place at strategic location:
-
-Ways to Support:
-
-https://buymeacoffee.com/bitsundbolts
-https://www.patreon.com/BitsUndBolts
-
-Check out my YouTube Channel for Retro Computing Topics:
-https://www.youtube.com/@bitsundbolts
-
