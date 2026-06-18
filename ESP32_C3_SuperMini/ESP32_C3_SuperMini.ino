@@ -1,3 +1,8 @@
+/*
+ * Copyright (c) 2026 Alexander Fuchs
+ * Licensed under the MIT License.
+ */
+
 // =============================================================================
 // ESP32 Wireless Multimeter Bridge
 // Firmware Version: 1.0
@@ -11,7 +16,6 @@
 //   GPIO 20 — HC-12 TXD → ESP32 UART1 RX
 //   GPIO 21 — ESP32 UART1 TX → HC-12 RXD
 // =============================================================================
-
 #include <WiFi.h>
 #include <Update.h>
 #include <esp_wifi.h>

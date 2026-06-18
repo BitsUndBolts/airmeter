@@ -1,3 +1,8 @@
+/*
+ * Copyright (c) 2026 Alexander Fuchs
+ * Licensed under the MIT License.
+ */
+ 
 // =============================================================================
 // RP2040 Zero — Multimeter LCD Monitor & Wireless Transmitter
 // =============================================================================

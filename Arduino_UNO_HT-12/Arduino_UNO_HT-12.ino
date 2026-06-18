@@ -1,3 +1,8 @@
+/*
+ * Copyright (c) 2026 Alexander Fuchs
+ * Licensed under the MIT License.
+ */
+
 #include <SoftwareSerial.h>
 
 // Assign non-conflicting pins for communication
