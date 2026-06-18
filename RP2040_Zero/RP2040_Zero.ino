@@ -422,6 +422,7 @@ void processIncomingESP32() {
 
 void setup() {
   // Initialise onboard RGB LED (off at startup)
+  rgb_led.begin();
   flashLED(2, 0, 180, 0);
 
   // Configure COM and SEG pins as inputs with pull-ups.
