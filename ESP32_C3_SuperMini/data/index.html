@@ -69,7 +69,6 @@
     .nav-card.meter:hover .nav-arrow  { transform: translateX(0.2em); color: var(--accent); }
     .nav-card.update:hover .nav-arrow { transform: translateX(0.2em); color: var(--blue); }
 
-
     /* ── DEVICE CONTROLS ── */
     .controls-section { padding: 0 1.2em 0.8em; }
 
@@ -83,6 +82,10 @@
       border-radius: 0.4em;
       gap: 1.2em;
       margin-bottom: 0.8em;
+    }
+
+    .control-row button {
+      width: 7em;
     }
 
     .control-info  { flex: 1; min-width: 0; }
@@ -211,7 +214,7 @@
         <path d="M24 38v4" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity="0.4"/>
       </svg>
       <div class="empty-title">No meters detected</div>
-      <div class="empty-desc">Waiting for a multimeter to transmit. Once a meter is seen, it will appear here automatically.</div>
+      <div class="empty-desc">Waiting for a multimeter to transmit.<br />Once a meter is seen, it will appear here automatically.</div>
     </div>
 
     <!-- ── NAVIGATION ── -->

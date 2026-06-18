@@ -1,9 +1,8 @@
 <div align="center">
 
-<img src="Screens/Logo AirMeter.png" alt="AirMeter Logo" width="220">
+<img src="AirMeter.png" alt="AirMeter Logo" width="220">
 
-# AirMeter
-
+<br>
 **Wireless LCD streaming for the ANENG AN870 multimeter — straight into OBS, your browser, or anywhere else you need live readings.**
 
 </div>
