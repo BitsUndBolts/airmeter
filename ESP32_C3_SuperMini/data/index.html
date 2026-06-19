@@ -536,7 +536,7 @@
       const empty     = $('meters-empty');
 
       // 1. Filter out inactive meters before doing anything else
-      const activeMeters = (meters || []).filter(m => m.seen <= HIDE_METERS_AFTER_SECONDS);
+      const activeMeters = (meters || []).filter(m => m.seen <= HIDE_METERS_AFTER_SECONDS || m.powerSave === 1);
 
       if (!activeMeters || activeMeters.length === 0) {
         label.style.display   = 'none';
