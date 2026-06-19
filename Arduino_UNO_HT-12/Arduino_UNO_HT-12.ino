@@ -4,6 +4,31 @@
  * Licensed under the MIT License.
  */
 
+/*
+ * Hardware Wiring Diagram
+ * 
+ * To automate testing and individual programming, you must connect the SET pins 
+ * of both modules to the Arduino. This allows the code to pull them LOW for 
+ * programming and push them HIGH for communication.
+ *
+ * Module: ARDUINO UNO
+ * Adapt for any other microcontroller development boards
+ * 
+ * HC-12 Module A:
+ *   VCC -> 5V (or 3.3V with a capacitor)
+ *   GND -> GND
+ *   RXD -> Arduino Pin 3 (TX_A)
+ *   TXD -> Arduino Pin 2 (RX_A)
+ *   SET -> Arduino Pin 6 (SET_A)
+ * 
+ * HC-12 Module B:
+ *   VCC -> 5V (or 3.3V with a capacitor)
+ *   GND -> GND
+ *   RXD -> Arduino Pin 5 (TX_B)
+ *   TXD -> Arduino Pin 4 (RX_B)
+ *   SET -> Arduino Pin 7 (SET_B)
+ */
+
 #include <SoftwareSerial.h>
 
 // Module A Pins

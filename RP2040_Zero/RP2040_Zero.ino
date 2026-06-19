@@ -23,11 +23,22 @@
 //   clean 3.3V logic levels before they reach the RP2040 GPIO pins.
 //
 // Sampling Strategy:
-//   Each COM row is sampled independently whenever that COM goes HIGH.
-//   The display matrix is overwritten in-place on each valid sample —
-//   no buffer clearing is performed. This ensures that a missed COM
-//   cycle retains the last known state for that row rather than going
-//   blank, which is the correct behaviour for a slowly-changing display.
+//   Each COM row is sampled whenever that COM goes HIGH, but rows are no
+//   longer written into the live display matrix independently. The
+//   DTM0660's displayed value can change asynchronously to our ~8ms
+//   COM0..COM3 sweep (most visibly when the input is floating and the
+//   reading is racing), so writing rows in one at a time risks stitching
+//   segments from two different underlying values into one torn digit —
+//   even though each individual row read was itself correct.
+//
+//   Instead, a full COM0..COM3 sweep is staged locally and validated for
+//   timing continuity (a missed phase aborts that sweep). A validated
+//   sweep is only committed into the live display matrix once it is
+//   bit-for-bit identical to the immediately preceding validated sweep —
+//   i.e. the source data has demonstrably settled rather than just been
+//   caught mid-transition. See SECTION 5b. A sweep that never stabilises
+//   simply leaves the previous known-good matrix in place, which remains
+//   the correct behaviour for a slowly-changing display.
 //
 // Sleep Detection:
 //   The multimeter enters a low-power sleep mode after a period of
@@ -66,6 +77,7 @@
 #include <Arduino.h>
 #include <Adafruit_NeoPixel.h>
 #include <EEPROM.h>
+#include <string.h>  // memcpy / memcmp, used by frame-coherency staging (SECTION 5b)
 #include "pico/stdlib.h"
 #include "hardware/sync.h"
 #include "hardware/structs/ioqspi.h"
@@ -227,11 +239,14 @@ const unsigned long SLEEP_TIMEOUT_MS = 10000;
 // SECTION 5 — DISPLAY STATE
 // =============================================================================
 
-// Live display matrix. Each element holds the 15-bit SEG state for one COM row,
-// sampled from the last valid mux pass for that row.
+// Live display matrix. Each element holds the 15-bit SEG state for one COM row.
 // Indexed by COM number: display_matrix[0] = COM0 row, etc.
-// Rows are overwritten in-place on each valid sample — never cleared —
-// so a missed COM cycle retains the previous valid state for that row.
+// Updated only as a whole (all 4 rows at once) by handleCompletedSweep() in
+// SECTION 9, and only once a full sweep has been validated for both timing
+// continuity and stability against the previous sweep — see SECTION 5b.
+// A sweep that isn't yet stable leaves this matrix untouched, so a still-
+// settling reading simply holds the last known-good value rather than
+// flickering or tearing.
 uint16_t display_matrix[4] = { 0, 0, 0, 0 };
 
 // Buzzer latch state.
@@ -242,6 +257,49 @@ uint16_t display_matrix[4] = { 0, 0, 0, 0 };
 //                      The latch expires when (now - buzzerLatchTime) > BUZZER_HOLD_MS.
 bool          buzzer_active   = false;
 unsigned long buzzerLatchTime = 0;
+
+
+// =============================================================================
+// SECTION 5b — FRAME COHERENCY STATE
+// =============================================================================
+//
+// Problem: COM0..COM3 are sampled over the course of one mux sweep, but the
+// DTM0660 can update the displayed value asynchronously to that sweep. If
+// the value changes mid-sweep, rows captured before vs. after the change
+// reflect two different "moments" — assembling them into one digit produces
+// a torn / illegible glyph, even though every individual row read was
+// itself a correct snapshot at the instant it was taken.
+//
+// Fix, in two parts:
+//   1. Completeness check — collect 4 *distinct* COM rows, in whatever order
+//      they actually arrive (no assumption about COM0→1→2→3 ordering, which
+//      this code has no independent way to verify against the real wiring).
+//      If the same COM index shows up again before all 4 distinct rows have
+//      been seen, or if assembling the 4 rows takes longer than
+//      SWEEP_MAX_DURATION_US, something was missed — discard and restart
+//      the sweep from the row that just arrived.
+//   2. Stability check — a complete sweep is only committed into the live
+//      display_matrix if it is bit-for-bit identical to the immediately
+//      preceding complete sweep. Two independently captured sweeps agreeing
+//      is good evidence the source had actually settled, not just been
+//      caught between transitions. A full sweep takes on the order of a few
+//      ms and the fastest TX interval is 100ms, so there is ample headroom
+//      to wait an extra sweep or two before committing.
+// =============================================================================
+
+// Generous ceiling on how long assembling one 4-row sweep may take before
+// it's considered stale (e.g. due to a long gap after waking from sleep).
+// The real mux cycle should be roughly 8ms; this is intentionally much
+// looser than that so it never rejects a real sweep on a timing guess.
+const unsigned long SWEEP_MAX_DURATION_US = 50000;
+
+uint16_t      sweep_staging[4]        = { 0, 0, 0, 0 };          // rows captured so far in the in-progress sweep
+bool          sweep_row_seen[4]       = { false, false, false, false }; // which COM indices have been captured this sweep
+uint8_t       sweep_rows_captured     = 0;                        // how many distinct rows captured in the in-progress sweep
+unsigned long sweep_start_us          = 0;                        // micros() timestamp of this sweep's first row
+
+uint16_t      last_validated_sweep[4]    = { 0, 0, 0, 0 }; // most recent complete sweep
+bool          have_last_validated_sweep  = false;          // false until at least one sweep has validated
 
 
 // =============================================================================
@@ -284,6 +342,31 @@ Adafruit_NeoPixel rgb_led(1, LED_PIN, NEO_GRB + NEO_KHZ800);
 
 uint8_t makeMetaByte(uint8_t fps_idx, uint8_t channel) {
   return ((fps_idx & 0x07) << 5) | (channel & 0x1F);
+}
+
+// Discard any in-progress sweep so the next captured row starts a fresh one.
+// Called after a sweep completes (successfully or not) to keep sweeps
+// non-overlapping and self-recovering.
+void resetSweep() {
+  sweep_row_seen[0] = sweep_row_seen[1] = sweep_row_seen[2] = sweep_row_seen[3] = false;
+  sweep_rows_captured = 0;
+}
+
+// Called once a full 4-row sweep has passed the continuity check (see
+// SECTION 5b). Commits it into the live display matrix only if it matches
+// the previous continuity-valid sweep bit-for-bit; otherwise the previous
+// known-good matrix is left untouched and we simply wait for the next
+// sweep to (hopefully) agree.
+void handleCompletedSweep() {
+  bool matches_previous = have_last_validated_sweep &&
+    (memcmp(sweep_staging, last_validated_sweep, sizeof(sweep_staging)) == 0);
+
+  if (matches_previous) {
+    memcpy(display_matrix, sweep_staging, sizeof(display_matrix));
+  }
+
+  memcpy(last_validated_sweep, sweep_staging, sizeof(last_validated_sweep));
+  have_last_validated_sweep = true;
 }
 
 // Flash the LED a given number of times in blue to confirm a frame rate change.
@@ -470,15 +553,29 @@ void loop() {
   //
   // Poll all four COM lines. When a COM line is found HIGH, wait for the signal
   // to settle to the midpoint of the active window, then confirm it is still
-  // HIGH before reading all 15 SEG lines. The resulting 15-bit word is written
-  // directly into the corresponding row of the display matrix.
+  // HIGH before reading all 15 SEG lines.
   //
-  // Any successful COM sample resets the activity timer and wakes the system
-  // if it was sleeping. Rows are overwritten independently — a missed phase
-  // leaves the previous valid data in place rather than zeroing that row.
+  // Rows are NOT written into display_matrix directly. Instead each row is
+  // staged into sweep_staging[] and checked for timing continuity against
+  // the previous row (SECTION 5b). A full, continuity-valid 4-row sweep is
+  // only committed into display_matrix once it matches the immediately
+  // preceding continuity-valid sweep — this is what prevents a value change
+  // mid-sweep from being stitched into a torn digit.
+  //
+  // Raw COM activity (not sweep validity) still drives the activity timer
+  // and sleep wake-up, so an unstable/changing reading is never mistaken
+  // for the meter going to sleep.
   // ---------------------------------------------------------------------------
+  static bool com_prev_high[4] = { false, false, false, false };
+
   for (int c = 0; c < 4; c++) {
-    if (digitalRead(COM_PINS[c]) == HIGH) {
+    bool comNowHigh = (digitalRead(COM_PINS[c]) == HIGH);
+
+    // Only act on the rising edge (comNowHigh && previously LOW). loop()
+    // runs far faster than the ~2ms COM window, so without this guard the
+    // same window gets sampled many times while still HIGH, corrupting the
+    // sweep-tracking state below with duplicate same-index captures.
+    if (comNowHigh && !com_prev_high[c]) {
       delayMicroseconds(COM_SETTLE_US);           // Wait for signal centre
 
       if (digitalRead(COM_PINS[c]) == HIGH) {     // Confirm still active
@@ -487,9 +584,11 @@ void loop() {
           if (digitalRead(SEG_PINS[s]) == HIGH)
             row_bits |= (1 << s);
         }
-        display_matrix[c] = row_bits;             // Overwrite this COM row
 
-        // Reset inactivity timer on every valid COM sample
+        unsigned long captureTimeUs = micros();
+
+        // Reset inactivity timer on every valid COM sample, regardless of
+        // whether the sweep it belongs to ends up validated/committed.
         lastActivityTime = currentTime;
 
         // Wake from sleep if COM activity has resumed
@@ -497,8 +596,33 @@ void loop() {
           systemSleeping = false;
           Serial1.begin(HC12_BAUD);               // Re-enable HC-12 transmission
         }
+
+        // --- Frame coherency: does this row fit the in-progress sweep? ---
+        bool tooLongSinceSweepStart = sweep_rows_captured > 0 &&
+          ((captureTimeUs - sweep_start_us) > SWEEP_MAX_DURATION_US);
+        bool rowAlreadySeenThisSweep = sweep_row_seen[c];
+
+        if (sweep_rows_captured == 0 || tooLongSinceSweepStart || rowAlreadySeenThisSweep) {
+          // Starting fresh: either we were idle, the in-progress sweep has
+          // been open too long (something was missed), or this exact COM
+          // index already showed up earlier in the current sweep (meaning
+          // we cycled back around without ever seeing one of the others).
+          resetSweep();
+          sweep_start_us = captureTimeUs;
+        }
+
+        sweep_staging[c]    = row_bits;
+        sweep_row_seen[c]   = true;
+        sweep_rows_captured++;
+
+        if (sweep_rows_captured == 4) {
+          handleCompletedSweep();
+          resetSweep();                            // next COM starts a fresh sweep
+        }
       }
     }
+
+    com_prev_high[c] = comNowHigh;
   }
 
   // ---------------------------------------------------------------------------
@@ -563,13 +687,6 @@ void loop() {
     // Pack buzzer state into bit 15 of COM0 word (spare bit, not used by display)
     if (buzzer_active) tx_matrix[0] |= (1 << 15);
 
-    // Heartbeat: flash green LED for the first LED_HEARTBEAT transmissions
-    if (led_active) {
-      flashLED(1, 180, 0, 0);
-      heartbeat_count++;
-      if (heartbeat_count >= LED_HEARTBEAT) led_active = false;
-    }
-
     // Build 14-byte packet
     uint8_t tx_packet[14];
 
@@ -596,5 +713,12 @@ void loop() {
     tx_packet[13] = calculate_crc8(&tx_packet[2], 11);
 
     Serial1.write(tx_packet, 14);
+
+    // Heartbeat: flash LED for the first LED_HEARTBEAT transmissions
+    if (led_active) {
+      flashLED(1, 180, 0, 0);
+      heartbeat_count++;
+      if (heartbeat_count >= LED_HEARTBEAT) led_active = false;
+    }
   }
 }
