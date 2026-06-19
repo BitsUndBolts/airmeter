@@ -252,6 +252,10 @@ const uint8_t FLAG_POWER_CONSERVATION = 0x01;  // bit 0
 // forward compatibility.
 uint8_t flags_byte = 0x00;
 
+// Global flag to record settings change
+// If changed, the next packet will be sent regardless of power mode
+bool settingsChanged = false;
+
 // Convenience accessor — true when power conservation is active.
 inline bool powerConservationEnabled() { return (flags_byte & FLAG_POWER_CONSERVATION) != 0; }
 
@@ -435,7 +439,7 @@ uint8_t calculate_crc8(uint8_t *data, uint8_t len) {
   return crc;
 }
 
-void applyNewConfiguration(uint8_t new_channel, uint8_t new_fps_idx, uint8_t new_flags) {
+bool applyNewConfiguration(uint8_t new_channel, uint8_t new_fps_idx, uint8_t new_flags) {
   bool changed = false;
 
   if (new_channel != CHANNEL && new_channel <= 31) {
@@ -462,11 +466,15 @@ void applyNewConfiguration(uint8_t new_channel, uint8_t new_fps_idx, uint8_t new
     EEPROM.commit();
     flashLED(3, 0, 0, 180);  // 3 flashes = config received confirmation
   }
+
+  return changed;
 }
 
-void decodeConfigPacket(const uint8_t* payload) {
+bool decodeConfigPacket(const uint8_t* payload) {
   const uint8_t current_channel = payload[0];
-  if (current_channel != CHANNEL) return;
+  if (current_channel != CHANNEL) {
+    return false;
+  }
 
   // Extract shared fields: frequency (bits 7-5) | new_channel (bits 4-0)
   const uint8_t shared_byte = payload[1];
@@ -480,10 +488,10 @@ void decodeConfigPacket(const uint8_t* payload) {
   Serial.printf("[ESP32 -> RP2040] Current Channel: %u | New Channel: %u | Freq Index: %u | Flags: 0x%02X\n",
                 current_channel, new_channel, frequency, new_flags);
 
-  applyNewConfiguration(new_channel, frequency, new_flags);
+  return applyNewConfiguration(new_channel, frequency, new_flags);
 }
 
-void processIncomingESP32() {
+bool processIncomingESP32() {
   while (Serial1.available()) { // Drain HC-12 RX buffer
     const uint8_t b = Serial1.read();
 
@@ -532,17 +540,19 @@ void processIncomingESP32() {
         const uint8_t expected_crc = calculate_crc8(crc_input, 4);
 
         if (b == expected_crc) {
-          decodeConfigPacket(rx_payload);
+          rx_state = WAIT_PREAMBLE_1;
+
+          return decodeConfigPacket(rx_payload);
         } else {
           rx_error_count++;
           Serial.printf("[HC12] CRC FAIL from ESP32 — got 0x%02X expected 0x%02X (Total: %lu)\n",
                         b, expected_crc, rx_error_count);
         }
-        rx_state = WAIT_PREAMBLE_1;
         break;
       }
     }
   }
+  return false;
 }
 
 // =============================================================================
@@ -715,7 +725,7 @@ void loop() {
   // the HC-12 reverse channel. Valid packets update CHANNEL and/or
   // frameRateIndex and persist both to EEPROM immediately.
   // ---------------------------------------------------------------------------
-  processIncomingESP32();
+  settingsChanged = processIncomingESP32() || settingsChanged;
 
   // ---------------------------------------------------------------------------
   // PHASE 4: Transmit packet every txIntervalMs (active mode only)
@@ -753,7 +763,7 @@ void loop() {
     if (powerConservationEnabled()) tx_matrix[1] |= (1 << 15);
 
     // Power conservation: suppress if the payload is unchanged since last TX
-    bool payloadChanged = (memcmp(tx_matrix, last_tx_matrix, sizeof(tx_matrix)) != 0);
+    bool payloadChanged = (memcmp(tx_matrix, last_tx_matrix, sizeof(tx_matrix)) != 0) || settingsChanged;
 
     if (powerConservationEnabled() && !payloadChanged) {
       // Nothing changed — skip transmission this tick
@@ -769,9 +779,9 @@ void loop() {
       // META byte: upper 3 bits = current fps index, lower 5 bits = CHANNEL.
       // Lets the receiver display the active frame rate and route packets from
       // multiple meters to separate UI panels without any extra protocol overhead.
-      tx_packet[4]  = makeMetaByte(frameRateIndex, CHANNEL);    // [F2 F1 F0 | M4 M3 M2 M1 M0]
+      tx_packet[4]  = makeMetaByte(frameRateIndex, CHANNEL);    // [F2 F1 F0 | C4 C3 C2 C1 C0]
 
-      tx_packet[5]  = (tx_matrix[0] >> 8) & 0xFF;       // COM0 high byte (bit15 = buzzer)
+      tx_packet[5]  = (tx_matrix[0] >> 8) & 0xFF;        // COM0 high byte (bit15 = buzzer)
       tx_packet[6]  =  tx_matrix[0]       & 0xFF;        // COM0 low byte
       tx_packet[7]  = (tx_matrix[1] >> 8) & 0xFF;        // COM1 high byte (bit15 = power conservation flag)
       tx_packet[8]  =  tx_matrix[1]       & 0xFF;        // COM1 low byte
@@ -788,12 +798,14 @@ void loop() {
       // Record this snapshot for next-tick suppression comparison
       memcpy(last_tx_matrix, tx_matrix, sizeof(last_tx_matrix));
 
-      // Heartbeat: flash LED for the first LED_HEARTBEAT transmissions
-      if (led_active) {
-        flashLED(1, 180, 0, 0);
-        heartbeat_count++;
-        if (heartbeat_count >= LED_HEARTBEAT) led_active = false;
-      }
+      settingsChanged = false; // reset settings chagned
+    }
+
+    // Heartbeat: flash LED for the first LED_HEARTBEAT transmissions
+    if (led_active) {
+      flashLED(1, 180, 0, 0);
+      heartbeat_count++;
+      if (heartbeat_count >= LED_HEARTBEAT) led_active = false;
     }
   }
 }

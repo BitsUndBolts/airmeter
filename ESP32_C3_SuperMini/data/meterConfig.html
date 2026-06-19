@@ -760,10 +760,10 @@
 
     // How long to wait after sending an RF command before a fresh
     // telemetry packet reflecting it is guaranteed to have arrived.
-    // Based on the OLD fps (the rate the meter is transmitting at
+    // Based on the NEW fps (the rate the meter is transmitting at
     // until it actually receives & applies the new command).
-    function verifyWaitMs(oldFpsIdx) {
-      const hz = FPS_OPTIONS[oldFpsIdx] ?? FPS_OPTIONS[2];
+    function verifyWaitMs(newFpsIdx) {
+      const hz = FPS_OPTIONS[newFpsIdx] ?? FPS_OPTIONS[2];
       const intervalMs = 1000 / hz;
       return Math.round(intervalMs * VERIFY_MULTIPLIER) + VERIFY_BUFFER_MS;
     }
@@ -825,8 +825,8 @@
     // Sends the RF command and verifies it actually applied, resending
     // up to MAX_RF_RETRIES times. Returns true once /api/system confirms
     // the target channel reports the requested fpsIdx/powerSave.
-    async function pushMeterUpdate(channel, { newChannel, fpsIdx, powerSave, flagsByte, oldFpsIdx }) {
-      const waitMs = verifyWaitMs(oldFpsIdx);
+    async function pushMeterUpdate(channel, { newChannel, fpsIdx, powerSave, flagsByte }) {
+      const waitMs = verifyWaitMs(fpsIdx);
       showSaveOverlay(channel, 'Saving…', `Attempt 1 of ${MAX_RF_RETRIES}`);
 
       for (let attempt = 1; attempt <= MAX_RF_RETRIES; attempt++) {
@@ -884,7 +884,6 @@
       const flagsByte  = powerSave & 0x01; // bit 0 = power conservation; bits 7-1 reserved
 
       const prevData  = activeMeters.get(channel);
-      const oldFpsIdx = prevData?.fpsIdx ?? 2;
       const oldPowerSave = prevData?.powerSave ?? 0;
 
       const channelChanged = newChannel !== channel;
@@ -906,8 +905,7 @@
             newChannel: channelChanged ? newChannel : channel,
             fpsIdx,
             powerSave,
-            flagsByte,
-            oldFpsIdx
+            flagsByte
           });
 
           if (!ok) {
