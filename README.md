@@ -50,11 +50,11 @@ AirMeter is an open-source, wireless hardware + software modification kit that t
 No UART hack, no proprietary app, no Bluetooth pairing dance. Just probes on glass traces, a comparator board, and two cheap radio modules.
 
 <p align="center" style="margin: 20px">
-  <img src="Screens/9 Classic.png" width="500" alt="AirMeter live view - Amber theme" style="padding: 20px;">
+  <img src="Screens/9 Classic.png" width="800" alt="AirMeter live view - Amber theme" style="padding: 20px;">
   &nbsp;&nbsp;
-  <img src="Screens/8 Amber.png" width="500" alt="AirMeter live view - Amber theme" style="padding: 20px;">
+  <img src="Screens/8 Amber.png" width="800" alt="AirMeter live view - Amber theme" style="padding: 20px;">
   &nbsp;&nbsp;
-  <img src="Screens/13 Red Alert.png" width="500" alt="AirMeter live view - Red Alert theme" style="padding: 20px;">
+  <img src="Screens/13 Red Alert.png" width="800" alt="AirMeter live view - Red Alert theme" style="padding: 20px;">
 </p>
 
 ## The Backstory
@@ -70,7 +70,7 @@ It turns out the AN870 doesn't drive each of its ~60 segments with individual co
 Probing the glass with an oscilloscope revealed the timing: each COM phase holds for **2 ms** before the driver inverts polarity, which is what prevents DC bias from degrading the liquid crystal over time. A segment is "on" whenever there's a 3V differential between its COM and SEG line - and that 3V can show up as `COM:3V / SEG:0V` or the inverted `COM:0V / SEG:3V`, alternating every cycle.
 
 <p align="center" style="margin: 20px">
-  <img src="Screens/Oscilloscope Readings.png" width="500" alt="Oscilloscope capture of multiplexed LCD signal" style="padding: 20px;">
+  <img src="Screens/Oscilloscope Readings.png" width="800" alt="Oscilloscope capture of multiplexed LCD signal" style="padding: 20px;">
 </p>
 
 ### 1. The Probe & Segment Mapping
@@ -177,19 +177,19 @@ Since the project is designed to run on **2× AA batteries** (rechargeable 1.2V 
 - **File manager** - full CRUD (upload, download, rename, delete) over anything stored on the ESP32's LittleFS partition, including custom multimeter face images (prefixed `mm_*.webp`) that show up automatically in the meter configuration dropdown.
 
 <p align="center" style="margin: 20px">
-  <img src="Screens/1 Setup - Search WiFi.png" width="500" alt="WiFi Search" style="padding: 20px;">
+  <img src="Screens/1 Setup - Search WiFi.png" width="800" alt="WiFi Search" style="padding: 20px;">
   &nbsp;&nbsp;
-  <img src="Screens/2 Setup - Select WiFi.png" width="500" alt="WiFi Search Select" style="padding: 20px;">
+  <img src="Screens/2 Setup - Select WiFi.png" width="800" alt="WiFi Search Select" style="padding: 20px;">
   &nbsp;&nbsp;
-  <img src="Screens/3 Setup - Credentials.png" width="500" alt="WiFi Credentials" style="padding: 20px;">
+  <img src="Screens/3 Setup - Credentials.png" width="800" alt="WiFi Credentials" style="padding: 20px;">
   &nbsp;&nbsp;
-  <img src="Screens/4 Setup - Complete.png" width="500" alt="WiFi Setup Complete" style="padding: 20px;">
+  <img src="Screens/4 Setup - Complete.png" width="800" alt="WiFi Setup Complete" style="padding: 20px;">
   &nbsp;&nbsp;
-  <img src="Screens/5 Dashboard.png" width="500" alt="Dashboard" style="padding: 20px;">
+  <img src="Screens/5 Dashboard.png" width="800" alt="Dashboard" style="padding: 20px;">
   &nbsp;&nbsp;
-  <img src="Screens/6 Meter Configuration.png" width="500" alt="Meter Configuration" style="padding: 20px;">
+  <img src="Screens/6 Meter Configuration.png" width="800" alt="Meter Configuration" style="padding: 20px;">
   &nbsp;&nbsp;
-  <img src="Screens/7 File Management.png" width="500" alt="File Management" style="padding: 20px;">
+  <img src="Screens/7 File Management.png" width="800" alt="File Management" style="padding: 20px;">
 </p>
 
 ## Wireless Protocol (HC-12)
