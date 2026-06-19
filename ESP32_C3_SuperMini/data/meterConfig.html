@@ -734,16 +734,12 @@
     }
 
     function rebuildBlock(oldChannel, newChannel) {
-      const cfg    = allSettings.meters[newChannel] || {};
-
+      const cfg      = allSettings.meters[newChannel] || {};
       const oldBlock = document.querySelector(`[data-channel="${oldChannel}"]`);
       const newBlock = renderMeterBlock(newChannel, cfg);
       oldBlock.replaceWith(newBlock);
-
-      delete allSettings.meters[oldChannel];
-      activeMeters.delete(oldChannel);
-
-      saveMeter(newChannel);
+      // allSettings and activeMeters are already updated by saveMeter
+      // before rebuildBlock is called. No saveMeter() call here.
     }
 
     /* ═══════════════════════════════════════════════════════════
@@ -856,6 +852,15 @@
           }
 
           if (confirmed && confirmed.fpsIdx === fpsIdx && confirmed.powerSave === powerSave) {
+            // RF confirmed: commit the rename on the ESP32 (only does
+            // real work when channel changed; harmless otherwise).
+            try {
+              await fetch('/api/meter/commit', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ oldChannel: channel, newChannel })
+              });
+            } catch (e) { /* non-fatal */ }
             activeMeters.set(newChannel, confirmed);
             if (newChannel !== channel) activeMeters.delete(channel);
             hideSaveOverlay(channel);
@@ -939,18 +944,24 @@
         }
 
         if (channelChanged) {
+          // Settings key rename and registry move happen in /api/meter/commit
+          // (called inside pushMeterUpdate on success) or are deferred for
+          // offline meters. Here we only update the LOCAL JS state so the
+          // UI block can be rebuilt with the correct channel number.
           allSettings.meters[newChannel] = {
             ...(allSettings.meters[channel] || {}),
             name,
             image
           };
-          if (!canVerify) {
-            // No confirmed telemetry yet — carry the requested values over
-            // so the rebuilt block reflects what we just asked for.
-            const carried = activeMeters.get(channel) || {};
-            activeMeters.set(newChannel, { ...carried, fpsIdx, powerSave });
-            activeMeters.delete(channel);
-          }
+          // Keep the old key intact until we have confirmed delivery
+          // (for !canVerify / offline path the meter is not transmitting
+          // so we cannot confirm; we optimistically rename the local state
+          // but the ESP32 commit call in pushMeterUpdate already handled it
+          // for the canVerify path).
+          const carried = activeMeters.get(channel) || {};
+          activeMeters.set(newChannel, { ...carried, fpsIdx, powerSave });
+          activeMeters.delete(channel);
+          delete allSettings.meters[channel];
           rebuildBlock(channel, newChannel);
           return;
         }

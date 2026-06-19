@@ -891,41 +891,12 @@ void setupWebServer() {
       // use; callers that omit the field default to 0x00 (all flags off).
       const uint8_t flagsByte = doc["flags"].is<uint8_t>() ? doc["flags"].as<uint8_t>() : 0x00;
 
-      // 1. Rename in settings: load, move key, save
-      String raw = loadSettings();
-      JsonDocument cfg;
-      deserializeJson(cfg, raw);
-
-      const String oldKey = String(oldChannel);
-      const String newKey = String(newChannel);
-      if (cfg["meters"][oldKey]) {
-        cfg["meters"][newKey] = cfg["meters"][oldKey];
-        cfg["meters"].remove(oldKey.c_str());
-        String out; serializeJson(cfg, out);
-        saveSettings(out.c_str());
-      }
-
-      // 2. Move runtime last-seen entry
-      if (meterRegistry.count(oldChannel)) {
-        meterRegistry[newChannel] = meterRegistry[oldChannel];
-        meterRegistry.erase(oldChannel);
-      }
-
-      // 3. Start the cool-off window for oldChannel. Any packet still arriving
-      //    tagged with oldChannel over the next CHANNEL_COOLOFF_MS ms is assumed to be
-      //    a straggler sent before the RP2040 applied the rename, and will
-      //    be dropped instead of re-registering meterRegistry[oldChannel].
-      startChannelCooloff(oldChannel);
-
-      // If newChannel was itself recently retired (e.g. quick chained changes
-      // and reusing a channel), clear that cool-off so the just-renamed meter's
-      // own packets aren't dropped under its new Channel.
-      for (int i = 0; i < COOLOFF_SLOTS; i++) {
-        if (channelCooloffList[i].channel == newChannel) {
-          channelCooloffList[i].channel = 0xFF;
-          break;
-        }
-      }
+      // This endpoint ONLY transmits the RF command. It does NOT touch stored
+      // settings or meterRegistry. Settings migration (key rename) and registry
+      // housekeeping are handled by /api/meter/commit, which the UI calls only
+      // after confirming the RP2040 acknowledged the new config via /api/system.
+      // This guarantees a mid-air collision or failed delivery can never corrupt
+      // or delete the stored meter configuration.
 
       // Build the 7-byte config packet
       // [ 0xAA ][ 0x55 ][ 0x03 ][ CHANNEL ][ DATA_BYTE ][ FLAGS_BYTE ][ CRC8 ]
@@ -942,6 +913,67 @@ void setupWebServer() {
       tx[6] = calculate_crc8(crc_input, 4);
 
       HC12.write(tx, 7);
+
+      request->send(200, "application/json", "{\"status\":\"success\"}");
+    }
+  );
+
+  // ── API: Meter Commit (called by UI after RF delivery confirmed) ────────────────────
+  // Renames the stored settings key from oldChannel to newChannel and updates
+  // the runtime meterRegistry. Only called once the UI has confirmed via
+  // /api/system that the RP2040 is reporting the expected fpsIdx/powerSave,
+  // so a failed RF delivery can never corrupt the stored configuration.
+  server.on("/api/meter/commit", HTTP_POST, [](AsyncWebServerRequest* request) {}, NULL,
+    [](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+      JsonDocument doc;
+      if (deserializeJson(doc, data, len)) {
+        request->send(400, "application/json", "{\"status\":\"error\"}");
+        return;
+      }
+
+      if (!doc["oldChannel"].is<uint8_t>() || doc["oldChannel"].as<uint8_t>() > 31 ||
+          !doc["newChannel"].is<uint8_t>() || doc["newChannel"].as<uint8_t>() > 31) {
+        request->send(400, "application/json",
+                      "{\"status\":\"error\",\"message\":\"Invalid channel\"}");
+        return;
+      }
+
+      const uint8_t oldChannel = doc["oldChannel"].as<uint8_t>();
+      const uint8_t newChannel = doc["newChannel"].as<uint8_t>();
+
+      // Only do rename work when the channel actually changed
+      if (oldChannel != newChannel) {
+        // 1. Rename settings key on flash
+        String raw = loadSettings();
+        JsonDocument cfg;
+        deserializeJson(cfg, raw);
+
+        const String oldKey = String(oldChannel);
+        const String newKey = String(newChannel);
+        if (cfg["meters"][oldKey]) {
+          cfg["meters"][newKey] = cfg["meters"][oldKey];
+          cfg["meters"].remove(oldKey.c_str());
+          String out; serializeJson(cfg, out);
+          saveSettings(out.c_str());
+        }
+
+        // 2. Move runtime registry entry
+        if (meterRegistry.count(oldChannel)) {
+          meterRegistry[newChannel] = meterRegistry[oldChannel];
+          meterRegistry.erase(oldChannel);
+        }
+
+        // 3. Cool-off old channel so straggler packets are ignored
+        startChannelCooloff(oldChannel);
+
+        // Clear any cool-off on newChannel so its packets are accepted
+        for (int i = 0; i < COOLOFF_SLOTS; i++) {
+          if (channelCooloffList[i].channel == newChannel) {
+            channelCooloffList[i].channel = 0xFF;
+            break;
+          }
+        }
+      }
 
       request->send(200, "application/json", "{\"status\":\"success\"}");
     }
