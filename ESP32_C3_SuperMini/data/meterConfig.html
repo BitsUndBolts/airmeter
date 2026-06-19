@@ -39,10 +39,60 @@
     }
 
     .meter-block {
+      position: relative;
       background: var(--panel-2);
       border: 1px solid var(--border-bright);
       border-radius: 0.5em;
       overflow: hidden;
+    }
+
+    /* ── SAVE / VERIFY OVERLAY ── */
+    .save-overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 50;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.6em;
+      padding: 1.6em;
+      text-align: center;
+      background: rgba(10,11,13,0.92);
+      backdrop-filter: blur(2px);
+    }
+
+    .save-overlay.hidden { display: none; }
+
+    .save-overlay .spinner-inline {
+      width: 2em;
+      height: 2em;
+      border-width: 0.2em;
+      margin: 0 0 0.2em 0;
+    }
+
+    .save-overlay-title {
+      font-family: var(--mono);
+      font-size: 1.1em;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      color: var(--text);
+    }
+
+    .save-overlay.failed .save-overlay-title { color: var(--red); }
+
+    .save-overlay-sub {
+      font-family: var(--mono);
+      font-size: 0.9em;
+      letter-spacing: 0.04em;
+      color: var(--text-3);
+      min-height: 1.2em;
+    }
+
+    .save-overlay-actions {
+      display: flex;
+      gap: 0.6em;
+      margin-top: 0.4em;
     }
 
     .meter-block-header {
@@ -397,6 +447,13 @@
     const $ = id => document.getElementById(id);
     const FPS_OPTIONS = [1, 2, 3, 5, 10]; // index 0–4, matches transmitter
 
+    // Mid-air collision handling: how many times we resend an RF command
+    // before giving up, and the safety multiplier/buffer applied on top of
+    // the OLD transmit interval before we trust a fresh /api/system read.
+    const MAX_RF_RETRIES   = 3;
+    const VERIFY_MULTIPLIER = 2;     // double the old interval (per meter's own logic)
+    const VERIFY_BUFFER_MS  = 150;   // extra slack for HC-12/serial latency
+
     let allSettings    = {}; // full settings blob from ESP32
     let activeMeters = new Map(); // meters seen since boot
     let availableImages = []; // .webp files from Storage
@@ -656,6 +713,7 @@
           <span class="save-status" id="status-${channel}"></span>
           <button class="btn btn-md btn-accent" id="save-${channel}" onclick="saveMeter(${channel})" disabled>Save</button>
         </div>
+        <div class="save-overlay hidden" id="overlay-${channel}"></div>
       `;
       return block;
     }
@@ -688,6 +746,132 @@
       saveMeter(newChannel);
     }
 
+    /* ═══════════════════════════════════════════════════════════
+       MID-AIR COLLISION HANDLING
+       ─────────────────────────────────────────────────────────
+       An RF update can be silently lost if it collides with a
+       telemetry packet from any meter on the link. After sending
+       a channel/fps/power-save change we read back /api/system
+       and confirm the meter itself reports the new values before
+       calling the change applied. If it doesn't match, we resend.
+       ═══════════════════════════════════════════════════════════ */
+
+    const sleep = ms => new Promise(res => setTimeout(res, ms));
+
+    // How long to wait after sending an RF command before a fresh
+    // telemetry packet reflecting it is guaranteed to have arrived.
+    // Based on the OLD fps (the rate the meter is transmitting at
+    // until it actually receives & applies the new command).
+    function verifyWaitMs(oldFpsIdx) {
+      const hz = FPS_OPTIONS[oldFpsIdx] ?? FPS_OPTIONS[2];
+      const intervalMs = 1000 / hz;
+      return Math.round(intervalMs * VERIFY_MULTIPLIER) + VERIFY_BUFFER_MS;
+    }
+
+    // Look up a single channel's entry from the live /api/system feed.
+    async function fetchSystemMeter(channel) {
+      const data = await fetch('/api/system').then(r => r.json());
+      return (data.meters || []).find(m => m.channel === channel) || null;
+    }
+
+    function saveOverlayEl(channel) { return $(`overlay-${channel}`); }
+
+    function showSaveOverlay(channel, title, sub) {
+      const ov = saveOverlayEl(channel);
+      ov.classList.remove('hidden', 'failed');
+      ov.innerHTML = `
+        <span class="spinner-inline"></span>
+        <div class="save-overlay-title">${title}</div>
+        <div class="save-overlay-sub">${sub || ''}</div>
+      `;
+    }
+
+    function updateSaveOverlay(channel, title, sub) {
+      const ov = saveOverlayEl(channel);
+      const titleEl = ov.querySelector('.save-overlay-title');
+      const subEl   = ov.querySelector('.save-overlay-sub');
+      if (titleEl) titleEl.textContent = title;
+      if (subEl)   subEl.textContent   = sub || '';
+    }
+
+    function hideSaveOverlay(channel) {
+      saveOverlayEl(channel).classList.add('hidden');
+    }
+
+    function showSaveFailedOverlay(channel) {
+      const ov = saveOverlayEl(channel);
+      ov.classList.add('failed');
+      ov.innerHTML = `
+        <div class="save-overlay-title">⚠ Update failed</div>
+        <div class="save-overlay-sub">The meter never confirmed the new settings after ${MAX_RF_RETRIES} attempts.</div>
+        <div class="save-overlay-actions">
+          <button class="btn btn-md btn-accent" onclick="retrySaveMeter(${channel})">Try again</button>
+          <button class="btn btn-md" onclick="cancelSaveOverlay(${channel})">Cancel</button>
+        </div>
+      `;
+    }
+
+    function cancelSaveOverlay(channel) {
+      hideSaveOverlay(channel);
+      $(`save-${channel}`).disabled = false;
+      $(`status-${channel}`).className   = 'save-status error';
+      $(`status-${channel}`).textContent = '✗ Not applied';
+    }
+
+    function retrySaveMeter(channel) {
+      saveMeter(channel);
+    }
+
+    // Sends the RF command and verifies it actually applied, resending
+    // up to MAX_RF_RETRIES times. Returns true once /api/system confirms
+    // the target channel reports the requested fpsIdx/powerSave.
+    async function pushMeterUpdate(channel, { newChannel, fpsIdx, powerSave, flagsByte, oldFpsIdx }) {
+      const waitMs = verifyWaitMs(oldFpsIdx);
+      showSaveOverlay(channel, 'Saving…', `Attempt 1 of ${MAX_RF_RETRIES}`);
+
+      for (let attempt = 1; attempt <= MAX_RF_RETRIES; attempt++) {
+        updateSaveOverlay(channel, 'Sending update…', `Attempt ${attempt} of ${MAX_RF_RETRIES}`);
+
+        let sendOk = false;
+        try {
+          const r = await fetch('/api/meter/update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ oldChannel: channel, newChannel, fpsIdx, flags: flagsByte })
+          }).then(r => r.json());
+          sendOk = r.status === 'success';
+        } catch (e) {
+          sendOk = false;
+        }
+
+        if (sendOk) {
+          updateSaveOverlay(channel, 'Verifying…', `Waiting ${(waitMs / 1000).toFixed(1)}s for confirmation…`);
+          await sleep(waitMs);
+
+          let confirmed = null;
+          try {
+            confirmed = await fetchSystemMeter(newChannel);
+          } catch (e) {
+            confirmed = null;
+          }
+
+          if (confirmed && confirmed.fpsIdx === fpsIdx && confirmed.powerSave === powerSave) {
+            activeMeters.set(newChannel, confirmed);
+            if (newChannel !== channel) activeMeters.delete(channel);
+            hideSaveOverlay(channel);
+            return true;
+          }
+        }
+
+        if (attempt < MAX_RF_RETRIES) {
+          updateSaveOverlay(channel, sendOk ? 'Not applied yet…' : 'Send failed…', 'Retrying…');
+        }
+      }
+
+      showSaveFailedOverlay(channel);
+      return false;
+    }
+
     /* ── SAVE ONE METER ── */
     async function saveMeter(channel) {
       const btn      = $(`save-${channel}`);
@@ -699,22 +883,61 @@
       const powerSave  = parseInt($(`powerSave-${channel}`).value, 10); // 0 or 1
       const flagsByte  = powerSave & 0x01; // bit 0 = power conservation; bits 7-1 reserved
 
+      const prevData  = activeMeters.get(channel);
+      const oldFpsIdx = prevData?.fpsIdx ?? 2;
+      const oldPowerSave = prevData?.powerSave ?? 0;
+
       const channelChanged = newChannel !== channel;
-      const fpsChanged     = (activeMeters.get(channel)?.fpsIdx ?? -1) !== fpsIdx;
-      const flagsChanged   = (activeMeters.get(channel)?.powerSave ?? 0) !== powerSave;
+      const fpsChanged     = (prevData?.fpsIdx ?? -1) !== fpsIdx;
+      const flagsChanged   = (prevData?.powerSave ?? 0) !== powerSave;
+      const rfChanged      = channelChanged || fpsChanged || flagsChanged;
 
-      if (channelChanged || fpsChanged || flagsChanged) {
-        const r = await fetch('/api/meter/update', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ oldChannel: channel, newChannel: channelChanged ? newChannel : channel, fpsIdx, flags: flagsByte })
-        }).then(r => r.json());
+      // Can we even verify? Only if the meter is currently transmitting.
+      // (seen < 5 mirrors the "Active" badge logic used elsewhere on this page.)
+      const canVerify = (!!prevData && prevData.seen < 5) || oldPowerSave === 1;
 
-        if (r.status !== 'success') {
-          statusEl.className   = 'save-status error';
-          statusEl.textContent = channelChanged ? '✗ Channel change failed' : '✗ Update failed';
-          btn.disabled = false;
-          return;
+      btn.disabled          = true;
+      statusEl.className    = 'save-status';
+      statusEl.textContent  = '';
+
+      if (rfChanged) {
+        if (canVerify) {
+          const ok = await pushMeterUpdate(channel, {
+            newChannel: channelChanged ? newChannel : channel,
+            fpsIdx,
+            powerSave,
+            flagsByte,
+            oldFpsIdx
+          });
+
+          if (!ok) {
+            // Overlay is showing the failure UI with Retry/Cancel — leave
+            // the button state to cancelSaveOverlay()/retrySaveMeter().
+            return;
+          }
+        } else {
+          // Meter has never been seen, or has gone quiet — there's no
+          // telemetry to verify against, so send once and move on.
+          let sendOk = false;
+          try {
+            const r = await fetch('/api/meter/update', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ oldChannel: channel, newChannel: channelChanged ? newChannel : channel, fpsIdx, flags: flagsByte })
+            }).then(r => r.json());
+            sendOk = r.status === 'success';
+          } catch (e) {
+            sendOk = false;
+          }
+
+          if (!sendOk) {
+            statusEl.className   = 'save-status error';
+            statusEl.textContent = channelChanged ? '✗ Channel change failed' : '✗ Update failed';
+            btn.disabled = false;
+            return;
+          }
+
+          showToast(`Command sent — meter ${channelChanged ? `${channel}→${newChannel}` : channel} is offline, will apply once it reconnects`, 'success');
         }
 
         if (channelChanged) {
@@ -723,19 +946,20 @@
             name,
             image
           };
-          const prevData = activeMeters.get(channel) || {};
-          activeMeters.set(newChannel, { ...prevData, powerSave });
-          activeMeters.delete(channel);
+          if (!canVerify) {
+            // No confirmed telemetry yet — carry the requested values over
+            // so the rebuilt block reflects what we just asked for.
+            const carried = activeMeters.get(channel) || {};
+            activeMeters.set(newChannel, { ...carried, fpsIdx, powerSave });
+            activeMeters.delete(channel);
+          }
           rebuildBlock(channel, newChannel);
           return;
         }
       }
 
-      btn.disabled         = true;
       statusEl.className   = 'save-status';
       statusEl.textContent = 'Saving…';
-
-      if (!allSettings.meters)          allSettings.meters          = {};
       if (!allSettings.meters[channel]) allSettings.meters[channel] = {};
 
       allSettings.meters[channel].name  = name;
