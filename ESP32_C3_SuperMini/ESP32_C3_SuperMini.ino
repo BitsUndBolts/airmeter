@@ -13,8 +13,8 @@
 // Pin Map:
 //   GPIO 8  — Onboard LED  (LOW = ON, HIGH = OFF on most ESP32-C3 boards)
 //   GPIO 9  — BOOT button  (INPUT_PULLUP, active LOW)
-//   GPIO 20 — HC-12 TXD → ESP32 UART1 RX
-//   GPIO 21 — ESP32 UART1 TX → HC-12 RXD
+//   GPIO 20 — Receiving:   HC-12 TXD        → ESP32 UART1 RX
+//   GPIO 21 — Sending:     ESP32 UART1 TX   → HC-12 RXD
 // =============================================================================
 #include <WiFi.h>
 #include <Update.h>
