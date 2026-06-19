@@ -33,8 +33,9 @@
 // STORED METER DATA SINCE BOOT - REFRESHES WITH EACH PACKET ARRIVAL
 // =============================================================================
 struct MeterData {
-    unsigned long lastSeen = 0;
-    uint8_t lastFpsIndex   = 0;
+    unsigned long lastSeen    = 0;
+    uint8_t lastFpsIndex      = 0;
+    uint8_t lastPowerSave     = 0;  // 1 = power conservation enabled, 0 = disabled
 };
 
 std::map<uint8_t, MeterData> meterRegistry;
@@ -153,7 +154,7 @@ HardwareSerial HC12(1); // UART1
 
 static const uint8_t PREAMBLE_1  = 0x55;
 static const uint8_t PREAMBLE_2  = 0xAA;
-static const uint8_t PAYLOAD_LEN = 0x09;
+static const uint8_t PAYLOAD_LEN = 0x09;  // 9 payload bytes received from RP2040
 
 // =============================================================================
 // NETWORK & SERVER OBJECTS
@@ -274,8 +275,13 @@ void decodePacket(const uint8_t* payload) {
   const bool buzzer = (com[0] & 0x8000) != 0;
   int buzzer_status = buzzer ? 1 : 0;
 
-  // Strip buzzer bit — only SEG0-SEG14 (bits 0-14) carry valid LCD data
+  // Extract power-conservation flag from bit 15 of COM1 BEFORE masking
+  const bool powerSave = (com[1] & 0x8000) != 0;
+  int power_save_status = powerSave ? 1 : 0;
+
+  // Strip injected status bits — only SEG0-SEG14 (bits 0-14) carry valid LCD data
   com[0] &= 0x7FFF;
+  com[1] &= 0x7FFF;
 
   // Build 60-character bit string: COM0[bit0..14] + COM1 + COM2 + COM3
   char bitString[61]; 
@@ -286,17 +292,18 @@ void decodePacket(const uint8_t* payload) {
     }
   }
 
-  // Track per-meter last-seen timestamp and fps_index
-  meterRegistry[channel].lastSeen     = millis();
-  meterRegistry[channel].lastFpsIndex = fps_index;
+  // Track per-meter last-seen timestamp, fps_index, and power conservation flag
+  meterRegistry[channel].lastSeen      = millis();
+  meterRegistry[channel].lastFpsIndex  = fps_index;
+  meterRegistry[channel].lastPowerSave = power_save_status;
 
   // Broadcast over SSE — CHANNEL is now encoded in the event name
   // (meter-data-<channel>) instead of the payload, since each stream
   // only ever carries one meter's data.
-  char jsonPayload[120];
+  char jsonPayload[140];
   snprintf(jsonPayload, sizeof(jsonPayload),
-           "{\"lcd\":\"%s\",\"buzzer\":%d,\"fpsIdx\":%u}", 
-           bitString, buzzer_status, fps_index);
+           "{\"lcd\":\"%s\",\"buzzer\":%d,\"fpsIdx\":%u,\"powerSave\":%d}",
+           bitString, buzzer_status, fps_index, power_save_status);
 
   // Separate SSE event names per CHANNEL
   char eventName[16];
@@ -316,8 +323,8 @@ void decodePacket(const uint8_t* payload) {
     if (c < 3) visual += '\n';
   }
 
-  Serial.printf("[HC12] Packet #%lu | SEQ:%u | Channel:%u | FPS Idx:%u | Buzzer:%d\n%s\n",
-                rx_packet_count, rx_seq, channel, fps_index, buzzer_status, visual.c_str());
+  Serial.printf("[HC12] Packet #%lu | SEQ:%u | Channel:%u | FPS Idx:%u | Buzzer:%d | PowerSave:%d\n%s\n",
+                rx_packet_count, rx_seq, channel, fps_index, buzzer_status, power_save_status, visual.c_str());
 #endif
 }
 
@@ -590,9 +597,10 @@ void setupWebServer() {
     
     for (auto const& kv : meterRegistry) {
       JsonObject m = meters.add<JsonObject>();
-      m["channel"] = kv.first;
-      m["seen"]    = (long)((now - kv.second.lastSeen) / 1000);
-      m["fpsIdx"]  = kv.second.lastFpsIndex;
+      m["channel"]   = kv.first;
+      m["seen"]      = (long)((now - kv.second.lastSeen) / 1000);
+      m["fpsIdx"]    = kv.second.lastFpsIndex;
+      m["powerSave"] = kv.second.lastPowerSave;
     }
 
     if (littlefs_available) {
@@ -858,7 +866,7 @@ void setupWebServer() {
     pendingReboot = true;
   });
 
-  // ── API: Meter Update (change channel + set fps index, forwards config to RP2040) ────
+  // ── API: Meter Update (change channel + set fps index + set flags, forwards config to RP2040) ────
   server.on("/api/meter/update", HTTP_POST, [](AsyncWebServerRequest* request) {}, NULL,
     [](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
       JsonDocument doc;
@@ -877,6 +885,11 @@ void setupWebServer() {
       const uint8_t oldChannel  = doc["oldChannel"].as<uint8_t>();
       const uint8_t newChannel  = doc["newChannel"].as<uint8_t>();
       const uint8_t fpsIdx = doc["fpsIdx"].as<uint8_t>();
+
+      // FLAGS_BYTE — full byte forwarded to the RP2040 and persisted there.
+      // Bit 0 = power conservation enable. Bits 7-1 are reserved for future
+      // use; callers that omit the field default to 0x00 (all flags off).
+      const uint8_t flagsByte = doc["flags"].is<uint8_t>() ? doc["flags"].as<uint8_t>() : 0x00;
 
       // 1. Rename in settings: load, move key, save
       String raw = loadSettings();
@@ -914,18 +927,21 @@ void setupWebServer() {
         }
       }
 
-      // Build the 6-byte config packet
-      uint8_t tx[6];
-      tx[0] = 0xAA;                              // Preamble 1 (flipped for ESP→RP direction)
-      tx[1] = 0x55;                              // Preamble 2
-      tx[2] = 0x02;                              // Payload length
-      tx[3] = oldChannel;                             // Target: who should act on this
-      tx[4] = ((fpsIdx & 0x07) << 5) | (newChannel & 0x1F);  // DATA_BYTE: fpsIdx|newChannel
+      // Build the 7-byte config packet
+      // [ 0xAA ][ 0x55 ][ 0x03 ][ CHANNEL ][ DATA_BYTE ][ FLAGS_BYTE ][ CRC8 ]
+      uint8_t tx[7];
+      tx[0] = 0xAA;                                            // Preamble 1 (flipped for ESP→RP direction)
+      tx[1] = 0x55;                                            // Preamble 2
+      tx[2] = 0x03;                                            // Payload length (3 bytes)
+      tx[3] = oldChannel;                                      // Target: who should act on this
+      tx[4] = ((fpsIdx & 0x07) << 5) | (newChannel & 0x1F);  // DATA_BYTE: fpsIdx | newChannel
+      tx[5] = flagsByte;                                       // FLAGS_BYTE: bit0=power conservation, bits7-1=reserved
 
-      uint8_t crc_input[3] = { tx[2], tx[3], tx[4] };
-      tx[5] = calculate_crc8(crc_input, 3);
+      // CRC covers LEN + CHANNEL + DATA_BYTE + FLAGS_BYTE (4 bytes)
+      uint8_t crc_input[4] = { tx[2], tx[3], tx[4], tx[5] };
+      tx[6] = calculate_crc8(crc_input, 4);
 
-      HC12.write(tx, 6);
+      HC12.write(tx, 7);
 
       request->send(200, "application/json", "{\"status\":\"success\"}");
     }

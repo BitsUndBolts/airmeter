@@ -258,6 +258,66 @@
     .save-status.saved  { color: var(--green); }
     .save-status.error  { color: var(--red); }
 
+    /* ── TOGGLE CHECKBOX ── */
+    .ctoggle {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      gap: 0.8em;
+    }
+
+    .ctoggle-track {
+      position: relative;
+      width: 2.8em;
+      height: 1.6em;
+      flex-shrink: 0;
+      cursor: pointer;
+    }
+
+    .ctoggle-track input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+      position: absolute;
+    }
+
+    .ctoggle-rail {
+      position: absolute;
+      inset: 0;
+      border-radius: 1em;
+      background: var(--panel-2);
+      border: 1px solid var(--border-bright);
+      transition: background 0.2s, border-color 0.2s;
+    }
+
+    .ctoggle-track input:checked ~ .ctoggle-rail {
+      background: var(--accent-dim);
+      border-color: var(--accent);
+    }
+
+    .ctoggle-knob {
+      position: absolute;
+      top: 0.2em;
+      left: 0.2em;
+      width: 1.1em;
+      height: 1.1em;
+      border-radius: 50%;
+      background: var(--text-3);
+      transition: transform 0.2s, background 0.2s;
+    }
+
+    .ctoggle-track input:checked ~ .ctoggle-rail .ctoggle-knob {
+      transform: translateX(1.2em);
+      background: var(--accent);
+    }
+
+    .ctoggle-desc {
+      font-family: var(--mono);
+      font-size: 0.95em;
+      color: var(--text-3);
+      letter-spacing: 0.04em;
+    }
+
     /* ── FOOTER NOTE ── */
     .footer-note {
       font-family: var(--mono);
@@ -498,12 +558,37 @@
       cstepperSetVal(wrapper, val, onchangeExpr);
     }
 
+    /* ═══════════════════════════════════════════════════════════
+       CUSTOM TOGGLE
+       ─────────────────────────────────────────────────────────
+       buildCtoggle(hiddenId, checked, onchangeExpr)
+         checked: boolean — initial state
+       ═══════════════════════════════════════════════════════════ */
+    function buildCtoggle(hiddenId, checked, onchangeExpr) {
+      return `<div class="ctoggle">
+        <input type="hidden" id="${hiddenId}" value="${checked ? 1 : 0}">
+        <label class="ctoggle-track">
+          <input type="checkbox" ${checked ? 'checked' : ''}
+                 onchange="ctoggleChange(this,'${onchangeExpr}')">
+          <span class="ctoggle-rail"><span class="ctoggle-knob"></span></span>
+        </label>
+        <span class="ctoggle-desc">Suppress duplicate transmissions when display is unchanged</span>
+      </div>`;
+    }
+
+    function ctoggleChange(checkbox, onchangeExpr) {
+      const hidden = checkbox.closest('.ctoggle').querySelector('input[type="hidden"]');
+      hidden.value = checkbox.checked ? 1 : 0;
+      if (onchangeExpr) eval(onchangeExpr);
+    }
+
     /* ── RENDER ONE METER BLOCK ── */
     function renderMeterBlock(channel, cfg) {
       const name   = cfg.name  || '';
       const image  = cfg.image || '';
       const meterData = activeMeters.get(channel);
-      const fpsIdx = meterData?.fpsIdx ?? 2; // default index 2 = 3 Hz
+      const fpsIdx    = meterData?.fpsIdx    ?? 2; // default index 2 = 3 Hz
+      const powerSave = meterData?.powerSave ?? 0; // default: off
       const isActive = (meterData !== undefined && meterData.seen < 5);
 
       const displayName = name || 'UNKNOWN';
@@ -562,6 +647,10 @@
             <span class="field-label">Refresh</span>
             ${buildCselect(`fps-${channel}`, fpsOpts, fpsIdx, `onFieldChange(${channel})`)}
           </div>
+          <div class="field-row">
+            <span class="field-label">Power Save</span>
+            ${buildCtoggle(`powerSave-${channel}`, !!powerSave, `onFieldChange(${channel})`)}
+          </div>
         </div>
         <div class="meter-block-footer">
           <span class="save-status" id="status-${channel}"></span>
@@ -607,15 +696,18 @@
       const image    = $(`image-${channel}`).value;
       const newChannel = parseInt($(`newChannel-${channel}`).value, 10);
       const fpsIdx     = parseInt($(`fps-${channel}`).value, 10);
+      const powerSave  = parseInt($(`powerSave-${channel}`).value, 10); // 0 or 1
+      const flagsByte  = powerSave & 0x01; // bit 0 = power conservation; bits 7-1 reserved
 
       const channelChanged = newChannel !== channel;
       const fpsChanged     = (activeMeters.get(channel)?.fpsIdx ?? -1) !== fpsIdx;
+      const flagsChanged   = (activeMeters.get(channel)?.powerSave ?? 0) !== powerSave;
 
-      if (channelChanged || fpsChanged) {
+      if (channelChanged || fpsChanged || flagsChanged) {
         const r = await fetch('/api/meter/update', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ oldChannel: channel, newChannel: channelChanged ? newChannel : channel, fpsIdx })
+          body: JSON.stringify({ oldChannel: channel, newChannel: channelChanged ? newChannel : channel, fpsIdx, flags: flagsByte })
         }).then(r => r.json());
 
         if (r.status !== 'success') {
@@ -631,7 +723,8 @@
             name,
             image
           };
-          activeMeters.set(newChannel, { ...activeMeters.get(channel) });
+          const prevData = activeMeters.get(channel) || {};
+          activeMeters.set(newChannel, { ...prevData, powerSave });
           activeMeters.delete(channel);
           rebuildBlock(channel, newChannel);
           return;

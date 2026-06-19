@@ -54,17 +54,18 @@
 //   [ SEQ  ]                  — rolling sequence number (0x00–0xFF)
 //   [ META ]                  — bits 7-5: fps index (0-7), bits 4-0: meter ID (0-31)
 //   [ COM0_HI ][ COM0_LO ]    — 15 SEG bits for COM0 row (bit15 = buzzer)
-//   [ COM1_HI ][ COM1_LO ]    — 15 SEG bits for COM1 row
+//   [ COM1_HI ][ COM1_LO ]    — 15 SEG bits for COM1 row (bit15 = power conservation flag)
 //   [ COM2_HI ][ COM2_LO ]    — 15 SEG bits for COM2 row
 //   [ COM3_HI ][ COM3_LO ]    — 15 SEG bits for COM3 row
 //   [ CRC8  ]                 — CRC-8 (Dallas/Maxim) over bytes 2-12 (LEN through COM3_LO)
 //
 // Transmission Protocol - Receiving:
 //   [ 0xAA ][ 0x55 ]          — 2-byte preamble (sync marker)
-//   [ 0x02 ]                  — payload length (2 bytes); acts as implicit format tag
+//   [ 0x03 ]                  — payload length (3 bytes); acts as implicit format tag
 //   [ CHANNEL ]               — Identifier for the RP2040 if this packet is meant for it
-//   [ DATA_BYTE ]             — bits 7-5: fps index (0-7), bits 4-0: meter ID (0-31). This is for update purposes
-//   [ CRC8  ]                 — CRC-8 (Dallas/Maxim) over bytes 2-4 (LEN through SHARED_BYTE)
+//   [ DATA_BYTE ]             — bits 7-5: fps index (0-7), bits 4-0: new channel (0-31)
+//   [ FLAGS_BYTE ]            — bit 0: power conservation enable (1=on, 0=off); bits 7-1: reserved
+//   [ CRC8  ]                 — CRC-8 (Dallas/Maxim) over bytes 2-5 (LEN through FLAGS_BYTE)
 //
 // Hardware:
 //   MCU         : RP2040 Zero
@@ -138,7 +139,7 @@ const int HC12_BAUD   = 9600;
 const uint8_t PREAMBLE_1  = 0x55;
 const uint8_t PREAMBLE_2  = 0xAA;
 const uint8_t PAYLOAD_LEN_TX = 0x09;  // 9 payload bytes: 1 META + 4 COM rows × 2 bytes
-const uint8_t PAYLOAD_LEN_RX = 0x02;  // 2 payload bytes: CHANNEL + DATA_BYTE
+const uint8_t PAYLOAD_LEN_RX = 0x03;  // 3 payload bytes: CHANNEL + DATA_BYTE + FLAGS_BYTE
 
 // =============================================================================
 // PACKET RECEIVE STATE MACHINE
@@ -218,10 +219,47 @@ const int EEPROM_ADDR_FRAME_INDEX = 0;
 const int EEPROM_MAGIC_ADDR       = 1;    // Address used to detect initialised EEPROM
 const uint8_t EEPROM_MAGIC_VALUE  = 0xA5; // Sentinel — if present, EEPROM data is valid
 const int EEPROM_ADDR_CHANNEL     = 2;
+const int EEPROM_ADDR_FLAGS       = 3;    // Full FLAGS_BYTE (bit 0 = power conservation)
 
 // Active frame rate index and interval. Set during setup and updated on button press.
 int           frameRateIndex    = FRAME_RATE_DEFAULT_INDEX;
 unsigned long txIntervalMs      = FRAME_INTERVALS[FRAME_RATE_DEFAULT_INDEX];
+
+// =============================================================================
+// SECTION 3b — POWER CONSERVATION
+// =============================================================================
+//
+// When enabled, the RP2040 suppresses transmission of any packet whose LCD
+// payload (display_matrix + buzzer bit) is bit-for-bit identical to the
+// payload sent in the immediately preceding packet. This eliminates redundant
+// RF traffic when the meter display is stable, saving power on both ends.
+//
+// The flag is stored as a full byte in EEPROM (EEPROM_ADDR_FLAGS, bit 0),
+// leaving bits 7-1 available for future feature flags without a protocol
+// change. The complete FLAGS_BYTE is echoed back to the ESP32 in each
+// transmitted packet by setting bit 15 of the COM1 word, allowing the UI
+// to reflect the currently active flag state.
+//
+// Important: suppression is based on the *outgoing* TX snapshot (after
+// buzzer injection), not the raw display_matrix, so a buzzer state change
+// alone is sufficient to force a packet even if the LCD digits are unchanged.
+
+// FLAGS_BYTE bit mask for power conservation
+const uint8_t FLAG_POWER_CONSERVATION = 0x01;  // bit 0
+
+// Runtime FLAGS_BYTE — loaded from EEPROM on boot. Only bit 0 is currently
+// used; the remaining 7 bits are preserved and echoed back to the ESP32 for
+// forward compatibility.
+uint8_t flags_byte = 0x00;
+
+// Convenience accessor — true when power conservation is active.
+inline bool powerConservationEnabled() { return (flags_byte & FLAG_POWER_CONSERVATION) != 0; }
+
+// Last TX snapshot used for power-conservation suppression.
+// Holds the full tx_matrix (including injected buzzer / flag bits) from the
+// most recently transmitted packet. Initialised to all-zeros so the very
+// first packet is always sent regardless of display content.
+uint16_t last_tx_matrix[4] = { 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF }; // force first send
 
 
 // =============================================================================
@@ -397,7 +435,7 @@ uint8_t calculate_crc8(uint8_t *data, uint8_t len) {
   return crc;
 }
 
-void applyNewConfiguration(uint8_t new_channel, uint8_t new_fps_idx) {
+void applyNewConfiguration(uint8_t new_channel, uint8_t new_fps_idx, uint8_t new_flags) {
   bool changed = false;
 
   if (new_channel != CHANNEL && new_channel <= 31) {
@@ -410,6 +448,12 @@ void applyNewConfiguration(uint8_t new_channel, uint8_t new_fps_idx) {
     frameRateIndex = new_fps_idx;
     txIntervalMs   = FRAME_INTERVALS[frameRateIndex];
     EEPROM.write(EEPROM_ADDR_FRAME_INDEX, frameRateIndex);
+    changed = true;
+  }
+
+  if (new_flags != flags_byte) {
+    flags_byte = new_flags;
+    EEPROM.write(EEPROM_ADDR_FLAGS, flags_byte);
     changed = true;
   }
 
@@ -429,12 +473,14 @@ void decodeConfigPacket(const uint8_t* payload) {
   const uint8_t frequency   = (shared_byte >> 5) & 0x07;
   const uint8_t new_channel = shared_byte & 0x1F;
 
+  // Full FLAGS_BYTE — bit 0 is power conservation, bits 7-1 reserved for future use
+  const uint8_t new_flags = payload[2];
+
   // Print debug confirmation over USB serial
-  Serial.printf("[ESP32 -> RP2040] Current Channel: %u | New Channel: %u | Freq Index: %u\n", 
-                current_channel, new_channel, frequency);
+  Serial.printf("[ESP32 -> RP2040] Current Channel: %u | New Channel: %u | Freq Index: %u | Flags: 0x%02X\n",
+                current_channel, new_channel, frequency, new_flags);
 
-
-  applyNewConfiguration(new_channel, frequency);
+  applyNewConfiguration(new_channel, frequency, new_flags);
 }
 
 void processIncomingESP32() {
@@ -478,12 +524,12 @@ void processIncomingESP32() {
         break;
 
       case WAIT_CRC: {
-        // CRC covers LEN + PAYLOAD (1 byte length + 2 bytes data = 3 bytes total)
-        uint8_t crc_input[3];
+        // CRC covers LEN + PAYLOAD (1 byte length + 3 bytes data = 4 bytes total)
+        uint8_t crc_input[4];
         crc_input[0] = rx_len;
         memcpy(&crc_input[1], rx_payload, rx_len);
 
-        const uint8_t expected_crc = calculate_crc8(crc_input, 3);
+        const uint8_t expected_crc = calculate_crc8(crc_input, 4);
 
         if (b == expected_crc) {
           decodeConfigPacket(rx_payload);
@@ -527,12 +573,14 @@ void setup() {
   if (EEPROM.read(EEPROM_MAGIC_ADDR) == EEPROM_MAGIC_VALUE) {
     uint8_t savedFpsIdx = EEPROM.read(EEPROM_ADDR_FRAME_INDEX);
     uint8_t savedChannel = EEPROM.read(EEPROM_ADDR_CHANNEL);
+    uint8_t savedFlags   = EEPROM.read(EEPROM_ADDR_FLAGS);
     
     if (savedFpsIdx < FRAME_RATE_COUNT) {
       frameRateIndex = savedFpsIdx;
       txIntervalMs   = FRAME_INTERVALS[frameRateIndex];
     }
     if (savedChannel <= 31) CHANNEL = savedChannel;
+    flags_byte = savedFlags;  // Accept the full byte; all bits preserved
   }
 
   // Seed activity timer so the sleep timeout does not trigger immediately
@@ -673,9 +721,22 @@ void loop() {
   // PHASE 4: Transmit packet every txIntervalMs (active mode only)
   //
   // Snapshot the current display matrix into a local TX buffer so the buzzer
-  // bit can be packed into the reserved bit without modifying live state.
-  // Build and send a 13-byte framed packet over UART to the HC-12 module.
-  // Transmission is skipped entirely while the system is in sleep mode.
+  // bit and power-conservation flag can be packed into reserved bits without
+  // modifying live state. Build and send a 14-byte framed packet over UART
+  // to the HC-12 module. Transmission is skipped entirely while the system
+  // is in sleep mode.
+  //
+  // Power conservation suppression:
+  //   When power_conservation is enabled, the snapshot is compared against
+  //   the snapshot transmitted in the immediately preceding packet (stored
+  //   in last_tx_matrix, *after* all bit-packing). If they are identical,
+  //   the packet is not sent, saving RF bandwidth when the meter display is
+  //   stable. The comparison includes the buzzer bit (packed into COM0 bit15)
+  //   and the power-conservation flag itself (COM1 bit15), so any change to
+  //   either forces an immediate retransmit.
+  //   The timer is still reset on a suppressed tick so the cadence is
+  //   maintained: when the display eventually changes, the next tick fires
+  //   at the configured interval rather than immediately.
   // ---------------------------------------------------------------------------
   if (!systemSleeping && (currentTime - lastTxTime >= txIntervalMs)) {
     lastTxTime = currentTime;
@@ -687,38 +748,52 @@ void loop() {
     // Pack buzzer state into bit 15 of COM0 word (spare bit, not used by display)
     if (buzzer_active) tx_matrix[0] |= (1 << 15);
 
-    // Build 14-byte packet
-    uint8_t tx_packet[14];
+    // Pack power-conservation flag into bit 15 of COM1 word (spare bit).
+    // The ESP32 extracts this to reflect the active flag state in the UI.
+    if (powerConservationEnabled()) tx_matrix[1] |= (1 << 15);
 
-    tx_packet[0]  = PREAMBLE_1;                        // Sync byte 1
-    tx_packet[1]  = PREAMBLE_2;                        // Sync byte 2
-    tx_packet[2]  = PAYLOAD_LEN_TX;                    // Payload length
-    tx_packet[3]  = sequence_number++;                 // Rolling sequence number
+    // Power conservation: suppress if the payload is unchanged since last TX
+    bool payloadChanged = (memcmp(tx_matrix, last_tx_matrix, sizeof(tx_matrix)) != 0);
 
-    // META byte: upper 3 bits = current fps index, lower 5 bits = CHANNEL.
-    // Lets the receiver display the active frame rate and route packets from
-    // multiple meters to separate UI panels without any extra protocol overhead.
-    tx_packet[4]  = makeMetaByte(frameRateIndex, CHANNEL);    // [F2 F1 F0 | M4 M3 M2 M1 M0]
+    if (powerConservationEnabled() && !payloadChanged) {
+      // Nothing changed — skip transmission this tick
+    } else {
+      // Build 14-byte packet
+      uint8_t tx_packet[14];
 
-    tx_packet[5]  = (tx_matrix[0] >> 8) & 0xFF;       // COM0 high byte (bit15 = buzzer)
-    tx_packet[6]  =  tx_matrix[0]       & 0xFF;        // COM0 low byte
-    tx_packet[7]  = (tx_matrix[1] >> 8) & 0xFF;        // COM1 high byte
-    tx_packet[8]  =  tx_matrix[1]       & 0xFF;        // COM1 low byte
-    tx_packet[9]  = (tx_matrix[2] >> 8) & 0xFF;        // COM2 high byte
-    tx_packet[10] =  tx_matrix[2]       & 0xFF;        // COM2 low byte
-    tx_packet[11] = (tx_matrix[3] >> 8) & 0xFF;        // COM3 high byte
-    tx_packet[12] =  tx_matrix[3]       & 0xFF;        // COM3 low byte
+      tx_packet[0]  = PREAMBLE_1;                        // Sync byte 1
+      tx_packet[1]  = PREAMBLE_2;                        // Sync byte 2
+      tx_packet[2]  = PAYLOAD_LEN_TX;                    // Payload length
+      tx_packet[3]  = sequence_number++;                 // Rolling sequence number
 
-    // CRC-8 over 11 bytes: LEN + SEQ + META + 8 COM bytes (indices 2-12)
-    tx_packet[13] = calculate_crc8(&tx_packet[2], 11);
+      // META byte: upper 3 bits = current fps index, lower 5 bits = CHANNEL.
+      // Lets the receiver display the active frame rate and route packets from
+      // multiple meters to separate UI panels without any extra protocol overhead.
+      tx_packet[4]  = makeMetaByte(frameRateIndex, CHANNEL);    // [F2 F1 F0 | M4 M3 M2 M1 M0]
 
-    Serial1.write(tx_packet, 14);
+      tx_packet[5]  = (tx_matrix[0] >> 8) & 0xFF;       // COM0 high byte (bit15 = buzzer)
+      tx_packet[6]  =  tx_matrix[0]       & 0xFF;        // COM0 low byte
+      tx_packet[7]  = (tx_matrix[1] >> 8) & 0xFF;        // COM1 high byte (bit15 = power conservation flag)
+      tx_packet[8]  =  tx_matrix[1]       & 0xFF;        // COM1 low byte
+      tx_packet[9]  = (tx_matrix[2] >> 8) & 0xFF;        // COM2 high byte
+      tx_packet[10] =  tx_matrix[2]       & 0xFF;        // COM2 low byte
+      tx_packet[11] = (tx_matrix[3] >> 8) & 0xFF;        // COM3 high byte
+      tx_packet[12] =  tx_matrix[3]       & 0xFF;        // COM3 low byte
 
-    // Heartbeat: flash LED for the first LED_HEARTBEAT transmissions
-    if (led_active) {
-      flashLED(1, 180, 0, 0);
-      heartbeat_count++;
-      if (heartbeat_count >= LED_HEARTBEAT) led_active = false;
+      // CRC-8 over 11 bytes: LEN + SEQ + META + 8 COM bytes (indices 2-12)
+      tx_packet[13] = calculate_crc8(&tx_packet[2], 11);
+
+      Serial1.write(tx_packet, 14);
+
+      // Record this snapshot for next-tick suppression comparison
+      memcpy(last_tx_matrix, tx_matrix, sizeof(last_tx_matrix));
+
+      // Heartbeat: flash LED for the first LED_HEARTBEAT transmissions
+      if (led_active) {
+        flashLED(1, 180, 0, 0);
+        heartbeat_count++;
+        if (heartbeat_count >= LED_HEARTBEAT) led_active = false;
+      }
     }
   }
 }
