@@ -91,73 +91,6 @@ static MeterUpdateTicket activeTicket;
 static uint32_t          ticketIdCounter = 1; // monotonic; never 0 (0 = "no ticket")
 
 
-//
-// When a CHANNEL is changed via /api/meter/update, packets already in flight
-// (or sitting in the RP2040's UART buffer) may still arrive tagged with the
-// OLD channel for a short while after the rename command goes out. Without this
-// guard, decodePacket() would treat that straggler as a brand-new meter and
-// silently re-create meterRegistry[oldChannel].
-//
-// We track a short list of "recently retired" Channels with an expiry timestamp.
-// Packets for a Channel still in this list are dropped (not re-registered)
-// until the cool-off window elapses — after which the Channel is open again for
-// genuine re-registration (e.g. a different physical meter later reusing
-// that Channel, or wrap-around re-use).
-// =============================================================================
-
-struct ChannelCooloff {
-  uint8_t        channel   = 0xFF;  // 0xFF == slot unused
-  unsigned long  expiresAt = 0;
-};
-
-static const uint8_t COOLOFF_SLOTS = 8; // generous headroom for rapid re-renames
-static ChannelCooloff channelCooloffList[COOLOFF_SLOTS];
-
-static const unsigned long CHANNEL_COOLOFF_MS = 5000; // 5s window
-
-// Mark `channel` as retired for CHANNEL_COOLOFF_MS. If the list is full, overwrite the
-// slot with the soonest expiry (oldest/least relevant entry).
-void startChannelCooloff(uint8_t channel) {
-  const unsigned long now = millis();
-  int freeSlot = -1;
-  int oldestSlot = 0;
-
-  for (int i = 0; i < COOLOFF_SLOTS; i++) {
-    if (channelCooloffList[i].channel == channel) {
-      // Already cooling off (e.g. re-renamed again quickly) — just refresh it.
-      channelCooloffList[i].expiresAt = now + CHANNEL_COOLOFF_MS;
-      return;
-    }
-    if (channelCooloffList[i].channel == 0xFF && freeSlot == -1) {
-      freeSlot = i;
-    }
-    if (channelCooloffList[i].expiresAt < channelCooloffList[oldestSlot].expiresAt) {
-      oldestSlot = i;
-    }
-  }
-
-  int slot = (freeSlot != -1) ? freeSlot : oldestSlot;
-  channelCooloffList[slot].channel        = channel;
-  channelCooloffList[slot].expiresAt = now + CHANNEL_COOLOFF_MS;
-}
-
-// Returns true if `channel` is currently within its cool-off window.
-// Lazily expires entries it walks past, so no separate cleanup task is needed.
-bool isChannelCoolingOff(uint8_t channel) {
-  const unsigned long now = millis();
-  for (int i = 0; i < COOLOFF_SLOTS; i++) {
-    if (channelCooloffList[i].channel == channel) {
-      if ((long)(channelCooloffList[i].expiresAt - now) > 0) {
-        return true;
-      }
-      // Expired — free the slot.
-      channelCooloffList[i].channel = 0xFF;
-      return false;
-    }
-  }
-  return false;
-}
-
 // =============================================================================
 // FIRMWARE METADATA
 // =============================================================================
@@ -313,7 +246,6 @@ void sendMeterUpdateRF(uint8_t oldCh, uint8_t newCh, uint8_t fpsIdx, uint8_t fla
 // Commits a confirmed channel rename on the ESP32 side:
 //   1. Rename settings key on flash
 //   2. Migrate runtime registry entry
-//   3. Start cooloff on old channel; clear cooloff on new channel
 // Called from decodePacket() the moment a confirming packet arrives.
 // Only called when oldChannel != newChannel.
 void commitChannelChange(uint8_t oldChannel, uint8_t newChannel) {
@@ -334,15 +266,6 @@ void commitChannelChange(uint8_t oldChannel, uint8_t newChannel) {
   if (meterRegistry[oldChannel].registered) {
     meterRegistry[newChannel] = meterRegistry[oldChannel];
     meterRegistry[oldChannel] = MeterData{};
-  }
-
-  // 3. Cooloff management
-  startChannelCooloff(oldChannel);
-  for (int i = 0; i < COOLOFF_SLOTS; i++) {
-    if (channelCooloffList[i].channel == newChannel) {
-      channelCooloffList[i].channel = 0xFF;
-      break;
-    }
   }
 
   Serial.printf("[TICKET] Channel %u → %u committed\n", oldChannel, newChannel);
@@ -390,16 +313,6 @@ void decodePacket(const uint8_t* payload) {
   const uint8_t meta_byte = payload[0];
   const uint8_t fps_index = (meta_byte >> 5) & 0x07;
   const uint8_t channel  = meta_byte & 0x1F;
-
-  // This Channel was just freed — almost certainly a straggler packet
-  // sent under the old channel before the RP2040 applied the change. Drop it
-  // silently rather than re-registering meterRegistry[channel].
-  if (isChannelCoolingOff(channel)) {
-#ifdef DEBUG_LCD_VISUAL
-    Serial.printf("[COOLOFF] Dropped packet for retired channel %u\n", channel);
-#endif
-    return;
-  }
 
   // Reconstruct the four 16-bit COM rows (skipping payload[0])
   uint16_t com[4];
