@@ -45,7 +45,52 @@ struct MeterData {
 static MeterData meterRegistry[32];
 
 // =============================================================================
-// CHANNEL-CHANGE COOL-OFF
+// METER UPDATE TICKET
+//
+// A single in-RAM pending update slot. Only one config update is allowed at
+// a time — a new /api/meter/update call while a ticket is active replaces it.
+//
+// Lifecycle:
+//   EMPTY    — no pending update; /api/meter/status returns 503
+//   PENDING  — RF sent, waiting for confirming packet from RP2040
+//   SUCCESS  — confirming packet received and committed; /api/meter/status
+//              returns 200 once, then deletes the ticket (EMPTY again)
+//
+// Retry logic (inside tickMeterUpdate(), called every loop()):
+//   Every TICKET_RETRY_INTERVAL_MS the RF command is resent if no confirming
+//   packet has arrived. After TICKET_MAX_RETRIES resends without confirmation
+//   the ticket is deleted (EMPTY) and the next status poll returns 503.
+// =============================================================================
+
+static const unsigned long TICKET_RETRY_INTERVAL_MS = 2000; // 2s per attempt
+static const uint8_t       TICKET_MAX_RETRIES        = 3;   // 3 attempts → ~6s total
+
+enum TicketStatus : uint8_t {
+  TICKET_EMPTY,
+  TICKET_PENDING,
+  TICKET_SUCCESS
+};
+
+struct MeterUpdateTicket {
+  TicketStatus status      = TICKET_EMPTY;
+  uint32_t     id          = 0;        // opaque ticket ID returned to the UI
+  uint8_t      oldChannel  = 0;
+  uint8_t      newChannel  = 0;
+  uint8_t      fpsIdx      = 0;
+  uint8_t      flagsByte   = 0;
+  uint8_t      powerSave   = 0;        // expected powerSave value (bit 0 of flagsByte)
+  uint8_t      retryCount  = 0;
+  unsigned long nextRetryAt = 0;       // millis() timestamp for next RF resend
+  // Confirmed values stored here on success, ready for the UI to consume
+  uint8_t      confirmedChannel  = 0;
+  uint8_t      confirmedFpsIdx   = 0;
+  uint8_t      confirmedPowerSave = 0;
+};
+
+static MeterUpdateTicket activeTicket;
+static uint32_t          ticketIdCounter = 1; // monotonic; never 0 (0 = "no ticket")
+
+
 //
 // When a CHANNEL is changed via /api/meter/update, packets already in flight
 // (or sitting in the RP2040's UART buffer) may still arrive tagged with the
@@ -227,6 +272,9 @@ uint8_t calculate_crc8(const uint8_t* data, uint8_t len);
 void    decodePacket(const uint8_t* payload);
 void    processHC12();
 String  getNetworksJSON();
+void    sendMeterUpdateRF(uint8_t oldCh, uint8_t newCh, uint8_t fpsIdx, uint8_t flagsByte);
+void    commitChannelChange(uint8_t oldChannel, uint8_t newChannel);
+void    tickMeterUpdate();
 
 // =============================================================================
 // CRC-8  (Dallas/Maxim — must match transmitter)
@@ -241,6 +289,91 @@ uint8_t calculate_crc8(const uint8_t* data, uint8_t len) {
     }
   }
   return crc;
+}
+
+// =============================================================================
+// METER UPDATE HELPERS
+// =============================================================================
+
+// Builds and sends the 7-byte RF config packet to the RP2040.
+// Called both from /api/meter/update (first send) and tickMeterUpdate() (retries).
+void sendMeterUpdateRF(uint8_t oldCh, uint8_t newCh, uint8_t fpsIdx, uint8_t flagsByte) {
+  uint8_t tx[7];
+  tx[0] = 0xAA;
+  tx[1] = 0x55;
+  tx[2] = 0x03;
+  tx[3] = oldCh;
+  tx[4] = ((fpsIdx & 0x07) << 5) | (newCh & 0x1F);
+  tx[5] = flagsByte;
+  uint8_t crc_input[4] = { tx[2], tx[3], tx[4], tx[5] };
+  tx[6] = calculate_crc8(crc_input, 4);
+  HC12.write(tx, 7);
+}
+
+// Commits a confirmed channel rename on the ESP32 side:
+//   1. Rename settings key on flash
+//   2. Migrate runtime registry entry
+//   3. Start cooloff on old channel; clear cooloff on new channel
+// Called from decodePacket() the moment a confirming packet arrives.
+// Only called when oldChannel != newChannel.
+void commitChannelChange(uint8_t oldChannel, uint8_t newChannel) {
+  // 1. Rename settings key on flash
+  String raw = loadSettings();
+  JsonDocument cfg;
+  deserializeJson(cfg, raw);
+  const String oldKey = String(oldChannel);
+  const String newKey = String(newChannel);
+  if (cfg["meters"][oldKey]) {
+    cfg["meters"][newKey] = cfg["meters"][oldKey];
+    cfg["meters"].remove(oldKey.c_str());
+    String out; serializeJson(cfg, out);
+    saveSettings(out.c_str());
+  }
+
+  // 2. Migrate runtime registry entry
+  if (meterRegistry[oldChannel].registered) {
+    meterRegistry[newChannel] = meterRegistry[oldChannel];
+    meterRegistry[oldChannel] = MeterData{};
+  }
+
+  // 3. Cooloff management
+  startChannelCooloff(oldChannel);
+  for (int i = 0; i < COOLOFF_SLOTS; i++) {
+    if (channelCooloffList[i].channel == newChannel) {
+      channelCooloffList[i].channel = 0xFF;
+      break;
+    }
+  }
+
+  Serial.printf("[TICKET] Channel %u → %u committed\n", oldChannel, newChannel);
+}
+
+// Called every loop() tick. Drives the retry cadence and expiry of the active
+// ticket. Resends the RF command every TICKET_RETRY_INTERVAL_MS. Deletes the
+// ticket (→ TICKET_EMPTY) after TICKET_MAX_RETRIES without confirmation, so
+// the next /api/meter/status poll returns 503 (not found = failed).
+void tickMeterUpdate() {
+  if (activeTicket.status != TICKET_PENDING) return;
+
+  const unsigned long now = millis();
+  if ((long)(now - activeTicket.nextRetryAt) < 0) return; // not yet time
+
+  if (activeTicket.retryCount >= TICKET_MAX_RETRIES) {
+    // All attempts exhausted — delete ticket; next status poll returns 503
+    Serial.printf("[TICKET] %u expired after %u retries — update failed\n",
+                  activeTicket.id, TICKET_MAX_RETRIES);
+    activeTicket.status = TICKET_EMPTY;
+    return;
+  }
+
+  activeTicket.retryCount++;
+  activeTicket.nextRetryAt = now + TICKET_RETRY_INTERVAL_MS;
+
+  Serial.printf("[TICKET] %u retry %u/%u — resending RF\n",
+                activeTicket.id, activeTicket.retryCount, TICKET_MAX_RETRIES);
+
+  sendMeterUpdateRF(activeTicket.oldChannel, activeTicket.newChannel,
+                    activeTicket.fpsIdx,     activeTicket.flagsByte);
 }
 
 // =============================================================================
@@ -301,6 +434,31 @@ void decodePacket(const uint8_t* payload) {
   meterRegistry[channel].lastFpsIndex  = fps_index;
   meterRegistry[channel].lastPowerSave = power_save_status;
   meterRegistry[channel].registered    = true;
+
+  // ── Ticket confirmation check ──────────────────────────────────────────────
+  // If there is a pending update ticket, check whether this packet is the
+  // confirmation we have been waiting for. A packet confirms delivery when:
+  //   - it arrives on the expected NEW channel
+  //   - fpsIdx and powerSave match what was requested
+  // On confirmation: commit any channel rename on flash, mark ticket SUCCESS,
+  // store the confirmed values for the UI to consume via /api/meter/status.
+  if (activeTicket.status == TICKET_PENDING &&
+      channel    == activeTicket.newChannel  &&
+      fps_index  == activeTicket.fpsIdx      &&
+      power_save_status == activeTicket.powerSave) {
+
+    if (activeTicket.oldChannel != activeTicket.newChannel) {
+      commitChannelChange(activeTicket.oldChannel, activeTicket.newChannel);
+    }
+
+    activeTicket.status              = TICKET_SUCCESS;
+    activeTicket.confirmedChannel    = channel;
+    activeTicket.confirmedFpsIdx     = fps_index;
+    activeTicket.confirmedPowerSave  = power_save_status;
+
+    Serial.printf("[TICKET] %u confirmed — channel %u fpsIdx %u powerSave %u\n",
+                  activeTicket.id, channel, fps_index, power_save_status);
+  }
 
   // Broadcast over SSE — CHANNEL is now encoded in the event name
   // (meter-data-<channel>) instead of the payload, since each stream
@@ -868,29 +1026,13 @@ void setupWebServer() {
   });
 
   // ── API: Meter Update ─────────────────────────────────────────────────────
-  // Sends an RF config command to the target RP2040 and, when the caller
-  // passes "commit":true, immediately migrates the ESP32-side state too
-  // (settings key rename + registry move + cooloff).
+  // Sends the RF config command to the target RP2040, creates a pending ticket,
+  // and returns 202 + the ticket ID immediately. The ESP32 backend drives all
+  // retry logic via tickMeterUpdate() in loop(). The UI polls
+  // /api/meter/status/<id> every second to learn the outcome.
   //
-  // Two-phase design — why commit is caller-controlled:
-  //
-  //   ONLINE meter (canVerify=true in the UI):
-  //     The UI's pushMeterUpdate() retry loop polls /api/system until the
-  //     RP2040 echoes back the new fpsIdx/powerSave, proving delivery.
-  //     Only then does the UI call this endpoint with "commit":true.
-  //     Committing here is safe because RF delivery is already confirmed.
-  //
-  //   OFFLINE meter (canVerify=false in the UI):
-  //     The RP2040 is not transmitting, so there is nothing to verify
-  //     against. The UI sends "commit":false — the RF command goes out
-  //     but ESP32 state is left unchanged (old channel key stays on flash,
-  //     meterRegistry slot keeps its old index). When the meter powers back
-  //     on it transmits on its old channel, the ESP32 sees it, and the UI
-  //     detects the mismatch via /api/system. The user (or a future
-  //     auto-detect flow) then calls /api/meter/commit to finalize.
-  //     Without this guard, committing while the meter is off would orphan
-  //     the old channel: the RP2040 wakes up transmitting on oldChannel,
-  //     but the ESP32 has already renamed that key — producing two entries.
+  // Only one ticket is active at a time. A new request while a ticket is
+  // pending replaces it (last writer wins — the old update is abandoned).
   server.on("/api/meter/update", HTTP_POST, [](AsyncWebServerRequest* request) {}, NULL,
     [](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
       JsonDocument doc;
@@ -910,145 +1052,78 @@ void setupWebServer() {
       const uint8_t oldChannel = doc["oldChannel"].as<uint8_t>();
       const uint8_t newChannel = doc["newChannel"].as<uint8_t>();
       const uint8_t fpsIdx     = doc["fpsIdx"].as<uint8_t>();
+      const uint8_t flagsByte  = doc["flags"].is<uint8_t>() ? doc["flags"].as<uint8_t>() : 0x00;
+      const uint8_t powerSave  = flagsByte & 0x01;
 
-      // FLAGS_BYTE — full byte forwarded to the RP2040 and persisted there.
-      // Bit 0 = power conservation enable. Bits 7-1 are reserved for future
-      // use; callers that omit the field default to 0x00 (all flags off).
-      const uint8_t flagsByte = doc["flags"].is<uint8_t>() ? doc["flags"].as<uint8_t>() : 0x00;
+      // Create (or replace) the active ticket
+      activeTicket.status      = TICKET_PENDING;
+      activeTicket.id          = ticketIdCounter++;
+      activeTicket.oldChannel  = oldChannel;
+      activeTicket.newChannel  = newChannel;
+      activeTicket.fpsIdx      = fpsIdx;
+      activeTicket.flagsByte   = flagsByte;
+      activeTicket.powerSave   = powerSave;
+      activeTicket.retryCount  = 0;
+      activeTicket.nextRetryAt = millis() + TICKET_RETRY_INTERVAL_MS;
 
-      // "commit":true  → caller has already verified RF delivery; migrate state now.
-      // "commit":false → offline/unverified send; leave ESP32 state untouched.
-      // Omitting the field defaults to false (safe).
-      const bool doCommit = doc["commit"].is<bool>() && doc["commit"].as<bool>();
+      // Send first RF attempt immediately
+      sendMeterUpdateRF(oldChannel, newChannel, fpsIdx, flagsByte);
 
-      // Build the 7-byte config packet
-      // [ 0xAA ][ 0x55 ][ 0x03 ][ CHANNEL ][ DATA_BYTE ][ FLAGS_BYTE ][ CRC8 ]
-      uint8_t tx[7];
-      tx[0] = 0xAA;                                            // Preamble 1 (flipped for ESP→RP direction)
-      tx[1] = 0x55;                                            // Preamble 2
-      tx[2] = 0x03;                                            // Payload length (3 bytes)
-      tx[3] = oldChannel;                                      // Target: who should act on this
-      tx[4] = ((fpsIdx & 0x07) << 5) | (newChannel & 0x1F);  // DATA_BYTE: fpsIdx | newChannel
-      tx[5] = flagsByte;                                       // FLAGS_BYTE: bit0=power conservation, bits7-1=reserved
+      Serial.printf("[TICKET] %u created — ch %u→%u fpsIdx %u flags 0x%02X\n",
+                    activeTicket.id, oldChannel, newChannel, fpsIdx, flagsByte);
 
-      // CRC covers LEN + CHANNEL + DATA_BYTE + FLAGS_BYTE (4 bytes)
-      uint8_t crc_input[4] = { tx[2], tx[3], tx[4], tx[5] };
-      tx[6] = calculate_crc8(crc_input, 4);
-
-      HC12.write(tx, 7);
-
-      if (doCommit && oldChannel != newChannel) {
-        // 1. Rename settings key on flash
-        String raw = loadSettings();
-        JsonDocument cfg;
-        deserializeJson(cfg, raw);
-
-        const String oldKey = String(oldChannel);
-        const String newKey = String(newChannel);
-        if (cfg["meters"][oldKey]) {
-          cfg["meters"][newKey] = cfg["meters"][oldKey];
-          cfg["meters"].remove(oldKey.c_str());
-          String out; serializeJson(cfg, out);
-          saveSettings(out.c_str());
-        }
-
-        // 2. Move runtime registry entry
-        if (meterRegistry[oldChannel].registered) {
-          meterRegistry[newChannel] = meterRegistry[oldChannel];
-          meterRegistry[oldChannel] = MeterData{};
-        }
-
-        // 3. Cool-off old channel so straggler packets are ignored
-        startChannelCooloff(oldChannel);
-
-        // Clear any cool-off on newChannel so its packets are accepted
-        for (int i = 0; i < COOLOFF_SLOTS; i++) {
-          if (channelCooloffList[i].channel == newChannel) {
-            channelCooloffList[i].channel = 0xFF;
-            break;
-          }
-        }
-
-        Serial.printf("[METER] Channel %u → %u committed (fpsIdx=%u flags=0x%02X)\n",
-                      oldChannel, newChannel, fpsIdx, flagsByte);
-      } else {
-        Serial.printf("[METER] Channel %u RF sent%s (fpsIdx=%u flags=0x%02X)\n",
-                      oldChannel, doCommit ? " [no rename needed]" : " [commit deferred]",
-                      fpsIdx, flagsByte);
-      }
-
-      request->send(200, "application/json", "{\"status\":\"success\"}");
+      char resp[48];
+      snprintf(resp, sizeof(resp), "{\"status\":\"pending\",\"ticket\":%lu}",
+               (unsigned long)activeTicket.id);
+      request->send(202, "application/json", resp);
     }
   );
 
-  // ── API: Meter Commit (offline-path finalizer) ────────────────────────────
-  // Called by the UI only for the offline path — after the meter has woken up
-  // and the UI has confirmed (via /api/system) that the RP2040 is now echoing
-  // the new channel/fpsIdx/powerSave. This finalizes the ESP32-side rename
-  // that was deliberately deferred while the meter was off.
+  // ── API: Meter Status ──────────────────────────────────────────────────────
+  // GET /api/meter/status/<ticket>
   //
-  // For the online path this endpoint is never called — /api/meter/update
-  // already committed with "commit":true after RF delivery was verified.
-  server.on("/api/meter/commit", HTTP_POST, [](AsyncWebServerRequest* request) {}, NULL,
-    [](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
-      JsonDocument doc;
-      if (deserializeJson(doc, data, len)) {
-        request->send(400, "application/json", "{\"status\":\"error\"}");
-        return;
-      }
+  //   202 → ticket still pending; poll again in 1s
+  //   200 → confirmed; body contains new channel, fpsIdx, powerSave.
+  //         Ticket is consumed and deleted immediately (one delivery).
+  //   503 → ticket not found (expired / never existed / already consumed).
+  //         The update failed — show failure UI.
+  server.on("/api/meter/status", HTTP_GET, [](AsyncWebServerRequest* request) {
+    // Extract ticket ID from the URL path: /api/meter/status/<id>
+    const String path     = request->url();          // e.g. "/api/meter/status/42"
+    const int    lastSlash = path.lastIndexOf('/');
+    const uint32_t requestedId = (lastSlash >= 0)
+      ? (uint32_t)path.substring(lastSlash + 1).toInt()
+      : 0;
 
-      if (!doc["oldChannel"].is<uint8_t>() || doc["oldChannel"].as<uint8_t>() > 31 ||
-          !doc["newChannel"].is<uint8_t>() || doc["newChannel"].as<uint8_t>() > 31) {
-        request->send(400, "application/json",
-                      "{\"status\":\"error\",\"message\":\"Invalid channel\"}");
-        return;
-      }
-
-      const uint8_t oldChannel = doc["oldChannel"].as<uint8_t>();
-      const uint8_t newChannel = doc["newChannel"].as<uint8_t>();
-
-      if (oldChannel == newChannel) {
-        request->send(200, "application/json", "{\"status\":\"success\"}");
-        return;
-      }
-
-      // 1. Rename settings key on flash
-      String raw = loadSettings();
-      JsonDocument cfg;
-      deserializeJson(cfg, raw);
-
-      const String oldKey = String(oldChannel);
-      const String newKey = String(newChannel);
-      if (cfg["meters"][oldKey]) {
-        cfg["meters"][newKey] = cfg["meters"][oldKey];
-        cfg["meters"].remove(oldKey.c_str());
-        String out; serializeJson(cfg, out);
-        saveSettings(out.c_str());
-      }
-
-      // 2. Move runtime registry entry
-      if (meterRegistry[oldChannel].registered) {
-        meterRegistry[newChannel] = meterRegistry[oldChannel];
-        meterRegistry[oldChannel] = MeterData{};
-      }
-
-      // 3. Cool-off old channel so straggler packets are ignored
-      startChannelCooloff(oldChannel);
-
-      // Clear any cool-off on newChannel so its packets are accepted
-      for (int i = 0; i < COOLOFF_SLOTS; i++) {
-        if (channelCooloffList[i].channel == newChannel) {
-          channelCooloffList[i].channel = 0xFF;
-          break;
-        }
-      }
-
-      Serial.printf("[METER] Offline commit: channel %u → %u finalized\n",
-                    oldChannel, newChannel);
-
-      request->send(200, "application/json", "{\"status\":\"success\"}");
+    if (requestedId == 0) {
+      request->send(400, "application/json", "{\"status\":\"error\",\"message\":\"Missing ticket ID\"}");
+      return;
     }
-  );
+
+    // Ticket not found or already consumed → 503
+    if (activeTicket.status == TICKET_EMPTY || activeTicket.id != requestedId) {
+      request->send(503, "application/json", "{\"status\":\"failed\"}");
+      return;
+    }
+
+    // Still waiting → 202
+    if (activeTicket.status == TICKET_PENDING) {
+      request->send(202, "application/json", "{\"status\":\"pending\"}");
+      return;
+    }
+
+    // Success → 200 with confirmed values; consume ticket immediately
+    char resp[96];
+    snprintf(resp, sizeof(resp),
+             "{\"status\":\"success\",\"channel\":%u,\"fpsIdx\":%u,\"powerSave\":%u}",
+             activeTicket.confirmedChannel,
+             activeTicket.confirmedFpsIdx,
+             activeTicket.confirmedPowerSave);
+
+    activeTicket.status = TICKET_EMPTY; // consumed — next poll returns 503
+
+    request->send(200, "application/json", resp);
+  });
 
   // ── API: Meter Delete ─────────────────────────────────────────────────────
   server.on("/api/meter/delete", HTTP_POST, [](AsyncWebServerRequest* request) {}, NULL,
@@ -1382,6 +1457,9 @@ void loop() {
     Serial.println("[SYSTEM] Executing reboot...");
     ESP.restart();
   }
+
+  // ── Meter Update Ticket ───────────────────────────────────────────────────
+  tickMeterUpdate();
 
   // ── HC-12 Receive ─────────────────────────────────────────────────────────
   processHC12();

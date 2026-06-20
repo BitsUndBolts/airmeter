@@ -447,13 +447,6 @@
     const $ = id => document.getElementById(id);
     const FPS_OPTIONS = [1, 2, 3, 5, 10]; // index 0–4, matches transmitter
 
-    // Mid-air collision handling: how many times we resend an RF command
-    // before giving up, and the safety multiplier/buffer applied on top of
-    // the OLD transmit interval before we trust a fresh /api/system read.
-    const MAX_RF_RETRIES   = 3;
-    const VERIFY_MULTIPLIER = 2;     // double the old interval (per meter's own logic)
-    const VERIFY_BUFFER_MS  = 150;   // extra slack for HC-12/serial latency
-
     let allSettings    = {}; // full settings blob from ESP32
     let activeMeters = new Map(); // meters seen since boot
     let availableImages = []; // .webp files from Storage
@@ -777,31 +770,23 @@
     }
 
     /* ═══════════════════════════════════════════════════════════
-       MID-AIR COLLISION HANDLING
+       METER UPDATE — TICKET-BASED
        ─────────────────────────────────────────────────────────
-       An RF update can be silently lost if it collides with a
-       telemetry packet from any meter on the link. After sending
-       a channel/fps/power-save change we read back /api/system
-       and confirm the meter itself reports the new values before
-       calling the change applied. If it doesn't match, we resend.
+       1. POST /api/meter/update  → 202 + { ticket }
+       2. Poll GET /api/meter/status/<ticket> every second:
+            202 → still pending, keep polling
+            200 → success, body has { channel, fpsIdx, powerSave }
+            503 → failed (expired / never existed)
+       The ESP32 owns all retry logic. The UI just watches.
        ═══════════════════════════════════════════════════════════ */
 
-    const sleep = ms => new Promise(res => setTimeout(res, ms));
+    let pollTimer = null; // active setInterval handle for status polling
 
-    // How long to wait after sending an RF command before a fresh
-    // telemetry packet reflecting it is guaranteed to have arrived.
-    // Based on the NEW fps (the rate the meter is transmitting at
-    // until it actually receives & applies the new command).
-    function verifyWaitMs(newFpsIdx) {
-      const hz = FPS_OPTIONS[newFpsIdx] ?? FPS_OPTIONS[2];
-      const intervalMs = 1000 / hz;
-      return Math.round(intervalMs * VERIFY_MULTIPLIER) + VERIFY_BUFFER_MS;
-    }
-
-    // Look up a single channel's entry from the live /api/system feed.
-    async function fetchSystemMeter(channel) {
-      const data = await fetch('/api/system').then(r => r.json());
-      return (data.meters || []).find(m => m.channel === channel) || null;
+    function stopPolling() {
+      if (pollTimer !== null) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+      }
     }
 
     function saveOverlayEl(channel) { return $(`overlay-${channel}`); }
@@ -833,7 +818,7 @@
       ov.classList.add('failed');
       ov.innerHTML = `
         <div class="save-overlay-title">⚠ Update failed</div>
-        <div class="save-overlay-sub">The meter never confirmed the new settings after ${MAX_RF_RETRIES} attempts.</div>
+        <div class="save-overlay-sub">The meter did not confirm the new settings. It may be off or out of range.</div>
         <div class="save-overlay-actions">
           <button class="btn btn-md btn-accent" onclick="retrySaveMeter(${channel})">Try again</button>
           <button class="btn btn-md" onclick="cancelSaveOverlay(${channel})">Cancel</button>
@@ -842,6 +827,7 @@
     }
 
     function cancelSaveOverlay(channel) {
+      stopPolling();
       hideSaveOverlay(channel);
       $(`save-${channel}`).disabled = false;
       $(`status-${channel}`).className   = 'save-status error';
@@ -849,75 +835,8 @@
     }
 
     function retrySaveMeter(channel) {
+      stopPolling();
       saveMeter(channel);
-    }
-
-    // Sends the RF command and verifies it actually applied, resending
-    // up to MAX_RF_RETRIES times. Returns true once /api/system confirms
-    // the target channel reports the requested fpsIdx/powerSave.
-    // Passes "commit":true so the ESP32 migrates its state atomically on
-    // the same call — safe because delivery is confirmed before this runs.
-    async function pushMeterUpdate(channel, { newChannel, fpsIdx, powerSave, flagsByte }) {
-      const waitMs = verifyWaitMs(fpsIdx);
-      showSaveOverlay(channel, 'Saving…', `Attempt 1 of ${MAX_RF_RETRIES}`);
-
-      for (let attempt = 1; attempt <= MAX_RF_RETRIES; attempt++) {
-        updateSaveOverlay(channel, 'Sending update…', `Attempt ${attempt} of ${MAX_RF_RETRIES}`);
-
-        let sendOk = false;
-        try {
-          const r = await fetch('/api/meter/update', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            // commit:false on every attempt — the ESP32 only sends the RF packet
-            // and does NOT rename the settings key or migrate the registry yet.
-            // The actual commit happens via /api/meter/commit below, but only
-            // after we confirm the RP2040 echoed the new values. This way a
-            // failed or colliding RF attempt can never leave the ESP32 in a
-            // partially-committed state.
-            body: JSON.stringify({ oldChannel: channel, newChannel, fpsIdx, flags: flagsByte, commit: false })
-          }).then(r => r.json());
-          sendOk = r.status === 'success';
-        } catch (e) {
-          sendOk = false;
-        }
-
-        if (sendOk) {
-          updateSaveOverlay(channel, 'Verifying…', `Waiting ${(waitMs / 1000).toFixed(1)}s for confirmation…`);
-          await sleep(waitMs);
-
-          let confirmed = null;
-          try {
-            confirmed = await fetchSystemMeter(newChannel);
-          } catch (e) {
-            confirmed = null;
-          }
-
-          if (confirmed && confirmed.fpsIdx === fpsIdx && confirmed.powerSave === powerSave) {
-            // RF delivery confirmed. Now commit the ESP32-side rename in one
-            // dedicated call — this is the clean single commit point for the
-            // online path, triggered only after we have proof of delivery.
-            try {
-              await fetch('/api/meter/commit', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ oldChannel: channel, newChannel })
-              });
-            } catch (e) { /* non-fatal — ESP32 state is consistent, retry on next load */ }
-            activeMeters.set(newChannel, confirmed);
-            if (newChannel !== channel) activeMeters.delete(channel);
-            hideSaveOverlay(channel);
-            return true;
-          }
-        }
-
-        if (attempt < MAX_RF_RETRIES) {
-          updateSaveOverlay(channel, sendOk ? 'Not applied yet…' : 'Send failed…', 'Retrying…');
-        }
-      }
-
-      showSaveFailedOverlay(channel);
-      return false;
     }
 
     /* ── SAVE ONE METER ── */
@@ -928,117 +847,125 @@
       const image    = $(`image-${channel}`).value;
       const newChannel = parseInt($(`newChannel-${channel}`).value, 10);
       const fpsIdx     = parseInt($(`fps-${channel}`).value, 10);
-      const powerSave  = parseInt($(`powerSave-${channel}`).value, 10); // 0 or 1
-      const flagsByte  = powerSave & 0x01; // bit 0 = power conservation; bits 7-1 reserved
-
-      const prevData  = activeMeters.get(channel);
-      const oldPowerSave = prevData?.powerSave ?? 0;
+      const powerSave  = parseInt($(`powerSave-${channel}`).value, 10);
+      const flagsByte  = powerSave & 0x01;
 
       const channelChanged = newChannel !== channel;
-      const fpsChanged     = (prevData?.fpsIdx ?? -1) !== fpsIdx;
-      const flagsChanged   = (prevData?.powerSave ?? 0) !== powerSave;
+      const prevData       = activeMeters.get(channel);
+      const fpsChanged     = (prevData?.fpsIdx    ?? -1) !== fpsIdx;
+      const flagsChanged   = (prevData?.powerSave ?? -1) !== powerSave;
       const rfChanged      = channelChanged || fpsChanged || flagsChanged;
 
-      // canVerify: true when we expect to be able to confirm RF delivery by
-      // polling /api/system for the new fpsIdx/powerSave echo from the meter.
-      //
-      // The `seen < 5` check is the normal "actively transmitting" gate.
-      //
-      // `oldPowerSave === 1` is included by design: a power-conservation meter
-      // suppresses retransmission when the display is stable, so it may have
-      // been silent for many minutes (reading OL, a fixed voltage, etc.) even
-      // though it is on and will respond to an RF command. We can still verify
-      // in that case — we send the command and wait; the RP2040 will force one
-      // unconditional packet immediately after applying new settings (via the
-      // settingsChanged flag), so confirmation will arrive within one TX window
-      // even if the display hasn't changed. `seen` is intentionally NOT checked
-      // here for this path; the meter being quiet is the whole point of power-save.
-      const canVerify = (!!prevData && prevData.seen < 5) || oldPowerSave === 1;
+      btn.disabled         = true;
+      statusEl.className   = 'save-status';
+      statusEl.textContent = '';
 
-      btn.disabled          = true;
-      statusEl.className    = 'save-status';
-      statusEl.textContent  = '';
-
+      // ── RF settings changed → ticket flow ──────────────────────────────────
       if (rfChanged) {
-        if (canVerify) {
-          const ok = await pushMeterUpdate(channel, {
-            newChannel: channelChanged ? newChannel : channel,
-            fpsIdx,
-            powerSave,
-            flagsByte
-          });
+        showSaveOverlay(channel, 'Sending…', 'Waiting for meter confirmation');
+        stopPolling();
 
-          if (!ok) {
-            // Overlay is showing the failure UI with Retry/Cancel — leave
-            // the button state to cancelSaveOverlay()/retrySaveMeter().
-            return;
-          }
-        } else {
-          // Meter is offline — there's no telemetry to verify against.
-          // Send the RF command with commit:false so the ESP32 does NOT
-          // rename the settings key or migrate the registry yet. The old
-          // channel entry stays intact on flash so that when the meter
-          // powers back on and starts transmitting on oldChannel, the ESP32
-          // still recognises it. The UI will detect the channel mismatch
-          // via /api/system and call /api/meter/commit to finalize the rename
-          // only once the RP2040 confirms it applied the new config.
-          let sendOk = false;
-          try {
-            const r = await fetch('/api/meter/update', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                oldChannel: channel,
-                newChannel: channelChanged ? newChannel : channel,
-                fpsIdx,
-                flags: flagsByte,
-                commit: false   // ← do NOT rename on ESP32 yet
-              })
-            }).then(r => r.json());
-            sendOk = r.status === 'success';
-          } catch (e) {
-            sendOk = false;
-          }
+        let ticketId = null;
+        try {
+          const r = await fetch('/api/meter/update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              oldChannel: channel,
+              newChannel: channelChanged ? newChannel : channel,
+              fpsIdx,
+              flags: flagsByte
+            })
+          }).then(r => r.json());
 
-          if (!sendOk) {
-            statusEl.className   = 'save-status error';
-            statusEl.textContent = channelChanged ? '✗ Channel change failed' : '✗ Update failed';
-            btn.disabled = false;
-            return;
-          }
+          if (r.status === 'pending' && r.ticket) ticketId = r.ticket;
+        } catch (e) { /* ticketId stays null */ }
 
-          showToast(`Command queued — meter ${channelChanged ? `${channel}→${newChannel}` : channel} is offline, will apply once it reconnects`, 'success');
-        }
-
-        if (channelChanged) {
-          // Online path: /api/meter/commit was already called inside
-          // pushMeterUpdate after RF delivery was confirmed, so ESP32 flash
-          // and registry are already renamed. Mirror into local JS state.
-          //
-          // Offline path: ESP32 flash is intentionally NOT renamed yet
-          // (commit:false). We still mirror into local JS so the UI block
-          // shows the intended new channel. When the meter wakes up the
-          // mismatch between the JS state and /api/system will be used to
-          // trigger /api/meter/commit automatically (future enhancement) or
-          // the user can reload the page to see the current state.
-          allSettings.meters[newChannel] = {
-            ...(allSettings.meters[channel] || {}),
-            name,
-            image
-          };
-          const carried = activeMeters.get(channel) || {};
-          activeMeters.set(newChannel, { ...carried, fpsIdx, powerSave });
-          activeMeters.delete(channel);
-          delete allSettings.meters[channel];
-          rebuildBlock(channel, newChannel);
+        if (!ticketId) {
+          hideSaveOverlay(channel);
+          statusEl.className   = 'save-status error';
+          statusEl.textContent = '✗ Send failed';
+          btn.disabled = false;
+          showToast('Could not reach ESP32', 'fail');
           return;
         }
+
+        updateSaveOverlay(channel, 'Applying…', 'Waiting for meter confirmation');
+
+        // Poll every second until ESP32 resolves the ticket
+        pollTimer = setInterval(async () => {
+          let res = null;
+          try {
+            const r = await fetch(`/api/meter/status/${ticketId}`);
+            res = { httpStatus: r.status, body: await r.json() };
+          } catch (e) {
+            return; // network hiccup — keep polling
+          }
+
+          if (res.httpStatus === 202) return; // still pending
+
+          stopPolling(); // terminal response — success or failure
+
+          if (res.httpStatus === 200 && res.body.status === 'success') {
+            // ── SUCCESS ──────────────────────────────────────────────────────
+            const confirmed = res.body; // { channel, fpsIdx, powerSave }
+            hideSaveOverlay(channel);
+            statusEl.className   = 'save-status saved';
+            statusEl.textContent = '✓ Applied';
+
+            // Update local activeMeters with confirmed values from the ESP32
+            const carried = activeMeters.get(channel) || {};
+            activeMeters.set(confirmed.channel, {
+              ...carried, fpsIdx: confirmed.fpsIdx,
+              powerSave: confirmed.powerSave, seen: 0
+            });
+            if (confirmed.channel !== channel) activeMeters.delete(channel);
+
+            // Mirror channel rename into local settings cache
+            if (channelChanged) {
+              allSettings.meters[confirmed.channel] = {
+                ...(allSettings.meters[channel] || {}), name, image
+              };
+              delete allSettings.meters[channel];
+            }
+
+            // Persist name + image to ESP32 flash
+            if (!allSettings.meters[confirmed.channel]) allSettings.meters[confirmed.channel] = {};
+            allSettings.meters[confirmed.channel].name  = name;
+            allSettings.meters[confirmed.channel].image = image;
+            fetch('/api/settings', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(allSettings)
+            }).catch(() => {});
+
+            if (channelChanged) {
+              rebuildBlock(channel, confirmed.channel);
+            } else {
+              const displayName = name || 'UNKNOWN';
+              $(`display-name-${channel}`).textContent = displayName;
+              if (!image) {
+                const initials = displayName.replace(/[^A-Z0-9]/gi,'').slice(0,2).toUpperCase() || '??';
+                $(`thumb-${channel}`).innerHTML = `<span class="meter-thumb-fallback">${initials}</span>`;
+              }
+              btn.disabled = false;
+            }
+
+            showToast(`Channel ${confirmed.channel} updated`, 'success');
+
+          } else {
+            // ── FAILURE (503 or unexpected) ───────────────────────────────────
+            showSaveFailedOverlay(channel);
+          }
+
+        }, 1000);
+
+        return; // polling now running; saveMeter() exits
       }
 
-      statusEl.className   = 'save-status';
+      // ── No RF change — save name/image only via /api/settings ──────────────
       statusEl.textContent = 'Saving…';
       if (!allSettings.meters[channel]) allSettings.meters[channel] = {};
-
       allSettings.meters[channel].name  = name;
       allSettings.meters[channel].image = image;
 
@@ -1060,7 +987,7 @@
           }
           showToast(`Channel ${channel} saved`, 'success');
         } else {
-          throw new Error('Save returned non-success');
+          throw new Error('non-success');
         }
       })
       .catch(() => {
