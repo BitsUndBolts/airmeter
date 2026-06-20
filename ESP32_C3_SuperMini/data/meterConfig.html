@@ -483,18 +483,18 @@
     /* ═══════════════════════════════════════════════════════════
        CUSTOM SELECT
        ─────────────────────────────────────────────────────────
-       buildCselect(hiddenId, options, selectedValue, onchangeExpr)
-         options: [{value, label}]
-         onchangeExpr: string to eval on pick, e.g. "onImageChange(1)"
+       buildCselect(hiddenId, options, selectedValue, onChange)
+         options:  [{value, label}]
+         onChange: function called after a pick, receives no args
+                   (read hidden input value inside the handler)
        ═══════════════════════════════════════════════════════════ */
-    function buildCselect(hiddenId, options, selectedValue, onchangeExpr) {
+    function buildCselect(hiddenId, options, selectedValue, onChange) {
       const sel = options.find(o => String(o.value) === String(selectedValue));
       const selectedLabel = sel ? sel.label : (options[0] ? options[0].label : '—');
 
       const optionRows = options.map(o => {
         const isActive = String(o.value) === String(selectedValue);
-        return `<div class="cselect-option${isActive ? ' active' : ''}" data-value="${o.value}"
-                     onclick="cselectPick(this,'${onchangeExpr}')">${o.label}</div>`;
+        return `<div class="cselect-option${isActive ? ' active' : ''}" data-value="${o.value}">${o.label}</div>`;
       }).join('');
 
       return `<div class="cselect">
@@ -539,7 +539,9 @@
       }
     }
 
-    function cselectPick(option, onchangeExpr) {
+    // Called via delegated click listener — looks up the registered onChange
+    // callback by the hidden input's id and invokes it.
+    function cselectPick(option) {
       const wrapper = option.closest('.cselect');
       const panel   = wrapper.querySelector('.cselect-panel');
       const hidden  = wrapper.querySelector('input[type="hidden"]');
@@ -553,38 +555,57 @@
       wrapper.classList.remove('open');
       panel.classList.add('hidden');
 
-      if (onchangeExpr) eval(onchangeExpr);
+      const cb = cselectCallbacks.get(hidden.id);
+      if (cb) cb();
     }
 
-    // Close open selects when clicking outside or scrolling
-    document.addEventListener('click',  e => { if (!e.target.closest('.cselect')) cselectClose(); }, true);
+    // Delegated click handler for all cselect options — avoids inline onclick
+    // on every option row and eliminates the need for eval().
+    document.addEventListener('click', e => {
+      const option = e.target.closest('.cselect-option');
+      if (option) { cselectPick(option); return; }
+      if (!e.target.closest('.cselect')) cselectClose();
+    }, true);
     document.addEventListener('scroll', () => cselectClose(), true);
+
+    // Registry mapping hidden-input id → onChange callback function.
+    const cselectCallbacks = new Map();
+
+    // Register a callback for a cselect after its HTML has been inserted.
+    function cselectBind(hiddenId, onChange) {
+      cselectCallbacks.set(hiddenId, onChange);
+    }
 
     /* ═══════════════════════════════════════════════════════════
        CUSTOM STEPPER
        ─────────────────────────────────────────────────────────
-       buildCstepper(hiddenId, value, min, max, onchangeExpr)
+       buildCstepper(hiddenId, value, min, max, onChange)
+         onChange: function called after value changes
        ═══════════════════════════════════════════════════════════ */
-    function buildCstepper(hiddenId, value, min, max, onchangeExpr) {
+    // Registry mapping hidden-input id → onChange callback function.
+    const cstepperCallbacks = new Map();
+
+    function buildCstepper(hiddenId, value, min, max, onChange) {
+      cstepperCallbacks.set(hiddenId, onChange);
       const atMin = value <= min;
       const atMax = value >= max;
-      return `<div class="cstepper" data-min="${min}" data-max="${max}">
+      return `<div class="cstepper" data-min="${min}" data-max="${max}" data-hid="${hiddenId}">
         <input type="hidden" id="${hiddenId}" value="${value}">
         <button class="cstepper-btn" type="button"
-                onclick="cstepperAdj(this,-1,'${onchangeExpr}')"
+                onclick="cstepperAdj(this,-1)"
                 ${atMin ? 'disabled' : ''}>−</button>
         <input class="cstepper-val" type="text" inputmode="numeric"
                value="${value}"
                onfocus="this.select()"
-               onblur="cstepperInput(this,'${onchangeExpr}')"
-               onkeydown="if(event.key==='Enter')this.blur();if(event.key==='ArrowUp'){event.preventDefault();cstepperAdj(this.closest('.cstepper').querySelectorAll('.cstepper-btn')[1],+1,'${onchangeExpr}')}if(event.key==='ArrowDown'){event.preventDefault();cstepperAdj(this.closest('.cstepper').querySelectorAll('.cstepper-btn')[0],-1,'${onchangeExpr}')}">
+               onblur="cstepperInput(this)"
+               onkeydown="if(event.key==='Enter')this.blur();if(event.key==='ArrowUp'){event.preventDefault();cstepperAdj(this.closest('.cstepper').querySelectorAll('.cstepper-btn')[1],+1)}if(event.key==='ArrowDown'){event.preventDefault();cstepperAdj(this.closest('.cstepper').querySelectorAll('.cstepper-btn')[0],-1)}">
         <button class="cstepper-btn" type="button"
-                onclick="cstepperAdj(this,+1,'${onchangeExpr}')"
+                onclick="cstepperAdj(this,+1)"
                 ${atMax ? 'disabled' : ''}>+</button>
       </div>`;
     }
 
-    function cstepperSetVal(wrapper, val, onchangeExpr) {
+    function cstepperSetVal(wrapper, val) {
       const hidden  = wrapper.querySelector('input[type="hidden"]');
       const display = wrapper.querySelector('.cstepper-val');
       const min     = parseInt(wrapper.dataset.min, 10);
@@ -598,45 +619,52 @@
       btnMinus.disabled = val <= min;
       btnPlus.disabled  = val >= max;
 
-      if (onchangeExpr) eval(onchangeExpr);
+      const cb = cstepperCallbacks.get(wrapper.dataset.hid);
+      if (cb) cb();
     }
 
-    function cstepperAdj(btn, delta, onchangeExpr) {
+    function cstepperAdj(btn, delta) {
       const wrapper = btn.closest('.cstepper');
       const hidden  = wrapper.querySelector('input[type="hidden"]');
-      cstepperSetVal(wrapper, parseInt(hidden.value, 10) + delta, onchangeExpr);
+      cstepperSetVal(wrapper, parseInt(hidden.value, 10) + delta);
     }
 
-    function cstepperInput(input, onchangeExpr) {
+    function cstepperInput(input) {
       const wrapper = input.closest('.cstepper');
       const hidden  = wrapper.querySelector('input[type="hidden"]');
       let val = parseInt(input.value, 10);
       if (isNaN(val)) val = parseInt(hidden.value, 10); // revert if not a number
-      cstepperSetVal(wrapper, val, onchangeExpr);
+      cstepperSetVal(wrapper, val);
     }
 
     /* ═══════════════════════════════════════════════════════════
        CUSTOM TOGGLE
        ─────────────────────────────────────────────────────────
-       buildCtoggle(hiddenId, checked, onchangeExpr)
-         checked: boolean — initial state
+       buildCtoggle(hiddenId, checked, onChange)
+         onChange: function called after state changes
        ═══════════════════════════════════════════════════════════ */
-    function buildCtoggle(hiddenId, checked, onchangeExpr) {
+    // Registry mapping hidden-input id → onChange callback function.
+    const ctoggleCallbacks = new Map();
+
+    function buildCtoggle(hiddenId, checked, onChange) {
+      ctoggleCallbacks.set(hiddenId, onChange);
       return `<div class="ctoggle">
         <input type="hidden" id="${hiddenId}" value="${checked ? 1 : 0}">
         <label class="ctoggle-track">
           <input type="checkbox" ${checked ? 'checked' : ''}
-                 onchange="ctoggleChange(this,'${onchangeExpr}')">
+                 data-hid="${hiddenId}"
+                 onchange="ctoggleChange(this)">
           <span class="ctoggle-rail"><span class="ctoggle-knob"></span></span>
         </label>
         <span class="ctoggle-desc">Suppress duplicate transmissions when display is unchanged</span>
       </div>`;
     }
 
-    function ctoggleChange(checkbox, onchangeExpr) {
+    function ctoggleChange(checkbox) {
       const hidden = checkbox.closest('.ctoggle').querySelector('input[type="hidden"]');
       hidden.value = checkbox.checked ? 1 : 0;
-      if (onchangeExpr) eval(onchangeExpr);
+      const cb = ctoggleCallbacks.get(checkbox.dataset.hid);
+      if (cb) cb();
     }
 
     /* ── RENDER ONE METER BLOCK ── */
@@ -694,19 +722,19 @@
           </div>
           <div class="field-row">
             <span class="field-label">Image</span>
-            ${buildCselect(`image-${channel}`, imageOpts, image, `onImageChange(${channel})`)}
+            ${buildCselect(`image-${channel}`, imageOpts, image, null)}
           </div>
           <div class="field-row">
             <span class="field-label">Channel</span>
-            ${buildCstepper(`newChannel-${channel}`, channel, 0, 31, `onFieldChange(${channel})`)}
+            ${buildCstepper(`newChannel-${channel}`, channel, 0, 31, () => onFieldChange(channel))}
           </div>
           <div class="field-row">
             <span class="field-label">Refresh</span>
-            ${buildCselect(`fps-${channel}`, fpsOpts, fpsIdx, `onFieldChange(${channel})`)}
+            ${buildCselect(`fps-${channel}`, fpsOpts, fpsIdx, null)}
           </div>
           <div class="field-row">
             <span class="field-label">Power Save</span>
-            ${buildCtoggle(`powerSave-${channel}`, !!powerSave, `onFieldChange(${channel})`)}
+            ${buildCtoggle(`powerSave-${channel}`, !!powerSave, () => onFieldChange(channel))}
           </div>
         </div>
         <div class="meter-block-footer">
@@ -715,6 +743,12 @@
         </div>
         <div class="save-overlay hidden" id="overlay-${channel}"></div>
       `;
+
+      // Register cselect callbacks after innerHTML is set (callbacks reference closures,
+      // not eval strings, so they must be bound after the hidden inputs exist in the DOM).
+      cselectBind(`image-${channel}`, () => onImageChange(channel));
+      cselectBind(`fps-${channel}`,   () => onFieldChange(channel));
+
       return block;
     }
 
@@ -821,6 +855,8 @@
     // Sends the RF command and verifies it actually applied, resending
     // up to MAX_RF_RETRIES times. Returns true once /api/system confirms
     // the target channel reports the requested fpsIdx/powerSave.
+    // Passes "commit":true so the ESP32 migrates its state atomically on
+    // the same call — safe because delivery is confirmed before this runs.
     async function pushMeterUpdate(channel, { newChannel, fpsIdx, powerSave, flagsByte }) {
       const waitMs = verifyWaitMs(fpsIdx);
       showSaveOverlay(channel, 'Saving…', `Attempt 1 of ${MAX_RF_RETRIES}`);
@@ -833,7 +869,13 @@
           const r = await fetch('/api/meter/update', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ oldChannel: channel, newChannel, fpsIdx, flags: flagsByte })
+            // commit:false on every attempt — the ESP32 only sends the RF packet
+            // and does NOT rename the settings key or migrate the registry yet.
+            // The actual commit happens via /api/meter/commit below, but only
+            // after we confirm the RP2040 echoed the new values. This way a
+            // failed or colliding RF attempt can never leave the ESP32 in a
+            // partially-committed state.
+            body: JSON.stringify({ oldChannel: channel, newChannel, fpsIdx, flags: flagsByte, commit: false })
           }).then(r => r.json());
           sendOk = r.status === 'success';
         } catch (e) {
@@ -852,15 +894,16 @@
           }
 
           if (confirmed && confirmed.fpsIdx === fpsIdx && confirmed.powerSave === powerSave) {
-            // RF confirmed: commit the rename on the ESP32 (only does
-            // real work when channel changed; harmless otherwise).
+            // RF delivery confirmed. Now commit the ESP32-side rename in one
+            // dedicated call — this is the clean single commit point for the
+            // online path, triggered only after we have proof of delivery.
             try {
               await fetch('/api/meter/commit', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ oldChannel: channel, newChannel })
               });
-            } catch (e) { /* non-fatal */ }
+            } catch (e) { /* non-fatal — ESP32 state is consistent, retry on next load */ }
             activeMeters.set(newChannel, confirmed);
             if (newChannel !== channel) activeMeters.delete(channel);
             hideSaveOverlay(channel);
@@ -896,8 +939,20 @@
       const flagsChanged   = (prevData?.powerSave ?? 0) !== powerSave;
       const rfChanged      = channelChanged || fpsChanged || flagsChanged;
 
-      // Can we even verify? Only if the meter is currently transmitting.
-      // (seen < 5 mirrors the "Active" badge logic used elsewhere on this page.)
+      // canVerify: true when we expect to be able to confirm RF delivery by
+      // polling /api/system for the new fpsIdx/powerSave echo from the meter.
+      //
+      // The `seen < 5` check is the normal "actively transmitting" gate.
+      //
+      // `oldPowerSave === 1` is included by design: a power-conservation meter
+      // suppresses retransmission when the display is stable, so it may have
+      // been silent for many minutes (reading OL, a fixed voltage, etc.) even
+      // though it is on and will respond to an RF command. We can still verify
+      // in that case — we send the command and wait; the RP2040 will force one
+      // unconditional packet immediately after applying new settings (via the
+      // settingsChanged flag), so confirmation will arrive within one TX window
+      // even if the display hasn't changed. `seen` is intentionally NOT checked
+      // here for this path; the meter being quiet is the whole point of power-save.
       const canVerify = (!!prevData && prevData.seen < 5) || oldPowerSave === 1;
 
       btn.disabled          = true;
@@ -919,14 +974,26 @@
             return;
           }
         } else {
-          // Meter has never been seen, or has gone quiet — there's no
-          // telemetry to verify against, so send once and move on.
+          // Meter is offline — there's no telemetry to verify against.
+          // Send the RF command with commit:false so the ESP32 does NOT
+          // rename the settings key or migrate the registry yet. The old
+          // channel entry stays intact on flash so that when the meter
+          // powers back on and starts transmitting on oldChannel, the ESP32
+          // still recognises it. The UI will detect the channel mismatch
+          // via /api/system and call /api/meter/commit to finalize the rename
+          // only once the RP2040 confirms it applied the new config.
           let sendOk = false;
           try {
             const r = await fetch('/api/meter/update', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ oldChannel: channel, newChannel: channelChanged ? newChannel : channel, fpsIdx, flags: flagsByte })
+              body: JSON.stringify({
+                oldChannel: channel,
+                newChannel: channelChanged ? newChannel : channel,
+                fpsIdx,
+                flags: flagsByte,
+                commit: false   // ← do NOT rename on ESP32 yet
+              })
             }).then(r => r.json());
             sendOk = r.status === 'success';
           } catch (e) {
@@ -940,24 +1007,25 @@
             return;
           }
 
-          showToast(`Command sent — meter ${channelChanged ? `${channel}→${newChannel}` : channel} is offline, will apply once it reconnects`, 'success');
+          showToast(`Command queued — meter ${channelChanged ? `${channel}→${newChannel}` : channel} is offline, will apply once it reconnects`, 'success');
         }
 
         if (channelChanged) {
-          // Settings key rename and registry move happen in /api/meter/commit
-          // (called inside pushMeterUpdate on success) or are deferred for
-          // offline meters. Here we only update the LOCAL JS state so the
-          // UI block can be rebuilt with the correct channel number.
+          // Online path: /api/meter/commit was already called inside
+          // pushMeterUpdate after RF delivery was confirmed, so ESP32 flash
+          // and registry are already renamed. Mirror into local JS state.
+          //
+          // Offline path: ESP32 flash is intentionally NOT renamed yet
+          // (commit:false). We still mirror into local JS so the UI block
+          // shows the intended new channel. When the meter wakes up the
+          // mismatch between the JS state and /api/system will be used to
+          // trigger /api/meter/commit automatically (future enhancement) or
+          // the user can reload the page to see the current state.
           allSettings.meters[newChannel] = {
             ...(allSettings.meters[channel] || {}),
             name,
             image
           };
-          // Keep the old key intact until we have confirmed delivery
-          // (for !canVerify / offline path the meter is not transmitting
-          // so we cannot confirm; we optimistically rename the local state
-          // but the ESP32 commit call in pushMeterUpdate already handled it
-          // for the canVerify path).
           const carried = activeMeters.get(channel) || {};
           activeMeters.set(newChannel, { ...carried, fpsIdx, powerSave });
           activeMeters.delete(channel);

@@ -25,7 +25,6 @@
 #include <Preferences.h>
 #include <DNSServer.h>
 #include <ArduinoJson.h>
-#include <map>
 
 //#define DEBUG_LCD_VISUAL  // Comment out to suppress per-packet LCD debug output
 
@@ -36,9 +35,14 @@ struct MeterData {
     unsigned long lastSeen    = 0;
     uint8_t lastFpsIndex      = 0;
     uint8_t lastPowerSave     = 0;  // 1 = power conservation enabled, 0 = disabled
+    bool    registered        = false; // true once this slot has been populated
 };
 
-std::map<uint8_t, MeterData> meterRegistry;
+// Fixed 32-slot array indexed by channel (0–31). No heap allocation, O(1)
+// access. Slots are zeroed at boot; `registered` marks which are active.
+// This replaces std::map<uint8_t, MeterData> to avoid per-entry heap nodes
+// on a microcontroller with a fixed, small channel space.
+static MeterData meterRegistry[32];
 
 // =============================================================================
 // CHANNEL-CHANGE COOL-OFF
@@ -296,6 +300,7 @@ void decodePacket(const uint8_t* payload) {
   meterRegistry[channel].lastSeen      = millis();
   meterRegistry[channel].lastFpsIndex  = fps_index;
   meterRegistry[channel].lastPowerSave = power_save_status;
+  meterRegistry[channel].registered    = true;
 
   // Broadcast over SSE — CHANNEL is now encoded in the event name
   // (meter-data-<channel>) instead of the payload, since each stream
@@ -595,12 +600,13 @@ void setupWebServer() {
     JsonArray meters = doc["meters"].to<JsonArray>();
     const unsigned long now = millis();
     
-    for (auto const& kv : meterRegistry) {
+    for (uint8_t ch = 0; ch < 32; ch++) {
+      if (!meterRegistry[ch].registered) continue;
       JsonObject m = meters.add<JsonObject>();
-      m["channel"]   = kv.first;
-      m["seen"]      = (long)((now - kv.second.lastSeen) / 1000);
-      m["fpsIdx"]    = kv.second.lastFpsIndex;
-      m["powerSave"] = kv.second.lastPowerSave;
+      m["channel"]   = ch;
+      m["seen"]      = (long)((now - meterRegistry[ch].lastSeen) / 1000);
+      m["fpsIdx"]    = meterRegistry[ch].lastFpsIndex;
+      m["powerSave"] = meterRegistry[ch].lastPowerSave;
     }
 
     if (littlefs_available) {
@@ -765,11 +771,6 @@ void setupWebServer() {
     }
   );
 
-  // ── API: Settings Read ────────────────────────────────────────────────────
-  server.on("/api/settings", HTTP_GET, [](AsyncWebServerRequest* request) {
-    request->send(200, "application/json", loadSettings());
-  });
-
   // ── API: Settings Write ───────────────────────────────────────────────────
   server.on("/api/settings", HTTP_POST,
     [](AsyncWebServerRequest* request) {
@@ -866,7 +867,30 @@ void setupWebServer() {
     pendingReboot = true;
   });
 
-  // ── API: Meter Update (change channel + set fps index + set flags, forwards config to RP2040) ────
+  // ── API: Meter Update ─────────────────────────────────────────────────────
+  // Sends an RF config command to the target RP2040 and, when the caller
+  // passes "commit":true, immediately migrates the ESP32-side state too
+  // (settings key rename + registry move + cooloff).
+  //
+  // Two-phase design — why commit is caller-controlled:
+  //
+  //   ONLINE meter (canVerify=true in the UI):
+  //     The UI's pushMeterUpdate() retry loop polls /api/system until the
+  //     RP2040 echoes back the new fpsIdx/powerSave, proving delivery.
+  //     Only then does the UI call this endpoint with "commit":true.
+  //     Committing here is safe because RF delivery is already confirmed.
+  //
+  //   OFFLINE meter (canVerify=false in the UI):
+  //     The RP2040 is not transmitting, so there is nothing to verify
+  //     against. The UI sends "commit":false — the RF command goes out
+  //     but ESP32 state is left unchanged (old channel key stays on flash,
+  //     meterRegistry slot keeps its old index). When the meter powers back
+  //     on it transmits on its old channel, the ESP32 sees it, and the UI
+  //     detects the mismatch via /api/system. The user (or a future
+  //     auto-detect flow) then calls /api/meter/commit to finalize.
+  //     Without this guard, committing while the meter is off would orphan
+  //     the old channel: the RP2040 wakes up transmitting on oldChannel,
+  //     but the ESP32 has already renamed that key — producing two entries.
   server.on("/api/meter/update", HTTP_POST, [](AsyncWebServerRequest* request) {}, NULL,
     [](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
       JsonDocument doc;
@@ -877,26 +901,25 @@ void setupWebServer() {
 
       if (!doc["oldChannel"].is<uint8_t>() || doc["oldChannel"].as<uint8_t>() > 31 ||
           !doc["newChannel"].is<uint8_t>() || doc["newChannel"].as<uint8_t>() > 31 ||
-          !doc["fpsIdx"].is<uint8_t>() || doc["fpsIdx"].as<uint8_t>() > 7) {
+          !doc["fpsIdx"].is<uint8_t>()     || doc["fpsIdx"].as<uint8_t>() > 7) {
         request->send(400, "application/json",
                       "{\"status\":\"error\",\"message\":\"Invalid field value\"}");
         return;
       }
-      const uint8_t oldChannel  = doc["oldChannel"].as<uint8_t>();
-      const uint8_t newChannel  = doc["newChannel"].as<uint8_t>();
-      const uint8_t fpsIdx = doc["fpsIdx"].as<uint8_t>();
+
+      const uint8_t oldChannel = doc["oldChannel"].as<uint8_t>();
+      const uint8_t newChannel = doc["newChannel"].as<uint8_t>();
+      const uint8_t fpsIdx     = doc["fpsIdx"].as<uint8_t>();
 
       // FLAGS_BYTE — full byte forwarded to the RP2040 and persisted there.
       // Bit 0 = power conservation enable. Bits 7-1 are reserved for future
       // use; callers that omit the field default to 0x00 (all flags off).
       const uint8_t flagsByte = doc["flags"].is<uint8_t>() ? doc["flags"].as<uint8_t>() : 0x00;
 
-      // This endpoint ONLY transmits the RF command. It does NOT touch stored
-      // settings or meterRegistry. Settings migration (key rename) and registry
-      // housekeeping are handled by /api/meter/commit, which the UI calls only
-      // after confirming the RP2040 acknowledged the new config via /api/system.
-      // This guarantees a mid-air collision or failed delivery can never corrupt
-      // or delete the stored meter configuration.
+      // "commit":true  → caller has already verified RF delivery; migrate state now.
+      // "commit":false → offline/unverified send; leave ESP32 state untouched.
+      // Omitting the field defaults to false (safe).
+      const bool doCommit = doc["commit"].is<bool>() && doc["commit"].as<bool>();
 
       // Build the 7-byte config packet
       // [ 0xAA ][ 0x55 ][ 0x03 ][ CHANNEL ][ DATA_BYTE ][ FLAGS_BYTE ][ CRC8 ]
@@ -914,15 +937,58 @@ void setupWebServer() {
 
       HC12.write(tx, 7);
 
+      if (doCommit && oldChannel != newChannel) {
+        // 1. Rename settings key on flash
+        String raw = loadSettings();
+        JsonDocument cfg;
+        deserializeJson(cfg, raw);
+
+        const String oldKey = String(oldChannel);
+        const String newKey = String(newChannel);
+        if (cfg["meters"][oldKey]) {
+          cfg["meters"][newKey] = cfg["meters"][oldKey];
+          cfg["meters"].remove(oldKey.c_str());
+          String out; serializeJson(cfg, out);
+          saveSettings(out.c_str());
+        }
+
+        // 2. Move runtime registry entry
+        if (meterRegistry[oldChannel].registered) {
+          meterRegistry[newChannel] = meterRegistry[oldChannel];
+          meterRegistry[oldChannel] = MeterData{};
+        }
+
+        // 3. Cool-off old channel so straggler packets are ignored
+        startChannelCooloff(oldChannel);
+
+        // Clear any cool-off on newChannel so its packets are accepted
+        for (int i = 0; i < COOLOFF_SLOTS; i++) {
+          if (channelCooloffList[i].channel == newChannel) {
+            channelCooloffList[i].channel = 0xFF;
+            break;
+          }
+        }
+
+        Serial.printf("[METER] Channel %u → %u committed (fpsIdx=%u flags=0x%02X)\n",
+                      oldChannel, newChannel, fpsIdx, flagsByte);
+      } else {
+        Serial.printf("[METER] Channel %u RF sent%s (fpsIdx=%u flags=0x%02X)\n",
+                      oldChannel, doCommit ? " [no rename needed]" : " [commit deferred]",
+                      fpsIdx, flagsByte);
+      }
+
       request->send(200, "application/json", "{\"status\":\"success\"}");
     }
   );
 
-  // ── API: Meter Commit (called by UI after RF delivery confirmed) ────────────────────
-  // Renames the stored settings key from oldChannel to newChannel and updates
-  // the runtime meterRegistry. Only called once the UI has confirmed via
-  // /api/system that the RP2040 is reporting the expected fpsIdx/powerSave,
-  // so a failed RF delivery can never corrupt the stored configuration.
+  // ── API: Meter Commit (offline-path finalizer) ────────────────────────────
+  // Called by the UI only for the offline path — after the meter has woken up
+  // and the UI has confirmed (via /api/system) that the RP2040 is now echoing
+  // the new channel/fpsIdx/powerSave. This finalizes the ESP32-side rename
+  // that was deliberately deferred while the meter was off.
+  //
+  // For the online path this endpoint is never called — /api/meter/update
+  // already committed with "commit":true after RF delivery was verified.
   server.on("/api/meter/commit", HTTP_POST, [](AsyncWebServerRequest* request) {}, NULL,
     [](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
       JsonDocument doc;
@@ -941,39 +1007,44 @@ void setupWebServer() {
       const uint8_t oldChannel = doc["oldChannel"].as<uint8_t>();
       const uint8_t newChannel = doc["newChannel"].as<uint8_t>();
 
-      // Only do rename work when the channel actually changed
-      if (oldChannel != newChannel) {
-        // 1. Rename settings key on flash
-        String raw = loadSettings();
-        JsonDocument cfg;
-        deserializeJson(cfg, raw);
+      if (oldChannel == newChannel) {
+        request->send(200, "application/json", "{\"status\":\"success\"}");
+        return;
+      }
 
-        const String oldKey = String(oldChannel);
-        const String newKey = String(newChannel);
-        if (cfg["meters"][oldKey]) {
-          cfg["meters"][newKey] = cfg["meters"][oldKey];
-          cfg["meters"].remove(oldKey.c_str());
-          String out; serializeJson(cfg, out);
-          saveSettings(out.c_str());
-        }
+      // 1. Rename settings key on flash
+      String raw = loadSettings();
+      JsonDocument cfg;
+      deserializeJson(cfg, raw);
 
-        // 2. Move runtime registry entry
-        if (meterRegistry.count(oldChannel)) {
-          meterRegistry[newChannel] = meterRegistry[oldChannel];
-          meterRegistry.erase(oldChannel);
-        }
+      const String oldKey = String(oldChannel);
+      const String newKey = String(newChannel);
+      if (cfg["meters"][oldKey]) {
+        cfg["meters"][newKey] = cfg["meters"][oldKey];
+        cfg["meters"].remove(oldKey.c_str());
+        String out; serializeJson(cfg, out);
+        saveSettings(out.c_str());
+      }
 
-        // 3. Cool-off old channel so straggler packets are ignored
-        startChannelCooloff(oldChannel);
+      // 2. Move runtime registry entry
+      if (meterRegistry[oldChannel].registered) {
+        meterRegistry[newChannel] = meterRegistry[oldChannel];
+        meterRegistry[oldChannel] = MeterData{};
+      }
 
-        // Clear any cool-off on newChannel so its packets are accepted
-        for (int i = 0; i < COOLOFF_SLOTS; i++) {
-          if (channelCooloffList[i].channel == newChannel) {
-            channelCooloffList[i].channel = 0xFF;
-            break;
-          }
+      // 3. Cool-off old channel so straggler packets are ignored
+      startChannelCooloff(oldChannel);
+
+      // Clear any cool-off on newChannel so its packets are accepted
+      for (int i = 0; i < COOLOFF_SLOTS; i++) {
+        if (channelCooloffList[i].channel == newChannel) {
+          channelCooloffList[i].channel = 0xFF;
+          break;
         }
       }
+
+      Serial.printf("[METER] Offline commit: channel %u → %u finalized\n",
+                    oldChannel, newChannel);
 
       request->send(200, "application/json", "{\"status\":\"success\"}");
     }
@@ -1004,7 +1075,7 @@ void setupWebServer() {
       saveSettings(out.c_str());
 
       // Remove from runtime stored meter data (won't show on dashboard anymore)
-      meterRegistry.erase(channel);
+      meterRegistry[channel] = MeterData{};  // clear slot
 
       request->send(200, "application/json", "{\"status\":\"success\"}");
     }

@@ -547,6 +547,7 @@ bool processIncomingESP32() {
           rx_error_count++;
           Serial.printf("[HC12] CRC FAIL from ESP32 — got 0x%02X expected 0x%02X (Total: %lu)\n",
                         b, expected_crc, rx_error_count);
+          rx_state = WAIT_PREAMBLE_1;  // resync — without this the state machine stalls
         }
         break;
       }
@@ -725,7 +726,7 @@ void loop() {
   // the HC-12 reverse channel. Valid packets update CHANNEL and/or
   // frameRateIndex and persist both to EEPROM immediately.
   // ---------------------------------------------------------------------------
-  settingsChanged = processIncomingESP32() || settingsChanged;
+  if (processIncomingESP32()) settingsChanged = true;
 
   // ---------------------------------------------------------------------------
   // PHASE 4: Transmit packet every txIntervalMs (active mode only)
