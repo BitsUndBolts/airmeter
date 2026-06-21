@@ -4,7 +4,7 @@
 
 <br>
 
-**Wireless LCD streaming for the ANENG AN870 multimeter<br />Straight into OBS, your browser, or anywhere else you need live readings.**
+**Wireless LCD streaming for the ANENG AN870 multimeter.<br />Straight into OBS, your browser, or anywhere else you need live readings.**
 
 <br>
 
@@ -52,9 +52,9 @@ No UART hack, no proprietary app, no Bluetooth pairing dance. Just probes on gla
 
 <p align="center" style="margin: 20px">
   <img src="Screens/9 Classic.png" width="800" alt="AirMeter live view - Amber theme" style="padding: 20px;">
-  &nbsp;&nbsp;
+  <br />
   <img src="Screens/8 Amber.png" width="800" alt="AirMeter live view - Amber theme" style="padding: 20px;">
-  &nbsp;&nbsp;
+  <br />
   <img src="Screens/13 Red Alert.png" width="800" alt="AirMeter live view - Red Alert theme" style="padding: 20px;">
 </p>
 
@@ -179,17 +179,17 @@ Since the project is designed to run on **2× AA batteries** (rechargeable 1.2V 
 
 <p align="center" style="margin: 20px">
   <img src="Screens/1 Setup - Search WiFi.png" width="800" alt="WiFi Search" style="padding: 20px;">
-  &nbsp;&nbsp;
+  <br />
   <img src="Screens/2 Setup - Select WiFi.png" width="800" alt="WiFi Search Select" style="padding: 20px;">
-  &nbsp;&nbsp;
+  <br />
   <img src="Screens/3 Setup - Credentials.png" width="800" alt="WiFi Credentials" style="padding: 20px;">
-  &nbsp;&nbsp;
+  <br />
   <img src="Screens/4 Setup - Complete.png" width="800" alt="WiFi Setup Complete" style="padding: 20px;">
-  &nbsp;&nbsp;
+  <br />
   <img src="Screens/5 Dashboard.png" width="800" alt="Dashboard" style="padding: 20px;">
-  &nbsp;&nbsp;
+  <br />
   <img src="Screens/6 Meter Configuration.png" width="800" alt="Meter Configuration" style="padding: 20px;">
-  &nbsp;&nbsp;
+  <br />
   <img src="Screens/7 File Management.png" width="800" alt="File Management" style="padding: 20px;">
 </p>
 
