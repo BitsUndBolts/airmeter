@@ -4,7 +4,7 @@
 
 <br>
 
-**Wireless LCD streaming for the ANENG AN870 multimeter - straight into OBS, your browser, or anywhere else you need live readings.**
+**Wireless LCD streaming for the ANENG AN870 multimeter<br />Straight into OBS, your browser, or anywhere else you need live readings.**
 
 <br>
 
@@ -35,6 +35,7 @@
 - [LCD Segment Map](#lcd-segment-map)
 - [Web Interface](#web-interface)
 - [Hardware You'll Need](#hardware-youll-need)
+- [Bill of Materials](#bill-of-materials)
 - [Repository Layout](#repository-layout)
 - [Getting Started](#getting-started)
 - [Roadmap / Ideas](#roadmap--ideas)
@@ -318,6 +319,7 @@ The four digits each draw their A–G segments from a different mix of COM rows,
 | [`setup.html`](./ESP32_C3_SuperMini/data/setup.html) | First-boot Wi-Fi provisioning wizard (served while the ESP32 is in AP mode) |
 | [`files.html`](./ESP32_C3_SuperMini/data/files.html) | File manager + OTA firmware/UI uploader |
 | [`airmeter.css`](./ESP32_C3_SuperMini/data/airmeter.css) | Shared design system used across all pages |
+| [`airmeter.js`](./ESP32_C3_SuperMini/data/airmeter.js) | Shared JavaScript file used across all pages |
 
 The live meter view ([`meter.html`](./ESP32_C3_SuperMini/data/meter.html)) ships with a dozen+ built-in color themes (Classic, Amber, Red Alert, Neon Cyan, Glass Dark/Bright, and more), adjustable zoom, and per-meter persistence of both settings - making it drop straight into OBS as a transparent or colored overlay.
 
@@ -327,19 +329,39 @@ The live meter view ([`meter.html`](./ESP32_C3_SuperMini/data/meter.html)) ships
 - 1× RP2040 Zero
 - 1× ESP32-C3 SuperMini (receiver side)
 - 2× HC-12 433 MHz wireless modules
-- 5× LMV339 quad comparators (+custom PCB and SMD components - please see BOM)
+- 5× LMV339 quad comparators (+custom PCB and SMD components - please see BOM below)
 - 1× Arduino Uno (or any AVR board) - only needed temporarily, to program the HC-12 modules
 - 3.3V boost converter
 
-## Repository Layout
+## Bill of Materials
 
-*(Inferred from the files referenced throughout this README - rename/reorganize as needed to match what's actually committed.)*
+| # | Component | Designators | Package | Qty | Value |
+|---|-----------|-------------|---------|-----|-------|
+| 1 | Capacitor | C2, C4, C5, C6, C7, C8, C9, C10, C11, C12, C14, C18 | C0603 | 12 | 100nF |
+| 2 | Capacitor | C17 | C0805 | 1 | 10µF |
+| 3 | Capacitor | C16 | C1206 | 1 | 22µF |
+| 4 | Ferrite Bead | FB1 | L0805 | 1 | 100Ω @ 100MHz |
+| 5 | Capacitor | C1, C3, C13, C15 | C0603 | 4 | 2.2µF |
+| 6 | Resistor | R1 | R0603 | 1 | 5kΩ¹ |
+| 7 | Resistor | R2 | R0603 | 1 | 20kΩ¹ |
+| 8 | Resistor | R3 | R0603 | 1 | 50kΩ² |
+| 9 | Resistor | R4 | R0603 | 1 | 6.8kΩ² |
+| 10 | Comparator | U1, U2, U3, U4, U5 | TSSOP-14 | 5 | LMV339 |
+
+¹ Voltage Divider (source 3.3V) aim for ~2.5V or more, but below 2.8V<br />
+² Voltage Divider (source 3.3V) aim for ~0.5V or less, but above 0.2V
+
+## Repository Layout
 
 ```
 AirMeter/
 ├── AirMeter.png                 # Project logo
 ├── LICENSE                      # MIT license
+├── Setup Arduino IDE.docx       # File with instruction of how to set up Arduino IDE 2.3.9+
+├── ANENG_AN870/                 # Folder containing research material
 ├── PCB/
+│   ├── Gerber-v1.3.zip          # Gerber Files / Custom PCB
+│   ├── BOM.csv                  # Bill Of Materials
 │   └── PCB.jpg                  # Comparator PCB photo (add Gerbers/KiCad source + BOM here)
 ├── Screens/                     # Screenshots used throughout this README
 ├── RP2040_Zero/
@@ -352,14 +374,13 @@ AirMeter/
 │       ├── meter.html           # Live recreated display (OBS source)
 │       ├── setup.html           # First-boot Wi-Fi wizard
 │       ├── files.html           # File manager / OTA uploader
-│       └── airmeter.css         # Shared styling
+│       ├── airmeter.css         # Shared styling
+│       └── airmeter.js          # Shared JavaScript file
 └── Arduino_UNO_HT-12/
     └── Arduino_UNO_HT-12.ino    # One-time utility to configure the HC-12 modules
 ```
 
 ## Getting Started
-
-*(This follows the same build order as the System Architecture section above - swap in your own IDE/board-manager specifics where noted.)*
 
 **Safety note:** disconnect the test probes from any circuit and remove the battery before opening the meter or soldering anything inside it.
 
@@ -376,13 +397,7 @@ AirMeter/
 
 ## Roadmap / Ideas
 
-*(A starter list to seed this section - replace with whatever you're actually planning next.)*
-
-- Encrypt or authenticate the HC-12 link, since anything else on the same channel/frequency can currently decode a meter's readings.
-- Package the live view as a native OBS plugin instead of a browser-source page.
-- Extend support to other DTM0660-driven multimeters that share the AN870's glass layout.
-- Add battery-level telemetry from the transmitter side.
-- Add data logging / CSV export to the web UI.
+- Extend support to other DTM0660-based meters
 
 ## Support This Project
 
