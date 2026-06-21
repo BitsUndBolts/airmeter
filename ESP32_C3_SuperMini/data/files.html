@@ -10,6 +10,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AirMeter · Files</title>
+  <script src="airmeter.js"></script>
   <link rel="stylesheet" href="airmeter.css">
   <style>
     .card-header { gap: 1em; }
@@ -486,7 +487,6 @@
     const FIRMWARE_ENDPOINT = '/ota/firmware';
     const FILE_ENDPOINT     = '/ota/file';
     const SYSTEM_ENDPOINT   = '/api/system';
-    const MAX_FILE_MB       = 1;
 
     /* ── STATE ──────────────────────────────────────────────────────────── */
     // Each entry: { id, file, isFirmware, status: 'pending'|'uploading'|'done'|'failed' }
@@ -496,8 +496,6 @@
     let isUploading    = false;
 
     /* ── DOM ────────────────────────────────────────────────────────────── */
-    const $ = id => document.getElementById(id);
-
     const dropzone       = $('dropzone');
     const fileInput      = $('fileInput');
     const queueEl        = $('queue');
@@ -517,12 +515,6 @@
     const rebootSec      = $('rebootSec');
 
     /* ── HELPERS ────────────────────────────────────────────────────────── */
-    function fmtBytes(b) {
-      if (b >= 1048576) return (b / 1048576).toFixed(1) + ' MB';
-      if (b >= 1024)    return (b / 1024).toFixed(0) + ' KB';
-      return b + ' B';
-    }
-
     function isFirmwareFile(file) {
       return file.name.toLowerCase().endsWith('.bin');
     }
@@ -817,11 +809,6 @@
         <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
         <polyline points="14 2 14 8 20 8"/></svg>`;
 
-    function escH(s) {
-      return s.replace(/&/g,'&amp;').replace(/</g,'&lt;')
-              .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-    }
-
     function renderFileTable(files) {
       const loading = $('fs-loading');
       const empty   = $('fs-empty');
@@ -891,7 +878,7 @@
 
     /* ── RENAME ─────────────────────────────────────────────────────────── */
     function startRename(name) {
-      const wrap = document.getElementById('fn-wrap-' + name);
+      const wrap = $('fn-wrap-' + name);
       if (!wrap) return;
 
       wrap.innerHTML = `
@@ -907,7 +894,7 @@
           </svg>
         </button>
       `;
-      const input = document.getElementById('fn-input-' + name);
+      const input = $('fn-input-' + name);
       if (input) { input.focus(); input.select(); }
     }
 
@@ -917,7 +904,7 @@
     }
 
     function cancelRename(name) {
-      const wrap = document.getElementById('fn-wrap-' + name);
+      const wrap = $('fn-wrap-' + name);
       if (!wrap) return;
       wrap.innerHTML = `
         <span class="fn-icon ${extClass(name)}">${fileIconSvg}</span>
@@ -927,7 +914,7 @@
     }
 
     async function confirmRename(oldName) {
-      const input   = document.getElementById('fn-input-' + oldName);
+      const input   = $('fn-input-' + oldName);
       if (!input) return;
       const newName = input.value.trim();
 
@@ -957,21 +944,21 @@
 
     function confirmDelete(name) {
       pendingDeleteName = name;
-      document.getElementById('confirm-filename').textContent = '/' + name;
-      document.getElementById('confirm-ok').onclick = () => {
+      $('confirm-filename').textContent = '/' + name;
+      $('confirm-ok').onclick = () => {
         deleteFile(pendingDeleteName);
         closeConfirm();
       };
-      document.getElementById('confirm-overlay').classList.add('visible');
+      $('confirm-overlay').classList.add('visible');
     }
 
     function closeConfirm() {
-      document.getElementById('confirm-overlay').classList.remove('visible');
+      $('confirm-overlay').classList.remove('visible');
       pendingDeleteName = null;
     }
 
     // Close on backdrop click
-    document.getElementById('confirm-overlay').addEventListener('click', e => {
+    $('confirm-overlay').addEventListener('click', e => {
       if (e.target === e.currentTarget) closeConfirm();
     });
 

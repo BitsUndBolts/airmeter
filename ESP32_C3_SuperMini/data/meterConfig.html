@@ -10,6 +10,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AirMeter · Meters</title>
+  <script src="airmeter.js"></script>
   <link rel="stylesheet" href="airmeter.css">
   <style>
     .card-header { justify-content: space-between; }
@@ -443,34 +444,11 @@
 
   <script>
     /* ── GLOBALS ── */
-    const $ = id => document.getElementById(id);
     const FPS_OPTIONS = [1, 2, 3, 5, 10]; // index 0–4, matches transmitter
 
     let allSettings    = {}; // full settings blob from ESP32
     let activeMeters = new Map(); // meters seen since boot
     let availableImages = []; // .webp files from Storage
-
-    /* ── TOAST ── */
-    let toastTimer = null;
-    function showToast(msg, type = 'success') {
-      const t = $('toast');
-      t.textContent = msg;
-      t.className   = `toast ${type} visible`;
-      clearTimeout(toastTimer);
-      toastTimer = setTimeout(() => t.classList.remove('visible'), 2800);
-    }
-
-    /* ── IMAGE THUMBNAIL ── */
-    function thumbHtml(image, name) {
-      const initials = (name || '??').replace(/[^A-Z0-9]/gi, '').slice(0, 2).toUpperCase() || '??';
-      if (image) {
-        return `<img src="${image}" alt="${name}"
-                    onload="this.classList.add('loaded')"
-                    onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
-                <span class="meter-thumb-fallback" style="display:none">${initials}</span>`;
-      }
-      return `<span class="meter-thumb-fallback">${initials}</span>`;
-    }
 
     /* ═══════════════════════════════════════════════════════════
        CUSTOM SELECT

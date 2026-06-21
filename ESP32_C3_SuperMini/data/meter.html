@@ -10,6 +10,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AirMeter · Live View</title>
+    <script src="airmeter.js"></script>
     <style>
         @font-face {
             font-family: 'MultimeterFont';
@@ -614,7 +615,6 @@
 
     <script>
         const DEFAULT_THEME = "Classic";
-        const $ = id => document.getElementById(id);
         const THEMES = {
             "Classic": { bg: "#c8d8c0", on: "#1a1a1a", off: "#c0d0b7aa", border: "#030303" },
             "Monotone": { bg: "#c8c8c0", on: "#101010", off: "#bcbcb466", border: "#050505" },
@@ -896,7 +896,7 @@
                     });
                 })
                 .then(r => r.json())
-                .then(d => { if (d.status === 'success') console.log('Settings saved!'); })
+                .then(d => { /* if (d.status === 'success') console.log('Settings saved!'); */ })
                 .catch(e => console.error('Error saving settings:', e));
         }
 

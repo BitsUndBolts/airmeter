@@ -10,6 +10,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AirMeter · Dashboard</title>
+  <script src="airmeter.js"></script>
   <link rel="stylesheet" href="airmeter.css">
   <style>
     .card-header { justify-content: space-between; }
@@ -422,7 +423,6 @@
 
   <script>
     /* ── APP LOGIC ────────────────────────────────────────────────────── */
-    const $ = id => document.getElementById(id);
     const HIDE_METERS_AFTER_SECONDS = 30;
 
     function openResetModal() {
@@ -446,18 +446,18 @@
     }
 
     function openRestartModal() {
-      document.getElementById('restart-step-confirm').classList.remove('hidden');
-      document.getElementById('restart-step-restarting').classList.add('hidden');
-      document.getElementById('restart-modal-overlay').classList.add('visible');
+      $('restart-step-confirm').classList.remove('hidden');
+      $('restart-step-restarting').classList.add('hidden');
+      $('restart-modal-overlay').classList.add('visible');
     }
 
     function closeRestartModal() {
-      document.getElementById('restart-modal-overlay').classList.remove('visible');
+      $('restart-modal-overlay').classList.remove('visible');
     }
 
     async function executeRestart() {
-      document.getElementById('restart-step-confirm').classList.add('hidden');
-      document.getElementById('restart-step-restarting').classList.remove('hidden');
+      $('restart-step-confirm').classList.add('hidden');
+      $('restart-step-restarting').classList.remove('hidden');
 
       try {
         await fetch('/api/restart', { method: 'POST' });
@@ -466,13 +466,6 @@
       }
 
       setTimeout(() => closeRestartModal(), 6000);
-    }
-
-    function getSignalBars(rssi) {
-      if (rssi >= -55) return 4;
-      if (rssi >= -67) return 3;
-      if (rssi >= -78) return 2;
-      return 1;
     }
 
     // Meter configs from settings (name and image)
@@ -500,32 +493,36 @@
     }
 
     function buildMeterCard(channel, seen, cfg) {
-      const name  = cfg?.name  || 'UNKNOWN';
-      const image = cfg?.image || null;
-      const dot   = dotClass(seen);
+      const safeChannel = parseInt(channel, 10);
+      const name        = cfg?.name  || 'UNKNOWN';
+      const image       = cfg?.image || null;
+      const dot         = dotClass(seen);
+      const initials    = name.replace(/[^A-Z0-9]/gi, '').slice(0, 2).toUpperCase() || '??';
 
       const imgHtml = image
-        ? `<img src="${image}" alt="${name}" onload="this.classList.add('loaded')" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
+        ? `<img src="${escH(image)}" alt="${escH(name)}"
+                onload="this.classList.add('loaded')"
+                onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
         : '';
       const fallbackStyle = image ? 'display:none' : '';
-      const initials = name.replace(/[^A-Z0-9]/gi, '').slice(0, 2).toUpperCase() || '??';
 
       return `
-        <a href="/meter?channel=${channel}" class="meter-card">
+        <a href="/meter?channel=${safeChannel}" class="meter-card">
           <div class="meter-thumb">
             ${imgHtml}
             <span class="meter-thumb-fallback" style="${fallbackStyle}">${initials}</span>
           </div>
           <div class="nav-text">
-            <div class="nav-title">${name}</div>
+            <div class="nav-title">${escH(name)}</div>
             <div class="nav-desc" style="display:flex;align-items:center;gap:0.6em">
               <span class="status-dot ${dot}" style="width:0.65em;height:0.65em;flex-shrink:0"></span>
               <span>${formatLastSeen(seen)}</span>
             </div>
           </div>
-          <span class="channel-badge">CH ${channel}</span>
+          <span class="channel-badge">CH ${safeChannel}</span>
           <svg class="nav-arrow" viewBox="0 0 16 16" fill="none">
-            <path d="M6 3l5 5-5 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+            <path d="M6 3l5 5-5 5" stroke="currentColor" stroke-width="1.5"
+                  stroke-linecap="round" stroke-linejoin="round" />
           </svg>
         </a>`;
     }

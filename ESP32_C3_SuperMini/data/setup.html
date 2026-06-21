@@ -10,6 +10,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AirMeter · Setup</title>
+  <script src="airmeter.js"></script>
   <link rel="stylesheet" href="airmeter.css">
   <style>
     /* ── CARD HEADER OVERRIDE (smaller padding on this page) ── */
@@ -438,7 +439,6 @@
   <script>
     /* ── APP LOGIC ────────────────────────────────────────────────── */
     let selectedSSID = "";
-    const $ = id => document.getElementById(id);
 
     function showScreen(screenId) {
       ['scr-list', 'scr-pass', 'scr-done'].forEach(id => $(id).classList.add('hidden'));
@@ -463,13 +463,6 @@
         input.type = 'password';
         icon.innerHTML = `<path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z" stroke="currentColor" stroke-width="1.2"/><circle cx="8" cy="8" r="2" stroke="currentColor" stroke-width="1.2"/>`;
       }
-    }
-
-    function getSignalBars(rssi) {
-      if (rssi >= -55) return 4;
-      if (rssi >= -67) return 3;
-      if (rssi >= -78) return 2;
-      return 1;
     }
 
     function fetchNetworks() {
