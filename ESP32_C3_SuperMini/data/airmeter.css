@@ -110,6 +110,7 @@ body {
 }
 
 .footer-val {
+  padding-top: 0.4em;
   font-family: var(--mono);
   font-size: 1.1em;
   color: var(--text-2);

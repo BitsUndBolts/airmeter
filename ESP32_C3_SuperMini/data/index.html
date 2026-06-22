@@ -107,7 +107,7 @@
     .signal-bars span:nth-child(4) { height: 1em; }
 
     /* ── STORAGE BAR (inline in footer) ── */
-    .storage-wrapper { display: inline-flex; align-items: center; }
+    .storage-wrapper { display: inline-flex; align-items: center; padding-top: 0.05em }
 
     .storage-text {
       position: relative;
@@ -126,8 +126,8 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      width: 7em;
-      height: 1.15em;
+      width: 12em;
+      height: 1.7em;
       background-color: var(--text-3);
       border-radius: 4px;
       overflow: hidden;
@@ -180,6 +180,54 @@
       border-radius: 0.2em;
       padding: 0.15em 0.5em;
       flex-shrink: 0;
+    }
+
+    /* ── FREQ TOGGLE ── */
+    .freq-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 0;
+      border: 1px solid var(--border-bright);
+      border-radius: 0.25em;
+      overflow: hidden;
+    }
+
+    .freq-btn {
+      width: 3.5em;
+      font-family: var(--mono);
+      font-size: 1em;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      padding: 0.15em 0.55em;
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--text-3);
+      transition: color 0.15s, background 0.15s;
+      line-height: 1.4;
+    }
+
+    .freq-btn + .freq-btn {
+      border-left: 1px solid var(--border-bright);
+    }
+
+    .freq-btn.active {
+      color: var(--accent);
+      background: var(--accent-dim);
+    }
+
+    .freq-btn.pending {
+      color: var(--yellow);
+      cursor: wait;
+    }
+
+    .freq-btn:not(.active):not(.pending):hover {
+      color: var(--text-2);
+      background: rgba(255,255,255,0.04);
+    }
+
+    .footer-val.cpu-val {
+      padding-top: 0;
     }
   </style>
 </head>
@@ -302,7 +350,7 @@
         </div>
         <div class="footer-item">
           <span class="footer-key">Module</span>
-          <span class="footer-val">ESP32</span>
+          <span class="footer-val"><span id="esp_model">ESP32</span></span>
         </div>
         <div class="footer-item">
           <span class="footer-key">Radio</span>
@@ -312,7 +360,19 @@
           <span class="footer-key">Memory</span>
           <span class="footer-val"><span id="free_memory"></span></span>
         </div>
-
+        <div class="footer-item">
+          <span class="footer-key">Temp</span>
+          <span class="footer-val"><span id="esp_temp">—</span></span>
+        </div>
+        <div class="footer-item">
+          <span class="footer-key">CPU Frequency</span>
+          <span class="footer-val cpu-val">
+            <span class="freq-toggle" id="freq-toggle">
+              <button class="freq-btn" id="freq-80"  onclick="setFreq(80)"  title="Switch to 80 MHz">80</button>
+              <button class="freq-btn" id="freq-160" onclick="setFreq(160)" title="Switch to 160 MHz">160</button>
+            </span>
+          </span>
+        </div>
         <div class="footer-item">
           <span class="footer-key">Storage</span>
           <span class="footer-val storage-wrapper" title="Loading layout...">
@@ -424,6 +484,65 @@
   <script>
     /* ── APP LOGIC ────────────────────────────────────────────────────── */
     const HIDE_METERS_AFTER_SECONDS = 30;
+
+    // ── Frequency toggle state ──────────────────────────────────────────
+    // confirmedFreq: what the ESP32 last told us (from api/system).
+    // pendingFreq:   what we requested but haven't yet seen confirmed.
+    // null = not yet known.
+    let confirmedFreq = null;
+    let pendingFreq   = null;
+
+    function updateFreqToggle(liveFreq) {
+      // If this matches our pending request, clear pending state.
+      if (pendingFreq !== null && liveFreq === pendingFreq) {
+        pendingFreq = null;
+      }
+      confirmedFreq = liveFreq;
+
+      const b80  = $('freq-80');
+      const b160 = $('freq-160');
+
+      // Clear all state classes first
+      b80.classList.remove('active', 'pending');
+      b160.classList.remove('active', 'pending');
+
+      if (pendingFreq !== null) {
+        // We sent a request and haven't seen it confirmed yet — show pending
+        // on the button we're waiting for, active on the current confirmed one.
+        const pendingBtn    = pendingFreq === 80  ? b80  : b160;
+        const confirmedBtn  = pendingFreq === 80  ? b160 : b80;
+        confirmedBtn.classList.add('active');
+        pendingBtn.classList.add('pending');
+      } else {
+        // Steady state — just highlight the confirmed freq.
+        const activeBtn = liveFreq === 80 ? b80 : b160;
+        activeBtn.classList.add('active');
+      }
+    }
+
+    async function setFreq(mhz) {
+      // Ignore clicks while a change is already in flight, or clicking
+      // the already-confirmed value with nothing pending.
+      if (pendingFreq !== null) return;
+      if (mhz === confirmedFreq) return;
+
+      pendingFreq = mhz;
+      updateFreqToggle(confirmedFreq); // immediately show pending state in UI
+
+      try {
+        await fetch('/api/system/freq', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ freq: mhz })
+        });
+        // Don't update confirmedFreq here — wait for the next api/system poll
+        // to confirm the change actually took effect on the device.
+      } catch (_) {
+        // Network error or device unreachable — revert pending state.
+        pendingFreq = null;
+        updateFreqToggle(confirmedFreq);
+      }
+    }
 
     function openResetModal() {
       $('modal-overlay').classList.add('visible');
@@ -592,6 +711,8 @@
       fetch('/api/system', { method: 'GET' })
         .then(res => res.json())
         .then(data => {
+          const esp = data.esp || {};
+
           // Firmware version
           if ($('firmware_version').innerText !== `v${data.firmware}`) {
             $('firmware_version').innerText = `v${data.firmware}`;
@@ -619,11 +740,34 @@
           // Active meter cards
           updateMeterCards(data.meters || []);
 
-          // Memory
-          if (data.memory) {
-            $('free_memory').innerText = `${Math.floor(parseInt(data.memory) / 1024)} KB`;
+          // Module name — dynamic from esp.model, tooltip shows chip details
+          if (esp.model) {
+            const modelEl = $('esp_model');
+            modelEl.textContent = esp.model;
+            const tipParts = [];
+            if (esp.cores !== undefined) tipParts.push(`Cores: ${esp.cores}`);
+            if (esp.rev   !== undefined) tipParts.push(`Rev: ${esp.rev}`);
+            if (esp.ver)                 tipParts.push(`SDK: ${esp.ver}`);
+            modelEl.title = tipParts.join(' · ');
+          }
+
+          // Memory (moved from data.memory to data.esp.memory)
+          const memBytes = esp.memory ?? data.memory;
+          if (memBytes) {
+            $('free_memory').innerText = `${Math.floor(parseInt(memBytes) / 1024)} KB`;
           } else {
             $('free_memory').innerText = 'Unavailable';
+          }
+
+          // Temperature
+          if (esp.temp !== undefined && esp.temp !== null) {
+            $('esp_temp').innerText = `${esp.temp.toFixed(1)} °C`;
+          }
+
+          // CPU frequency toggle — only update from confirmed device state,
+          // and only when no change is currently in flight.
+          if (esp.freq !== undefined) {
+            updateFreqToggle(esp.freq);
           }
 
           // Storage

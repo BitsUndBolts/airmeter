@@ -967,6 +967,43 @@ void setupWebServer() {
     pendingReboot = true;
   });
 
+  // ── API: CPU Frequency ────────────────────────────────────────────────────
+  // POST /api/system/freq  body: { "freq": 80 } or { "freq": 160 }
+  // Applies the new clock speed immediately (Wi-Fi stays up at both values)
+  // and persists it to Preferences so it survives reboots.
+  server.on("/api/system/freq", HTTP_POST, [](AsyncWebServerRequest* request) {}, NULL,
+    [](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+      JsonDocument doc;
+      if (deserializeJson(doc, data, len) || !doc["freq"].is<int>()) {
+        request->send(400, "application/json", "{\"status\":\"error\",\"message\":\"Invalid JSON or missing freq\"}");
+        return;
+      }
+
+      const int requested = doc["freq"].as<int>();
+
+      // Only 80 and 160 MHz are safe with Wi-Fi active on ESP32-C3.
+      if (requested != 80 && requested != 160) {
+        request->send(400, "application/json",
+                      "{\"status\":\"error\",\"message\":\"freq must be 80 or 160\"}");
+        return;
+      }
+
+      const uint32_t newFreq = (uint32_t)requested;
+
+      // Apply immediately — setCpuFrequencyMhz() is safe to call at runtime.
+      setCpuFrequencyMhz(newFreq);
+
+      // Persist to Preferences so the setting survives a reboot.
+      preferences.begin("cpu-config", false);
+      preferences.putUInt("freq_mhz", newFreq);
+      preferences.end();
+
+      Serial.printf("[CPU] Frequency changed to %u MHz\n", newFreq);
+
+      request->send(200, "application/json", "{\"status\":\"success\"}");
+    }
+  );
+
   // ── API: Meter Update ─────────────────────────────────────────────────────
   // Sends the RF config command to the target RP2040, creates a pending ticket,
   // and returns 202 + the ticket ID immediately. The ESP32 backend drives all
@@ -1221,6 +1258,18 @@ void setup() {
   wifi_ssid      = preferences.getString("ssid", "");
   wifi_password  = preferences.getString("pass", "");
   preferences.end();
+
+  // ── Apply saved CPU frequency (before Wi-Fi init so the radio clock is set) ──
+  // Safe values with Wi-Fi on ESP32-C3: 80 MHz and 160 MHz only.
+  // Default to 160 MHz if no saved value exists.
+  {
+    preferences.begin("cpu-config", true);
+    const uint32_t savedFreq = preferences.getUInt("freq_mhz", 160);
+    preferences.end();
+    const uint32_t safeFreq = (savedFreq == 80) ? 80 : 160;
+    setCpuFrequencyMhz(safeFreq);
+    Serial.printf("[CPU] Frequency set to %u MHz\n", safeFreq);
+  }
 
   // ── Network Strategy ──────────────────────────────────────────────────────
   if (wifi_ssid.isEmpty()) {
