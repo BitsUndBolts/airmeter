@@ -44,6 +44,24 @@ struct MeterData {
 // on a microcontroller with a fixed, small channel space.
 static MeterData meterRegistry[32];
 
+
+// =============================================================================
+// IMMUTABLE ESP32 HARDWARE PROFILE - POPULATED ONCE AT BOOT
+// =============================================================================
+struct ESPStaticDetails {
+    const char* model = nullptr;
+    const char* ver   = nullptr;
+    uint32_t    rev   = 0;
+    uint8_t     cores = 0;
+};
+
+// Global static instance allocated entirely on the BSS segment (stack/RAM).
+// Eliminates runtime heap allocations (`new` / `malloc`) for metadata.
+// Serves as a lightning-fast RAM cache to avoid reading hardware registers
+// or generating temporary strings during frequent JSON serialization loops.
+static ESPStaticDetails espStaticDetails;
+
+
 // =============================================================================
 // METER UPDATE TICKET
 //
@@ -665,7 +683,18 @@ void setupWebServer() {
     doc["ipAddress"] = WiFi.localIP().toString();
     doc["ssid"] = WiFi.SSID();
     doc["rssi"] = WiFi.RSSI();
-    doc["memory"] = ESP.getFreeHeap();
+
+    // Dedicated ESP32 object with chip details
+    JsonObject espObj = doc["esp"].to<JsonObject>();
+    // --- Dynamic Values (Polled live every time) ---
+    espObj["memory"] = ESP.getFreeHeap();
+    espObj["temp"]   = temperatureRead();
+    espObj["freq"]   = ESP.getCpuFreqMHz(); 
+    // --- Static Values (Read from your fast RAM struct cache) ---
+    espObj["model"]  = espStaticDetails.model;
+    espObj["cores"]  = espStaticDetails.cores;
+    espObj["rev"]    = espStaticDetails.rev;
+    espObj["ver"]    = espStaticDetails.ver;
 
     // Per-meter tracking array — only meters seen since boot
     JsonArray meters = doc["meters"].to<JsonArray>();
@@ -1163,6 +1192,12 @@ void setupWebServer() {
 void setup() {
   Serial.begin(115200);
   Serial.println("\n--- ESP32 Booting ---");
+
+  // Cache static hardware specs once
+  espStaticDetails.model = ESP.getChipModel();
+  espStaticDetails.cores = ESP.getChipCores();
+  espStaticDetails.rev   = ESP.getChipRevision();
+  espStaticDetails.ver   = ESP.getCoreVersion();
 
   // ── GPIO ──────────────────────────────────────────────────────────────────
   pinMode(BOOT_BUTTON_PIN,  INPUT_PULLUP);
