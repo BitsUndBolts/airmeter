@@ -68,7 +68,7 @@ For AirMeter to work, you need to program/flash four devices:
 
 ### ESP32 C3 SuperMini
 
-The easiest way to flash your ESP32 C3 SuperMini is to use this online tool. Just plug in your ESP32 C3 SuperMini and press "Flash"!
+The easiest way to flash your ESP32 C3 SuperMini is to use this online tool. Just plug in your ESP32 C3 SuperMini and press "Install Firmware"!
 
 [![Install Firmware](https://img.shields.io/badge/Install-Firmware-orange?style=for-the-badge&logo=espressif)](https://bitsundbolts.github.io/airmeter/)
 <br />*Note: Make sure to use Google Chrome, Microsoft Edge, or Opera. Safari and Firefox are not supported by the Web Serial standard.*
@@ -433,7 +433,7 @@ AirMeter/
 3. **Wire the PCB to the RP2040 Zero**, then flash [`RP2040_Zero.ino`](./RP2040_Zero/RP2040_Zero.ino).
 4. **Pre-configure the HC-12 pair** using [`Arduino_UNO_HT-12.ino`](./Arduino_UNO_HT-12/Arduino_UNO_HT-12.ino) so both radios agree on baud rate, channel, power, and mode (see [HC-12 Radio Configuration](#hc-12-radio-configuration)) - do this before final assembly, since the modules are easiest to reach on the bench.
 5. **Assemble the transmitter side**: comparator PCB, RP2040, HC-12, and the 3.3V boost converter, all powered from 2× AA cells, mounted inside the multimeter enclosure.
-6. **Flash the receiver ESP32-C3 SuperMini** with [`ESP32_C3_SuperMini.ino`](./ESP32_C3_SuperMini/ESP32_C3_SuperMini.ino), then upload the contents of [`data/`](./ESP32_C3_SuperMini/data) to LittleFS so the web UI is served from flash.
+6. **Flash the receiver ESP32-C3 SuperMini** with [`ESP32_C3_SuperMini.ino`](./ESP32_C3_SuperMini/ESP32_C3_SuperMini.ino), then upload the contents of [`data/`](./ESP32_C3_SuperMini/data) to LittleFS so the web UI is served from flash. Or use the one-click browser based [`Web Serial inteface`](https://bitsundbolts.github.io/airmeter/).
 7. **Power up the receiver and connect to its `AirMeter-Setup` Wi-Fi AP** (password `airmeter123`), then use the setup wizard to join it to your home network.
 8. **Open the dashboard** at `airmeter.local` (or the IP your router assigned it). The meter should auto-register the first time a packet arrives on its channel.
 9. **Fine-tune each meter** - name, face image, channel, refresh rate - from `meterConfig.html`.
