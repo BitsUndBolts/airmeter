@@ -70,7 +70,7 @@ For AirMeter to work, you need to program/flash four devices:
 
 The easiest way to flash your ESP32 C3 SuperMini is to use this online tool. Just plug in your ESP32 C3 SuperMini and press "Flash"!
 
-[![Install Firmware](https://img.shields.io/badge/Install-Firmware-orange?style=for-the-badge&logo=espressif)](./flasher/index.html)
+[![Install Firmware](https://img.shields.io/badge/Install-Firmware-orange?style=for-the-badge&logo=espressif)](https://bitsundbolts.github.io/airmeter/)
 <br />*Note: Make sure to use Google Chrome, Microsoft Edge, or Opera. Safari and Firefox are not supported by the Web Serial standard.*
 
 Of course, you can also flash the ESP32 using the Arduino IDE, but you need to install LittleFS management to upload the HTML UI manually.
