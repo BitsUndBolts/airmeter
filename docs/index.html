@@ -8,9 +8,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AirMeter · Installer</title>
-
   <style>
-    /* ── CSS VARIABLES (mirrored from airmeter.css) ── */
     :root {
       --bg:           #0a0c0e;
       --panel:        #111416;
@@ -34,7 +32,7 @@
 
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-    html { font-size: clamp(7px, 1.8vw, 22px); }
+    html { font-size: clamp(13px, 1.9vw, 20px); }
 
     body {
       font-family: var(--sans);
@@ -45,133 +43,110 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      padding: 2em 1.2em;
+      padding: 1.2em;
       background-image:
         linear-gradient(rgba(245, 166, 35, 0.02) 1px, transparent 1px),
         linear-gradient(90deg, rgba(245, 166, 35, 0.02) 1px, transparent 1px);
-      background-size: 3.2em 3.2em;
+      background-size: 40px 40px;
     }
 
     /* ── CARD ── */
     .card {
       width: 100%;
-      max-width: 34em;
+      max-width: 36em;
       background: var(--panel);
       border: 1px solid var(--border-bright);
-      border-radius: 0.4em;
+      border-radius: 0.45em;
       overflow: hidden;
     }
 
-    /* ── CARD HEADER ── */
+    /* ── HEADER ── */
     .card-header {
       background: var(--panel-2);
       border-bottom: 1px solid var(--border-bright);
-      padding: 1.2em 2em;
+      padding: 0.75em 1.2em;
       display: flex;
       align-items: center;
       justify-content: space-between;
     }
 
-    .header-badge {
-      display: flex;
-      align-items: center;
-      gap: 1em;
-    }
+    .header-badge { display: flex; align-items: center; gap: 0.75em; }
 
     .header-logo {
-      height: 2.5em;
+      height: 2em;
       width: auto;
       object-fit: contain;
-      aspect-ratio: 180 / 80;
-      animation: breathe 10s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+      animation: breathe 10s cubic-bezier(0.4,0,0.2,1) infinite;
     }
 
     @keyframes breathe {
-      0%, 100% { transform: scale(1); opacity: 1; }
-      50%       { transform: scale(1.1); }
+      0%,100% { transform: scale(1); }
+      50%      { transform: scale(1.08); }
     }
 
     .header-title {
       font-family: var(--mono);
-      font-size: 1.2em;
+      font-size: 0.85em;
       font-weight: 600;
       color: var(--text-2);
-      letter-spacing: 0.08em;
+      letter-spacing: 0.1em;
       text-transform: uppercase;
     }
 
     .version-pill {
       font-family: var(--mono);
-      font-size: 1em;
+      font-size: 0.85em;
       font-weight: 600;
       color: var(--accent);
       background: var(--accent-dim);
       border: 1px solid var(--accent-glow);
       border-radius: 0.3em;
-      padding: 0.2em 0.7em;
+      padding: 0.15em 0.6em;
       letter-spacing: 0.06em;
     }
 
-    /* ── CARD BODY ── */
-    .card-body {
-      padding: 2em;
-    }
+    /* ── BODY ── */
+    .card-body { padding: 1.2em; display: flex; flex-direction: column; gap: 1em; }
 
-    /* ── BROWSER SUPPORT NOTICE ── */
+    /* ── COMPAT NOTICE ── */
     .compat-notice {
       display: flex;
       align-items: flex-start;
-      gap: 0.8em;
-      padding: 1em 1.2em;
+      gap: 0.6em;
+      padding: 0.75em 0.9em;
       background: var(--accent-dim);
       border: 1px solid var(--accent-glow);
       border-radius: 0.3em;
-      margin-bottom: 2em;
     }
 
-    .compat-notice svg {
-      width: 1.4em;
-      height: 1.4em;
-      color: var(--accent);
-      flex-shrink: 0;
-      margin-top: 0.05em;
-    }
+    .compat-notice svg { width: 1em; height: 1em; color: var(--accent); flex-shrink: 0; margin-top: 0.1em; }
 
     .compat-notice p {
       font-family: var(--mono);
-      font-size: 1em;
+      font-size: 0.85em;
       color: var(--accent);
       line-height: 1.55;
       letter-spacing: 0.02em;
     }
 
-    .compat-notice a {
-      color: var(--accent);
-    }
-
     /* ── SECTION LABEL ── */
     .section-label {
       font-family: var(--mono);
-      font-size: 0.9em;
+      font-size: 0.78em;
       font-weight: 600;
-      letter-spacing: 0.18em;
+      letter-spacing: 0.16em;
       text-transform: uppercase;
       color: var(--text-3);
-      margin-bottom: 1em;
     }
 
-    /* ── STEP ROWS ── */
-    .steps {
-      display: flex;
-      flex-direction: column;
-      margin-bottom: 2em;
-    }
+    /* ── STEPS ── */
+    .steps { display: flex; flex-direction: column; }
 
     .step-row {
       display: flex;
-      gap: 1.2em;
+      gap: 0.75em;
       align-items: flex-start;
-      padding: 0.8em 0;
+      padding: 0.6em 0;
       border-bottom: 1px solid var(--border);
     }
 
@@ -179,65 +154,72 @@
 
     .step-num {
       font-family: var(--mono);
-      font-size: 1em;
+      font-size: 0.78em;
       font-weight: 600;
       color: var(--accent);
       background: var(--accent-dim);
-      border: 1px solid rgba(245, 166, 35, 0.2);
-      border-radius: 0.2em;
-      width: 2em;
-      height: 2em;
+      border: 1px solid rgba(245,166,35,0.2);
+      border-radius: 0.25em;
+      width: 1.6em;
+      height: 1.6em;
       display: flex;
       align-items: center;
       justify-content: center;
       flex-shrink: 0;
     }
 
-    .step-text {
-      font-size: 1.3em;
-      color: var(--text-2);
-      line-height: 1.5;
-      padding-top: 0.15em;
-    }
-
+    .step-text { font-size: 0.92em; color: var(--text-2); line-height: 1.5; padding-top: 0.1em; }
     .step-text strong { color: var(--text); font-weight: 600; }
 
     /* ── DIVIDER ── */
-    .divider {
-      height: 1px;
-      background: var(--border);
-      margin: 2em 0;
-    }
+    .divider { height: 1px; background: var(--border); }
 
-    /* ── FLASH SECTION ── */
-    .flash-area {
+    /* ── VERSION SELECT ── */
+    .field-row {
       display: flex;
-      flex-direction: column;
-      align-items: stretch;
-      gap: 1.2em;
+      align-items: center;
+      gap: 0.75em;
     }
 
-    .flash-label {
+    .field-label {
       font-family: var(--mono);
-      font-size: 0.9em;
+      font-size: 0.78em;
       font-weight: 600;
-      letter-spacing: 0.18em;
+      letter-spacing: 0.1em;
       text-transform: uppercase;
       color: var(--text-3);
+      flex-shrink: 0;
+      width: 4em;
     }
 
-    /* ── ESP WEB INSTALL BUTTON THEMING ── */
-    esp-web-install-button {
-      display: block;
-      width: 100%;
+    .version-select {
+      flex: 1;
+      background: var(--bg);
+      border: 1px solid var(--border-bright);
+      border-radius: 0.3em;
+      padding: 0.45em 0.75em;
+      font-family: var(--mono);
+      font-size: 0.92em;
+      color: var(--text);
+      outline: none;
+      cursor: pointer;
+      appearance: none;
+      -webkit-appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6' fill='none'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%234a5158' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 0.75em center;
+      padding-right: 2em;
+      transition: border-color 0.15s;
     }
 
-    /* Style the inner <button> that the custom element renders */
-    esp-web-install-button::part(button) {
+    .version-select:focus { border-color: var(--accent); }
+
+    /* ── FLASH BUTTON ── */
+    .flash-btn {
       width: 100%;
-      padding: 1.3em;
+      padding: 0.85em;
       font-family: var(--sans);
-      font-size: 1.4em;
+      font-size: 1em;
       font-weight: 600;
       background: var(--accent);
       color: var(--bg);
@@ -246,161 +228,264 @@
       cursor: pointer;
       letter-spacing: 0.01em;
       transition: opacity 0.15s, box-shadow 0.15s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5em;
     }
 
-    esp-web-install-button::part(button):hover {
+    .flash-btn:hover:not(:disabled) {
       opacity: 0.88;
       box-shadow: 0 0 2em var(--accent-glow);
     }
 
-    /* Unsupported browser state */
-    esp-web-install-button[unsupported] {
-      display: none;
+    .flash-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
     }
 
-    /* ── UNSUPPORTED BROWSER FALLBACK ── */
-    .unsupported-msg {
+    .flash-btn svg { width: 1.1em; height: 1.1em; flex-shrink: 0; }
+
+    /* ── UNSUPPORTED BROWSER ── */
+    .unsupported-box {
       display: none;
-      padding: 1.2em 1.4em;
-      background: rgba(255, 85, 85, 0.08);
-      border: 1px solid rgba(255, 85, 85, 0.2);
+      padding: 0.75em 0.9em;
+      background: rgba(255,85,85,0.08);
+      border: 1px solid rgba(255,85,85,0.2);
       border-radius: 0.3em;
       font-family: var(--mono);
-      font-size: 1.1em;
+      font-size: 0.85em;
       color: var(--red);
       line-height: 1.55;
       text-align: center;
     }
 
-    esp-web-install-button[unsupported] ~ .unsupported-msg {
-      display: block;
-    }
+    /* hide the esp-web-tools element entirely — we drive it via JS */
+    esp-web-install-button { display: none !important; }
 
-    /* ── CARD FOOTER ── */
+    /* ── FOOTER ── */
     .card-footer {
       background: var(--panel-2);
       border-top: 1px solid var(--border);
-      padding: 1em 2em;
+      padding: 0.6em 1.2em;
       font-family: var(--mono);
-      font-size: 1em;
+      font-size: 0.78em;
       color: var(--text-3);
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 1em;
+      gap: 0.6em;
     }
 
-    .card-footer a,
-    .card-footer a:visited {
-      color: var(--accent);
-      text-decoration: none;
-    }
-
+    .card-footer a, .card-footer a:visited { color: var(--accent); text-decoration: none; }
     .card-footer a:hover { text-decoration: underline; }
 
-    .footer-chip {
-      display: flex;
-      align-items: center;
-      gap: 0.5em;
-    }
+    .footer-chip { display: flex; align-items: center; gap: 0.5em; }
 
     .chip-dot {
-      width: 0.6em;
-      height: 0.6em;
+      width: 0.55em; height: 0.55em;
       border-radius: 50%;
       background: var(--accent);
       box-shadow: 0 0 6px var(--accent);
-      animation: pulse-dot 2.5s ease-in-out infinite;
+      animation: pulse 2.5s ease-in-out infinite;
       flex-shrink: 0;
     }
 
-    @keyframes pulse-dot {
-      0%, 100% { box-shadow: 0 0 4px var(--accent), 0 0 12px var(--accent); }
-      50%       { box-shadow: 0 0 2px var(--accent), 0 0 6px var(--accent); }
+    @keyframes pulse {
+      0%,100% { box-shadow: 0 0 4px var(--accent), 0 0 10px var(--accent); }
+      50%      { box-shadow: 0 0 2px var(--accent), 0 0 5px var(--accent); }
     }
   </style>
 </head>
-
 <body>
 
   <main class="card">
 
-    <!-- ── HEADER ── -->
+    <!-- HEADER -->
     <div class="card-header">
       <div class="header-badge">
-        <img src="airmeter.webp" alt="AirMeter Logo" class="header-logo"
+        <img src="airmeter.webp" alt="AirMeter" class="header-logo"
              onerror="this.style.display='none'">
         <span class="header-title">Installer</span>
       </div>
-      <span class="version-pill">v1.0</span>
+      <span class="version-pill" id="header-version">v1.0</span>
     </div>
 
-    <!-- ── BODY ── -->
+    <!-- BODY -->
     <div class="card-body">
 
-      <!-- Browser compatibility notice -->
+      <!-- Browser notice -->
       <div class="compat-notice">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
              stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="10"/>
           <line x1="12" y1="8" x2="12" y2="12"/>
           <line x1="12" y1="16" x2="12.01" y2="16"/>
         </svg>
-        <p>Requires a <strong>Chromium-based browser</strong> (Chrome, Edge, Opera) with Web Serial support. Firefox and Safari are not supported.</p>
+        <p>Requires <strong>Chrome, Edge</strong> or another Chromium browser. Firefox and Safari are not supported.</p>
       </div>
 
       <!-- Steps -->
-      <div class="section-label">Before you begin</div>
-      <div class="steps">
-        <div class="step-row">
-          <div class="step-num">1</div>
-          <div class="step-text">Connect your <strong>ESP32-C3 SuperMini</strong> to this computer with a USB data cable.</div>
-        </div>
-        <div class="step-row">
-          <div class="step-num">2</div>
-          <div class="step-text">Click <strong>Install Firmware</strong> below and select the correct serial port when prompted.</div>
-        </div>
-        <div class="step-row">
-          <div class="step-num">3</div>
-          <div class="step-text">Wait for the flash to complete, then connect to the <strong>AirMeter-Setup</strong> Wi-Fi hotspot to configure your network.</div>
+      <div>
+        <div class="section-label" style="margin-bottom:0.6em">Before you begin</div>
+        <div class="steps">
+          <div class="step-row">
+            <div class="step-num">1</div>
+            <div class="step-text">Connect your <strong>ESP32-C3 SuperMini</strong> to this computer with a USB data cable.</div>
+          </div>
+          <div class="step-row">
+            <div class="step-num">2</div>
+            <div class="step-text">Select a firmware version below, then click <strong>Install Firmware</strong> and pick the serial port when prompted.</div>
+          </div>
+          <div class="step-row">
+            <div class="step-num">3</div>
+            <div class="step-text">After flashing, connect to the <strong>AirMeter-Setup</strong> Wi-Fi hotspot to configure your network.</div>
+          </div>
         </div>
       </div>
 
       <div class="divider"></div>
 
-      <!-- Flash button -->
-      <div class="flash-area">
-        <span class="flash-label">Flash Firmware</span>
+      <!-- Version selector -->
+      <div>
+        <div class="section-label" style="margin-bottom:0.6em">Flash Firmware</div>
+        <div class="field-row" style="margin-bottom:0.75em">
+          <span class="field-label">Version</span>
+          <select class="version-select" id="version-select"></select>
+        </div>
 
-        <esp-web-install-button manifest="./manifest.json">
-          <button slot="activate">Install Firmware</button>
-        </esp-web-install-button>
+        <!-- Hidden esp-web-tools element — driven by JS -->
+        <esp-web-install-button id="ewt-btn"></esp-web-install-button>
 
-        <div class="unsupported-msg">
+        <!-- Our styled button -->
+        <button class="flash-btn" id="flash-btn" disabled>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/>
+            <line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
+          Install Firmware
+        </button>
+
+        <div class="unsupported-box" id="unsupported-box">
           Your browser does not support Web Serial.<br>
           Please use Chrome, Edge, or another Chromium-based browser.
         </div>
       </div>
 
-    </div>
+    </div><!-- /card-body -->
 
-    <!-- ── FOOTER ── -->
+    <!-- FOOTER -->
     <div class="card-footer">
       <div class="footer-chip">
         <span class="chip-dot"></span>
         <span>ESP32-C3 SuperMini</span>
       </div>
-      <a href="https://github.com/alexanderfuchs/airmeter" target="_blank" rel="noopener">
-        GitHub ↗
-      </a>
+      <a href="https://github.com/alexanderfuchs/airmeter" target="_blank" rel="noopener">GitHub ↗</a>
     </div>
 
   </main>
 
-  <!-- ESP Web Tools — loaded last so the custom element is defined after the DOM -->
-  <script
-    type="module"
-    src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module">
+  <!-- esp-web-tools — loaded as module so the custom element registers -->
+  <script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
+
+  <script>
+    // ── Manifest data ────────────────────────────────────────────────────────
+    // Each entry here maps to one selectable version in the UI.
+    // Add or remove entries as you cut new releases.
+    const VERSIONS = [
+      {
+        label: "Latest (v1.0)",
+        manifest: {
+          name: "AirMeter ESP32-C3 SuperMini",
+          version: "1.0",
+          builds: [
+            {
+              chipFamily: "ESP32-C3",
+              parts: [
+                { path: "../releases/download/v1.0/ESP32_C3_SuperMini_autoflash.bin", offset: 0 },
+                { path: "../releases/download/v1.0/boot_app0.bin", offset: 57344 }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        label: "v1.0",
+        manifest: {
+          name: "AirMeter ESP32-C3 SuperMini",
+          version: "1.0",
+          builds: [
+            {
+              chipFamily: "ESP32-C3",
+              parts: [
+                { path: "../releases/download/v1.0/ESP32_C3_SuperMini_autoflash.bin", offset: 0 },
+                { path: "../releases/download/v1.0/boot_app0.bin", offset: 57344 }
+              ]
+            }
+          ]
+        }
+      }
+    ];
+
+    // ── DOM refs ─────────────────────────────────────────────────────────────
+    const versionSelect  = document.getElementById('version-select');
+    const flashBtn       = document.getElementById('flash-btn');
+    const ewtBtn         = document.getElementById('ewt-btn');
+    const headerVersion  = document.getElementById('header-version');
+    const unsupportedBox = document.getElementById('unsupported-box');
+
+    // ── Check Web Serial support ──────────────────────────────────────────────
+    const supported = 'serial' in navigator;
+    if (!supported) {
+      flashBtn.style.display = 'none';
+      unsupportedBox.style.display = 'block';
+    }
+
+    // ── Populate version dropdown ─────────────────────────────────────────────
+    let currentBlobUrl = null;
+
+    function buildVersionSelect() {
+      VERSIONS.forEach((v, i) => {
+        const opt = document.createElement('option');
+        opt.value = i;
+        opt.textContent = v.label;
+        versionSelect.appendChild(opt);
+      });
+    }
+
+    function applyVersion(idx) {
+      const v = VERSIONS[idx];
+      if (!v) return;
+
+      // Revoke previous blob URL to avoid memory leak
+      if (currentBlobUrl) URL.revokeObjectURL(currentBlobUrl);
+
+      const blob = new Blob([JSON.stringify(v.manifest)], { type: 'application/json' });
+      currentBlobUrl = URL.createObjectURL(blob);
+
+      ewtBtn.setAttribute('manifest', currentBlobUrl);
+      headerVersion.textContent = 'v' + v.manifest.version;
+
+      if (supported) flashBtn.disabled = false;
+    }
+
+    buildVersionSelect();
+    applyVersion(0);
+
+    versionSelect.addEventListener('change', () => applyVersion(Number(versionSelect.value)));
+
+    // ── Flash button → delegate to the hidden esp-web-install-button ─────────
+    // We wait for the custom element to be defined (it registers asynchronously
+    // when the module loads), then wire our button to call its click() method.
+    customElements.whenDefined('esp-web-install-button').then(() => {
+      flashBtn.addEventListener('click', () => {
+        // The element's shadowRoot contains the real <button>. Clicking the
+        // host element itself triggers its internal install flow.
+        ewtBtn.click();
+      });
+    });
   </script>
 
 </body>
