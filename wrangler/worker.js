@@ -22,7 +22,7 @@ const REPO  = "airmeter";
 const ALLOWED_ORIGIN = "https://bitsundbolts.github.io";
 
 export default {
-  async fetch(request, ctx) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
     if (request.method === "OPTIONS") {
