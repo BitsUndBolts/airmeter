@@ -583,6 +583,7 @@
       navigator.serial.addEventListener('connect', refreshConnectionIndicator);
       navigator.serial.addEventListener('disconnect', refreshConnectionIndicator);
       refreshConnectionIndicator();
+      setInterval(refreshConnectionIndicator, 1000); // catches permission granted while still plugged in
     }
   </script>
 
