@@ -260,8 +260,8 @@
       text-align: center;
     }
 
-    /* hide the esp-web-tools element entirely — we drive it via JS */
-    esp-web-install-button { display: none !important; }
+    /* make the custom element a block so our button fills full width */
+    esp-web-install-button { display: block; }
 
     /* ── FOOTER ── */
     .card-footer {
@@ -354,24 +354,26 @@
           <select class="version-select" id="version-select"></select>
         </div>
 
-        <!-- Hidden esp-web-tools element — driven by JS -->
-        <esp-web-install-button id="ewt-btn"></esp-web-install-button>
-
-        <!-- Our styled button -->
-        <button class="flash-btn" id="flash-btn" disabled>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-               stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-            <polyline points="17 8 12 3 7 8"/>
-            <line x1="12" y1="3" x2="12" y2="15"/>
-          </svg>
-          Install Firmware
-        </button>
-
-        <div class="unsupported-box" id="unsupported-box">
-          Your browser does not support Web Serial.<br>
-          Please use Chrome, Edge, or another Chromium-based browser.
-        </div>
+        <!-- esp-web-install-button wraps our styled button via the activate slot.
+             The slot's click listener is what fires the install flow, so our
+             button just needs to live inside it — no JS delegation required. -->
+        <esp-web-install-button id="ewt-btn">
+          <button slot="activate" class="flash-btn" id="flash-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="17 8 12 3 7 8"/>
+              <line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+            Install Firmware
+          </button>
+          <span slot="unsupported">
+            <div class="unsupported-box" id="unsupported-box">
+              Your browser does not support Web Serial.<br>
+              Please use Chrome, Edge, or another Chromium-based browser.
+            </div>
+          </span>
+        </esp-web-install-button>
       </div>
 
     </div><!-- /card-body -->
@@ -430,20 +432,11 @@
     ];
 
     // ── DOM refs ─────────────────────────────────────────────────────────────
-    const versionSelect  = document.getElementById('version-select');
-    const flashBtn       = document.getElementById('flash-btn');
-    const ewtBtn         = document.getElementById('ewt-btn');
-    const headerVersion  = document.getElementById('header-version');
-    const unsupportedBox = document.getElementById('unsupported-box');
+    const versionSelect = document.getElementById('version-select');
+    const ewtBtn        = document.getElementById('ewt-btn');
+    const headerVersion = document.getElementById('header-version');
 
-    // ── Check Web Serial support ──────────────────────────────────────────────
-    const supported = 'serial' in navigator;
-    if (!supported) {
-      flashBtn.style.display = 'none';
-      unsupportedBox.style.display = 'block';
-    }
-
-    // ── Populate version dropdown ─────────────────────────────────────────────
+    // ── Populate version dropdown & wire manifest via Blob URL ────────────────
     let currentBlobUrl = null;
 
     function buildVersionSelect() {
@@ -459,7 +452,7 @@
       const v = VERSIONS[idx];
       if (!v) return;
 
-      // Revoke previous blob URL to avoid memory leak
+      // Revoke previous Blob URL to avoid memory leak
       if (currentBlobUrl) URL.revokeObjectURL(currentBlobUrl);
 
       const blob = new Blob([JSON.stringify(v.manifest)], { type: 'application/json' });
@@ -467,25 +460,12 @@
 
       ewtBtn.setAttribute('manifest', currentBlobUrl);
       headerVersion.textContent = 'v' + v.manifest.version;
-
-      if (supported) flashBtn.disabled = false;
     }
 
     buildVersionSelect();
     applyVersion(0);
 
     versionSelect.addEventListener('change', () => applyVersion(Number(versionSelect.value)));
-
-    // ── Flash button → delegate to the hidden esp-web-install-button ─────────
-    // We wait for the custom element to be defined (it registers asynchronously
-    // when the module loads), then wire our button to call its click() method.
-    customElements.whenDefined('esp-web-install-button').then(() => {
-      flashBtn.addEventListener('click', () => {
-        // The element's shadowRoot contains the real <button>. Clicking the
-        // host element itself triggers its internal install flow.
-        ewtBtn.click();
-      });
-    });
   </script>
 
 </body>
