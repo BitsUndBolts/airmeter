@@ -170,6 +170,8 @@
 
     .step-text { font-size: 0.92em; color: var(--text-2); line-height: 1.5; padding-top: 0.1em; }
     .step-text strong { color: var(--text); font-weight: 600; }
+    .step-text a         { color: var(--accent); text-decoration: none; font-family: var(--mono); font-size: 0.92em; }
+    .step-text a:hover   { text-decoration: underline; }
 
     /* ── DIVIDER ── */
     .divider { height: 1px; background: var(--border); }
@@ -301,6 +303,39 @@
       0%,100% { box-shadow: 0 0 4px var(--dot-color), 0 0 10px var(--dot-color); }
       50%      { box-shadow: 0 0 2px var(--dot-color), 0 0 5px var(--dot-color); }
     }
+
+    .footnote-ref {
+      color: var(--accent);
+      text-decoration: none;
+      font-size: 0.75em;
+      vertical-align: super;
+      margin-left: 0.15em;
+    }
+
+    .footnote {
+      margin-top: 0.6em;
+      padding-top: 0.6em;
+      border-top: 1px solid var(--border);
+      font-size: 0.85em;
+      color: var(--text-2);
+      line-height: 1.5;
+    }
+
+    .footnote sup {
+      color: var(--accent);
+      font-weight: 600;
+      margin-right: 0.2em;
+    }
+
+    .footnote code {
+      font-family: var(--mono);
+      background: var(--panel-2);
+      border: 1px solid var(--border-bright);
+      border-radius: 0.25em;
+      padding: 0.1em 0.45em;
+      color: var(--text);
+      font-size: 0.95em;
+    }
   </style>
 </head>
 <body>
@@ -345,7 +380,12 @@
           </div>
           <div class="step-row">
             <div class="step-num">3</div>
-            <div class="step-text">After flashing, connect to the <strong>AirMeter-Setup</strong> Wi-Fi hotspot to configure your network.</div>
+            <div class="step-text">
+              After flashing, connect to the <strong>AirMeter-Setup</strong><span id="ref1" class="footnote-ref">*</span> Wi-Fi hotspot to configure your network at <a href="http://airmeter.local">airmeter.local</a>.
+              <div class="footnote" id="fn1">
+                <sup>*</sup>Hotspot password: <code>airmeter123</code>
+              </div>
+            </div>
           </div>
         </div>
       </div>
