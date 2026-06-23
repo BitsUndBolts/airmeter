@@ -1,3 +1,5 @@
 ESP32_C3_SuperMini/build/
+ESP32_C3_SuperMini/release/
 RP2040_Zero/build/
 wrangler-account.json
+Build_Release.bat

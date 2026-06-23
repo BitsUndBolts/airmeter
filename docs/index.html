@@ -436,9 +436,10 @@
 
           const firmwareAsset = release.assets.find(a => a.name.endsWith('_autoflash.bin'));
           const bootAsset     = release.assets.find(a => a.name === 'boot_app0.bin');
+          const fsAsset       = release.assets.find(a => a.name.endsWith('_littlefs.bin'));
 
-          // Skip any release that doesn't have the expected pair of binaries
-          if (!firmwareAsset || !bootAsset) return null;
+          // Skip any release that doesn't have the full set of binaries
+          if (!firmwareAsset || !bootAsset || !fsAsset) return null;
 
           return {
             label: i === 0 ? `Latest (${tag})` : tag,
@@ -450,7 +451,9 @@
                   chipFamily: 'ESP32-C3',
                   parts: [
                     { path: `${PROXY_BASE}/${encodeURIComponent(tag)}/${encodeURIComponent(firmwareAsset.name)}`, offset: 0 },
-                    { path: `${PROXY_BASE}/${encodeURIComponent(tag)}/${encodeURIComponent(bootAsset.name)}`, offset: 57344 }
+                    { path: `${PROXY_BASE}/${encodeURIComponent(tag)}/${encodeURIComponent(bootAsset.name)}`, offset: 57344 },
+                    // LittleFS "spiffs" partition from partitions.csv: 0x290000
+                    { path: `${PROXY_BASE}/${encodeURIComponent(tag)}/${encodeURIComponent(fsAsset.name)}`, offset: 2686976 }
                   ]
                 }
               ]
