@@ -283,17 +283,23 @@
     .footer-chip { display: flex; align-items: center; gap: 0.5em; }
 
     .chip-dot {
+      --dot-color: var(--accent);
       width: 0.55em; height: 0.55em;
       border-radius: 50%;
-      background: var(--accent);
-      box-shadow: 0 0 6px var(--accent);
+      background: var(--dot-color);
+      box-shadow: 0 0 6px var(--dot-color);
       animation: pulse 2.5s ease-in-out infinite;
       flex-shrink: 0;
+      transition: background 0.3s, box-shadow 0.3s;
+    }
+
+    .chip-dot.connected {
+      --dot-color: var(--green);
     }
 
     @keyframes pulse {
-      0%,100% { box-shadow: 0 0 4px var(--accent), 0 0 10px var(--accent); }
-      50%      { box-shadow: 0 0 2px var(--accent), 0 0 5px var(--accent); }
+      0%,100% { box-shadow: 0 0 4px var(--dot-color), 0 0 10px var(--dot-color); }
+      50%      { box-shadow: 0 0 2px var(--dot-color), 0 0 5px var(--dot-color); }
     }
   </style>
 </head>
@@ -514,6 +520,30 @@
     versionSelect.addEventListener('change', () => applyVersion(Number(versionSelect.value)));
 
     init();
+
+    // ── Connection indicator ────────────────────────────────────────────────
+    // Web Serial only reports devices the user has already granted this page
+    // permission for (this is intentional - browsers don't let a site detect
+    // arbitrary USB devices for privacy reasons). So this stays accent-colored
+    // until someone clicks "Install Firmware" and picks a port at least once;
+    // after that, it tracks live connect/disconnect, including on future visits.
+    const chipDot = document.querySelector('.chip-dot');
+
+    async function refreshConnectionIndicator() {
+      try {
+        const ports = await navigator.serial.getPorts();
+        const connected = ports.some(p => p.connected);
+        chipDot.classList.toggle('connected', connected);
+      } catch {
+        chipDot.classList.remove('connected');
+      }
+    }
+
+    if ('serial' in navigator) {
+      navigator.serial.addEventListener('connect', refreshConnectionIndicator);
+      navigator.serial.addEventListener('disconnect', refreshConnectionIndicator);
+      refreshConnectionIndicator();
+    }
   </script>
 
 </body>
