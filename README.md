@@ -326,8 +326,16 @@ The live meter view ([`meter.html`](./ESP32_C3_SuperMini/data/meter.html)) ships
 ## Hardware You'll Need
 
 - 1× ANENG AN870 multimeter (or any multimeter sharing the same DTM0660-driven 4×15 multiplexed LCD)
-- 1× RP2040 Zero
-- 1× ESP32-C3 SuperMini (receiver side)
+- 1× RP2040 Zero 
+- 1× ESP32-C3 SuperMini 
+  > ⚠️ **CRITICAL CHIP REQUIREMENT:** Ensure the main silicon chip on your module is laser-etched with a model number starting with **`FH4P4`** (e.g., `FH4P4M4470` or `FH4P4T5140`). 
+  > 
+  > **What the markings mean:**
+  > * **F** = Flash embedded inside the chip package (SiP).
+  > * **H** = High-temperature rating up to 105°C (Avoid modules with **N**, which are only rated up to 85°C).
+  > * **4** = 4 MB Internal Flash memory capacity (Required for this project's code and LittleFS storage).
+  > * **P4** = Physical QFN32 (5x5 mm) form-factor packaging.
+  > * *The remaining letters/numbers (e.g., M4470, T5140) are factory batch tracking and can vary safely.*
 - 2× HC-12 433 MHz wireless modules
 - 5× LMV339 quad comparators (+custom PCB and SMD components - please see BOM below)
 - 1× Arduino Uno (or any AVR board) - only needed temporarily, to program the HC-12 modules
