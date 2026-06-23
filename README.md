@@ -156,11 +156,11 @@ Once every segment was mapped, the rest of the project was "just" wiring: a comp
 ## System Architecture
 
 ```
-  ┌─────────────────┐      ┌──────────────────┐       ┌─────────────┐       ┌─────────────────┐      
-  │ AN870 LCD glass │ ───▶│ LMV339 Comparator │ ───▶ │ RP2040 Zero │ ───▶ │   HC-12 (TX)    │ 
-  │ (4 COM × 15 SEG)│      │  PCB (digitize)  │       │ (sample +   │       │  9600 / C003 /  │ 
-  └─────────────────┘      └──────────────────┘       │  frame data)│       │  5dBm / FU1     │     
-                                                      └─────────────┘       └─────────────────┘  
+  ┌─────────────────┐      ┌───────────────────────┐       ┌─────────────┐       ┌─────────────────┐      
+  │ AN870 LCD glass │ ───▶│ LM339LVPWR Comparator │ ───▶  │ RP2040 Zero │ ───▶ │   HC-12 (TX)    │ 
+  │ (4 COM × 15 SEG)│      │  PCB (digitize)       │       │ (sample +   │       │  9600 / C003 /  │ 
+  └─────────────────┘      └───────────────────────┘       │  frame data)│       │  5dBm / FU1     │     
+                                                           └─────────────┘       └─────────────────┘  
 
    ···▶   ···▶   ···▶    WIRELESS / RADIO TRANSMISSION   ···▶   ···▶   ···▶
 
@@ -179,7 +179,7 @@ Reading the multiplexed lines directly from a microcontroller GPIO doesn't work 
   <img src="PCB/PCB.jpg" width="800" alt="Custom comparator PCB">
 </p>
 
-The fix is a custom PCB built around **LMV339 comparators**, each referenced to fixed voltage thresholds (~0.5V and ~2.5V) so that the messy analog waveform on each trace gets cleanly digitized into a proper HIGH/LOW signal before it ever reaches a microcontroller pin.
+The fix is a custom PCB built around **LM339LVPWR comparators**, each referenced to fixed voltage thresholds (~0.5V and ~2.5V) so that the messy analog waveform on each trace gets cleanly digitized into a proper HIGH/LOW signal before it ever reaches a microcontroller pin.
 
 ### 3. The Transmitter Node (RP2040 Zero)
 
@@ -373,7 +373,7 @@ The live meter view ([`meter.html`](./ESP32_C3_SuperMini/data/meter.html)) ships
   > * **P4** = Physical QFN32 (5x5 mm) form-factor packaging.
   > * *The remaining letters/numbers (e.g., M4470, T5140) are factory batch tracking and can vary safely.*
 - 2× HC-12 433 MHz wireless modules
-- 5× LMV339 quad comparators (+custom PCB and SMD components - please see BOM below)
+- 5× LM339LVPWR quad comparators (+custom PCB and SMD components - please see BOM below)
 - 1× Arduino Uno (or any AVR board) - only needed temporarily, to program the HC-12 modules
 - 3.3V boost converter
 
@@ -390,7 +390,7 @@ The live meter view ([`meter.html`](./ESP32_C3_SuperMini/data/meter.html)) ships
 | 7 | Resistor | R2 | R0603 | 1 | 20kΩ¹ |
 | 8 | Resistor | R3 | R0603 | 1 | 50kΩ² |
 | 9 | Resistor | R4 | R0603 | 1 | 6.8kΩ² |
-| 10 | Comparator | U1, U2, U3, U4, U5 | TSSOP-14 | 5 | LMV339 |
+| 10 | Comparator | U1, U2, U3, U4, U5 | TSSOP-14 | 5 | LM339LVPWR |
 
 ¹ Voltage Divider (source 3.3V) aim for ~2.5V or more, but below 2.8V<br />
 ² Voltage Divider (source 3.3V) aim for ~0.5V or less, but above 0.2V
@@ -428,7 +428,7 @@ AirMeter/
 
 **Safety note:** disconnect the test probes from any circuit and remove the battery before opening the meter or soldering anything inside it.
 
-1. **Get the comparator PCB built.** Order the board and SMD parts per the BOM, then solder the five LMV339s and supporting passives.
+1. **Get the comparator PCB built.** Order the board and SMD parts per the BOM, then solder the five LM339LVPWRs and supporting passives.
 2. **Map your glass (skip this if you're using a stock AN870).** Use the probing sketch in [The Probe & Segment Mapping](#1-the-probe--segment-mapping) to confirm your unit's COM/SEG layout matches the [LCD Segment Map](#lcd-segment-map) - cheap multimeters sometimes share a glass design across firmware variants, but it's worth verifying before you commit to wiring.
 3. **Wire the PCB to the RP2040 Zero**, then flash [`RP2040_Zero.ino`](./RP2040_Zero/RP2040_Zero.ino).
 4. **Pre-configure the HC-12 pair** using [`Arduino_UNO_HT-12.ino`](./Arduino_UNO_HT-12/Arduino_UNO_HT-12.ino) so both radios agree on baud rate, channel, power, and mode (see [HC-12 Radio Configuration](#hc-12-radio-configuration)) - do this before final assembly, since the modules are easiest to reach on the bench.
