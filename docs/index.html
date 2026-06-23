@@ -393,53 +393,76 @@
   <script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
 
   <script>
-    // ── Manifest data ────────────────────────────────────────────────────────
-    // Each entry here maps to one selectable version in the UI.
-    // Add or remove entries as you cut new releases.
-    const VERSIONS = [
-      {
-        label: "Latest (v1.0)",
-        manifest: {
-          name: "AirMeter ESP32-C3 SuperMini",
-          version: "1.0",
-          builds: [
-            {
-              chipFamily: "ESP32-C3",
-              parts: [
-                { path: "https://github.com/BitsUndBolts/airmeter/releases/download/v1.0/ESP32_C3_SuperMini_autoflash.bin", offset: 0 },
-                { path: "https://github.com/BitsUndBolts/airmeter/releases/download/v1.0/boot_app0.bin", offset: 57344 }
-              ]
-            }
-          ]
-        }
-      },
-      {
-        label: "v1.0",
-        manifest: {
-          name: "AirMeter ESP32-C3 SuperMini",
-          version: "1.0",
-          builds: [
-            {
-              chipFamily: "ESP32-C3",
-              parts: [
-                { path: "https://github.com/BitsUndBolts/airmeter/releases/download/v1.0/ESP32_C3_SuperMini_autoflash.bin", offset: 0 },
-                { path: "https://github.com/BitsUndBolts/airmeter/releases/download/v1.0/boot_app0.bin", offset: 57344 }
-              ]
-            }
-          ]
-        }
-      }
-    ];
+    // ── Configuration ────────────────────────────────────────────────────────
+    const REPO_OWNER = "bitsundbolts";
+    const REPO_NAME   = "airmeter";
+
+    // Cloudflare Worker that relays the GitHub release binaries with CORS
+    // headers attached (GitHub's release-asset CDN doesn't send any).
+    // See worker.js — update this after you deploy it.
+    const PROXY_BASE = `https://${REPO_NAME}-releases.${REPO_OWNER}.workers.dev`;
 
     // ── DOM refs ─────────────────────────────────────────────────────────────
     const versionSelect = document.getElementById('version-select');
-    const ewtBtn        = document.getElementById('ewt-btn');
-    const headerVersion = document.getElementById('header-version');
+    const ewtBtn         = document.getElementById('ewt-btn');
+    const headerVersion  = document.getElementById('header-version');
+    const flashBtn        = document.getElementById('flash-btn');
 
-    // ── Populate version dropdown & wire manifest via Blob URL ────────────────
+    let VERSIONS = [];
     let currentBlobUrl = null;
 
+    // ── Fetch releases straight from the GitHub API ────────────────────────────
+    // api.github.com sends Access-Control-Allow-Origin: * on every GET
+    // endpoint, so this call works fine cross-origin from GitHub Pages with
+    // no proxy involved. Only the binary downloads below need the proxy.
+    async function fetchVersions() {
+      const res = await fetch(
+        `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases`,
+        { headers: { Accept: 'application/vnd.github+json' } }
+      );
+
+      if (!res.ok) {
+        throw new Error(`GitHub API error: ${res.status}`);
+      }
+
+      const releases = await res.json();
+
+      // GitHub returns releases newest-first already.
+      return releases
+        .filter(r => !r.draft)
+        .map((release, i) => {
+          const tag        = release.tag_name;        // e.g. "v1.0"
+          const versionNum = tag.replace(/^v/, '');    // "1.0"
+
+          const firmwareAsset = release.assets.find(a => a.name.endsWith('_autoflash.bin'));
+          const bootAsset     = release.assets.find(a => a.name === 'boot_app0.bin');
+
+          // Skip any release that doesn't have the expected pair of binaries
+          if (!firmwareAsset || !bootAsset) return null;
+
+          return {
+            label: i === 0 ? `Latest (${tag})` : tag,
+            manifest: {
+              name: 'AirMeter ESP32-C3 SuperMini',
+              version: versionNum,
+              builds: [
+                {
+                  chipFamily: 'ESP32-C3',
+                  parts: [
+                    { path: `${PROXY_BASE}/${encodeURIComponent(tag)}/${encodeURIComponent(firmwareAsset.name)}`, offset: 0 },
+                    { path: `${PROXY_BASE}/${encodeURIComponent(tag)}/${encodeURIComponent(bootAsset.name)}`, offset: 57344 }
+                  ]
+                }
+              ]
+            }
+          };
+        })
+        .filter(Boolean);
+    }
+
+    // ── Populate version dropdown & wire manifest via Blob URL ────────────────
     function buildVersionSelect() {
+      versionSelect.innerHTML = '';
       VERSIONS.forEach((v, i) => {
         const opt = document.createElement('option');
         opt.value = i;
@@ -462,10 +485,32 @@
       headerVersion.textContent = 'v' + v.manifest.version;
     }
 
-    buildVersionSelect();
-    applyVersion(0);
+    async function init() {
+      versionSelect.disabled = true;
+      flashBtn.disabled = true;
+      versionSelect.innerHTML = '<option>Loading versions…</option>';
+
+      try {
+        VERSIONS = await fetchVersions();
+
+        if (VERSIONS.length === 0) {
+          versionSelect.innerHTML = '<option>No releases found</option>';
+          return;
+        }
+
+        buildVersionSelect();
+        applyVersion(0);
+        versionSelect.disabled = false;
+        flashBtn.disabled = false;
+      } catch (err) {
+        console.error('Failed to load firmware versions:', err);
+        versionSelect.innerHTML = '<option>Failed to load versions</option>';
+      }
+    }
 
     versionSelect.addEventListener('change', () => applyVersion(Number(versionSelect.value)));
+
+    init();
   </script>
 
 </body>
