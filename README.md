@@ -78,7 +78,7 @@ Of course, you can also flash the ESP32 using the Arduino IDE, but you need to i
 ### RP2040 Zero
 
 The RP2040 uses a native drag-and-drop workflow:
-1.  Download the latest **`AirMeter_RP2040_Zero.uf2`** file from [GitHub Releases](./releases).
+1.  Download the latest **`AirMeter_RP2040_Zero.uf2`** file from [GitHub Releases](../../releases).
 2.  Hold down the physical **BOOT** button on your RP2040 Zero and plug it into your computer via USB.
 3.  Open the newly appeared file drive named **`RPI-RP2`** and drag your downloaded `.uf2` file directly into it.
 4.  The board will automatically flash itself, reboot, and start running AirMeter.
