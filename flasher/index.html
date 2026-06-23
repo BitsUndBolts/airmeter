@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<!--
+  Copyright (c) 2026 Alexander Fuchs
+  Licensed under the MIT License.
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AirMeter · Installer</title>
+
+  <style>
+    /* ── CSS VARIABLES (mirrored from airmeter.css) ── */
+    :root {
+      --bg:           #0a0c0e;
+      --panel:        #111416;
+      --panel-2:      #181c1f;
+      --border:       #252a2e;
+      --border-bright:#2e3538;
+      --accent:       #f5a623;
+      --accent-dim:   rgba(245, 166, 35, 0.10);
+      --accent-glow:  rgba(245, 166, 35, 0.22);
+      --green:        #3ddc84;
+      --green-dim:    rgba(61, 220, 132, 0.10);
+      --red:          #ff5555;
+      --text:         #e8ecef;
+      --text-2:       #8a9199;
+      --text-3:       #4a5158;
+      --mono: ui-monospace, SFMono-Regular, 'SF Pro Mono', Menlo, Monaco,
+              Consolas, 'Liberation Mono', 'Courier New', monospace;
+      --sans: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI',
+              Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { font-size: clamp(7px, 1.8vw, 22px); }
+
+    body {
+      font-family: var(--sans);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 2em 1.2em;
+      background-image:
+        linear-gradient(rgba(245, 166, 35, 0.02) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(245, 166, 35, 0.02) 1px, transparent 1px);
+      background-size: 3.2em 3.2em;
+    }
+
+    /* ── CARD ── */
+    .card {
+      width: 100%;
+      max-width: 34em;
+      background: var(--panel);
+      border: 1px solid var(--border-bright);
+      border-radius: 0.4em;
+      overflow: hidden;
+    }
+
+    /* ── CARD HEADER ── */
+    .card-header {
+      background: var(--panel-2);
+      border-bottom: 1px solid var(--border-bright);
+      padding: 1.2em 2em;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .header-badge {
+      display: flex;
+      align-items: center;
+      gap: 1em;
+    }
+
+    .header-logo {
+      height: 2.5em;
+      width: auto;
+      object-fit: contain;
+      aspect-ratio: 180 / 80;
+      animation: breathe 10s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+    }
+
+    @keyframes breathe {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50%       { transform: scale(1.1); }
+    }
+
+    .header-title {
+      font-family: var(--mono);
+      font-size: 1.2em;
+      font-weight: 600;
+      color: var(--text-2);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .version-pill {
+      font-family: var(--mono);
+      font-size: 1em;
+      font-weight: 600;
+      color: var(--accent);
+      background: var(--accent-dim);
+      border: 1px solid var(--accent-glow);
+      border-radius: 0.3em;
+      padding: 0.2em 0.7em;
+      letter-spacing: 0.06em;
+    }
+
+    /* ── CARD BODY ── */
+    .card-body {
+      padding: 2em;
+    }
+
+    /* ── BROWSER SUPPORT NOTICE ── */
+    .compat-notice {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.8em;
+      padding: 1em 1.2em;
+      background: var(--accent-dim);
+      border: 1px solid var(--accent-glow);
+      border-radius: 0.3em;
+      margin-bottom: 2em;
+    }
+
+    .compat-notice svg {
+      width: 1.4em;
+      height: 1.4em;
+      color: var(--accent);
+      flex-shrink: 0;
+      margin-top: 0.05em;
+    }
+
+    .compat-notice p {
+      font-family: var(--mono);
+      font-size: 1em;
+      color: var(--accent);
+      line-height: 1.55;
+      letter-spacing: 0.02em;
+    }
+
+    .compat-notice a {
+      color: var(--accent);
+    }
+
+    /* ── SECTION LABEL ── */
+    .section-label {
+      font-family: var(--mono);
+      font-size: 0.9em;
+      font-weight: 600;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--text-3);
+      margin-bottom: 1em;
+    }
+
+    /* ── STEP ROWS ── */
+    .steps {
+      display: flex;
+      flex-direction: column;
+      margin-bottom: 2em;
+    }
+
+    .step-row {
+      display: flex;
+      gap: 1.2em;
+      align-items: flex-start;
+      padding: 0.8em 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .step-row:last-child { border-bottom: none; padding-bottom: 0; }
+
+    .step-num {
+      font-family: var(--mono);
+      font-size: 1em;
+      font-weight: 600;
+      color: var(--accent);
+      background: var(--accent-dim);
+      border: 1px solid rgba(245, 166, 35, 0.2);
+      border-radius: 0.2em;
+      width: 2em;
+      height: 2em;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .step-text {
+      font-size: 1.3em;
+      color: var(--text-2);
+      line-height: 1.5;
+      padding-top: 0.15em;
+    }
+
+    .step-text strong { color: var(--text); font-weight: 600; }
+
+    /* ── DIVIDER ── */
+    .divider {
+      height: 1px;
+      background: var(--border);
+      margin: 2em 0;
+    }
+
+    /* ── FLASH SECTION ── */
+    .flash-area {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 1.2em;
+    }
+
+    .flash-label {
+      font-family: var(--mono);
+      font-size: 0.9em;
+      font-weight: 600;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--text-3);
+    }
+
+    /* ── ESP WEB INSTALL BUTTON THEMING ── */
+    esp-web-install-button {
+      display: block;
+      width: 100%;
+    }
+
+    /* Style the inner <button> that the custom element renders */
+    esp-web-install-button::part(button) {
+      width: 100%;
+      padding: 1.3em;
+      font-family: var(--sans);
+      font-size: 1.4em;
+      font-weight: 600;
+      background: var(--accent);
+      color: var(--bg);
+      border: none;
+      border-radius: 0.3em;
+      cursor: pointer;
+      letter-spacing: 0.01em;
+      transition: opacity 0.15s, box-shadow 0.15s;
+    }
+
+    esp-web-install-button::part(button):hover {
+      opacity: 0.88;
+      box-shadow: 0 0 2em var(--accent-glow);
+    }
+
+    /* Unsupported browser state */
+    esp-web-install-button[unsupported] {
+      display: none;
+    }
+
+    /* ── UNSUPPORTED BROWSER FALLBACK ── */
+    .unsupported-msg {
+      display: none;
+      padding: 1.2em 1.4em;
+      background: rgba(255, 85, 85, 0.08);
+      border: 1px solid rgba(255, 85, 85, 0.2);
+      border-radius: 0.3em;
+      font-family: var(--mono);
+      font-size: 1.1em;
+      color: var(--red);
+      line-height: 1.55;
+      text-align: center;
+    }
+
+    esp-web-install-button[unsupported] ~ .unsupported-msg {
+      display: block;
+    }
+
+    /* ── CARD FOOTER ── */
+    .card-footer {
+      background: var(--panel-2);
+      border-top: 1px solid var(--border);
+      padding: 1em 2em;
+      font-family: var(--mono);
+      font-size: 1em;
+      color: var(--text-3);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1em;
+    }
+
+    .card-footer a,
+    .card-footer a:visited {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    .card-footer a:hover { text-decoration: underline; }
+
+    .footer-chip {
+      display: flex;
+      align-items: center;
+      gap: 0.5em;
+    }
+
+    .chip-dot {
+      width: 0.6em;
+      height: 0.6em;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 6px var(--accent);
+      animation: pulse-dot 2.5s ease-in-out infinite;
+      flex-shrink: 0;
+    }
+
+    @keyframes pulse-dot {
+      0%, 100% { box-shadow: 0 0 4px var(--accent), 0 0 12px var(--accent); }
+      50%       { box-shadow: 0 0 2px var(--accent), 0 0 6px var(--accent); }
+    }
+  </style>
+</head>
+
+<body>
+
+  <main class="card">
+
+    <!-- ── HEADER ── -->
+    <div class="card-header">
+      <div class="header-badge">
+        <img src="airmeter.webp" alt="AirMeter Logo" class="header-logo"
+             onerror="this.style.display='none'">
+        <span class="header-title">Installer</span>
+      </div>
+      <span class="version-pill">v1.0</span>
+    </div>
+
+    <!-- ── BODY ── -->
+    <div class="card-body">
+
+      <!-- Browser compatibility notice -->
+      <div class="compat-notice">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+             stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="12" y1="8" x2="12" y2="12"/>
+          <line x1="12" y1="16" x2="12.01" y2="16"/>
+        </svg>
+        <p>Requires a <strong>Chromium-based browser</strong> (Chrome, Edge, Opera) with Web Serial support. Firefox and Safari are not supported.</p>
+      </div>
+
+      <!-- Steps -->
+      <div class="section-label">Before you begin</div>
+      <div class="steps">
+        <div class="step-row">
+          <div class="step-num">1</div>
+          <div class="step-text">Connect your <strong>ESP32-C3 SuperMini</strong> to this computer with a USB data cable.</div>
+        </div>
+        <div class="step-row">
+          <div class="step-num">2</div>
+          <div class="step-text">Click <strong>Install Firmware</strong> below and select the correct serial port when prompted.</div>
+        </div>
+        <div class="step-row">
+          <div class="step-num">3</div>
+          <div class="step-text">Wait for the flash to complete, then connect to the <strong>AirMeter-Setup</strong> Wi-Fi hotspot to configure your network.</div>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- Flash button -->
+      <div class="flash-area">
+        <span class="flash-label">Flash Firmware</span>
+
+        <esp-web-install-button manifest="./manifest.json">
+          <button slot="activate">Install Firmware</button>
+        </esp-web-install-button>
+
+        <div class="unsupported-msg">
+          Your browser does not support Web Serial.<br>
+          Please use Chrome, Edge, or another Chromium-based browser.
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ── FOOTER ── -->
+    <div class="card-footer">
+      <div class="footer-chip">
+        <span class="chip-dot"></span>
+        <span>ESP32-C3 SuperMini</span>
+      </div>
+      <a href="https://github.com/alexanderfuchs/airmeter" target="_blank" rel="noopener">
+        GitHub ↗
+      </a>
+    </div>
+
+  </main>
+
+  <!-- ESP Web Tools — loaded last so the custom element is defined after the DOM -->
+  <script
+    type="module"
+    src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module">
+  </script>
+
+</body>
+</html>

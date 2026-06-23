@@ -20,6 +20,7 @@
 ## Table of Contents
 
 - [What is this?](#what-is-this)
+- [Quick Start](#quick-start)
 - [The Backstory](#the-backstory)
   - [1. The Probe & Segment Mapping](#1-the-probe--segment-mapping)
 - [System Architecture](#system-architecture)
@@ -57,6 +58,41 @@ No UART hack, no proprietary app, no Bluetooth pairing dance. Just probes on gla
   <br />
   <img src="Screens/13 Red Alert.png" width="800" alt="AirMeter live view - Red Alert theme" style="padding: 20px;">
 </p>
+
+## Quick Start
+
+For AirMeter to work, you need to program/flash four devices:
+- ESP32 C3 SuperMini
+- RP2040 Zero
+- HC-12 modules
+
+### ESP32 C3 SuperMini
+
+The easiest way to flash your ESP32 C3 SuperMini is to use this online tool. Just plug in your ESP32 C3 SuperMini and press "Flash"!
+
+[![Install Firmware](https://img.shields.io/badge/Install-Firmware-orange?style=for-the-badge&logo=espressif)](./flasher/index.html)
+<br />*Note: Make sure to use Google Chrome, Microsoft Edge, or Opera. Safari and Firefox are not supported by the Web Serial standard.*
+
+Of course, you can also flash the ESP32 using the Arduino IDE, but you need to install LittleFS management to upload the HTML UI manually.
+
+### RP2040 Zero
+
+The RP2040 uses a native drag-and-drop workflow:
+1.  Download the latest **`AirMeter_RP2040_Zero.uf2`** file from [GitHub Releases](./releases).
+2.  Hold down the physical **BOOT** button on your RP2040 Zero and plug it into your computer via USB.
+3.  Open the newly appeared file drive named **`RPI-RP2`** and drag your downloaded `.uf2` file directly into it.
+4.  The board will automatically flash itself, reboot, and start running AirMeter.
+
+### HC-12 Module Configuration
+
+| Parameter | Configured Value | AT Command | Description |
+| :--- | :--- | :--- | :--- |
+| **Baud Rate** | 9600 bps | `AT+B9600` | Standard data transmission speed |
+| **Channel** | C003 (434.6 MHz) | `AT+C003` | Operating frequency channel |
+| **Transmit Power** | P3 (+5 dBm) | `AT+P3` | Medium-low power output level |
+| **Working Mode** | FU1 | `AT+FU1` | Low-power mode (3.6mA idle current) |
+
+Alternatively, you can use an Arduino UNO and use this [sketch](./Arduino_UNO_HT-12/Arduino_UNO_HT-12.ino) to program your modules.
 
 ## The Backstory
 
