@@ -4,7 +4,7 @@ Pin  4: SEG0
 Pin  6: SEG3
 Pin  8: SEG1
 Pin 10: SEG2
-OUT (LMV339 to RP2040):
+OUT (LM339LVPWR to RP2040):
 Pin  1 - GP2 - SEG3
 Pin  2 - GP3 - SEG0
 Pin 13 - GP1 - SEG2
@@ -16,7 +16,7 @@ Pin  5: COM2
 Pin  7: COM3
 Pin  9: COM1
 Pin 11: COM0
-OUT (LMV339 to RP2040):
+OUT (LM339LVPWR to RP2040):
 Pin  1 - GP27 - COM3
 Pin  2 - GP26 - COM2
 Pin 13 - GP28 - COM0
@@ -28,7 +28,7 @@ Pin  4: SEG9
 Pin  6: SEG10
 Pin  8: SEG8
 Pin 10: SEG7
-OUT (LMV339 to RP2040):
+OUT (LM339LVPWR to RP2040):
 Pin  1 - GP6 - SEG10
 Pin  2 - GP7 - SEG9
 Pin 13 - GP4 - SEG7
@@ -40,7 +40,7 @@ Pin  4: SEG5
 Pin  6: SEG6
 Pin  8: SEG4
 Pin 10: NOT CONNECTED (floating)
-OUT (LMV339 to RP2040):
+OUT (LM339LVPWR to RP2040):
 Pin  1 - GP13 - SEG6
 Pin  2 - GP14 - SEG5
 Pin 13 - NOT CONNECTED / GND (non floating)
@@ -52,7 +52,7 @@ Pin  4: SEG13
 Pin  6: SEG14
 Pin  8: SEG12
 Pin 10: SEG11
-OUT (LMV339 to RP2040):
+OUT (LM339LVPWR to RP2040):
 Pin  1 - GP9   - SEG14
 Pin  2 - GP8   - SEG13
 Pin 13 - GP11  - SEG11

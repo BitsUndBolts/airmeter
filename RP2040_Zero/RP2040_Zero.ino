@@ -10,7 +10,7 @@
 // Overview:
 //   Monitors the multiplexed LCD signals of a DTM0660-based multimeter
 //   (ANENG AN870) by sampling COM and SEG lines via hardware comparators
-//   (LMV339). Decoded display state is transmitted at a configurable rate
+//   (LM339LVPWR). Decoded display state is transmitted at a configurable rate
 //   over a HC-12 433MHz wireless module using a framed binary protocol.
 //
 // LCD Multiplexing:
@@ -19,7 +19,7 @@
 //   2ms per phase. When a COM line is HIGH, the active SEG lines indicate
 //   which segments are lit for that COM row.
 //
-//   Hardware comparators (LMV339) convert the LCD AC drive signals into
+//   Hardware comparators (LM339LVPWR) convert the LCD AC drive signals into
 //   clean 3.3V logic levels before they reach the RP2040 GPIO pins.
 //
 // Sampling Strategy:
@@ -70,7 +70,7 @@
 // Hardware:
 //   MCU         : RP2040 Zero
 //   Wireless    : HC-12 (9600 baud, FU1, 5dBm, channel C003)
-//   Comparators : 5× LMV339 with resistor divider references
+//   Comparators : 5× LM339LVPWR with resistor divider references
 //   Target meter: ANENG AN870 (DTM0660 chip)
 //
 // =============================================================================
@@ -88,12 +88,12 @@
 // SECTION 1 — PIN DEFINITIONS
 // =============================================================================
 
-// COM lines from the DTM0660 LCD controller (via LMV339 comparator outputs).
+// COM lines from the DTM0660 LCD controller (via LM339LVPWR comparator outputs).
 // Each COM pin goes HIGH for ~2ms when that multiplexer phase is active.
 // Array index matches COM number: COM_PINS[0] = COM0, etc.
 const int COM_PINS[4] = { 28, 29, 26, 27 };  // COM0, COM1, COM2, COM3
 
-// SEG lines from the DTM0660 LCD controller (via LMV339 comparator outputs).
+// SEG lines from the DTM0660 LCD controller (via LM339LVPWR comparator outputs).
 // Array index matches SEG number: SEG_PINS[0] = SEG0, etc.
 // A SEG pin reads HIGH when that segment is active during the current COM phase.
 const int SEG_PINS[15] = {
@@ -173,7 +173,7 @@ const unsigned int COM_SETTLE_US = 1000;
 // Buzzer latch hold duration in milliseconds.
 //
 // The DTM0660 drives the buzzer as an AC tone (not a static DC HIGH), so the
-// LMV339 output toggles rapidly between HIGH and LOW at the buzzer frequency.
+// LM339LVPWR output toggles rapidly between HIGH and LOW at the buzzer frequency.
 // A single digitalRead() per loop iteration will frequently land on a LOW,
 // causing the reported buzzer state to flicker even when the buzzer is truly on.
 //
@@ -566,7 +566,7 @@ void setup() {
   flashLED(2, 0, 180, 0);
 
   // Configure COM and SEG pins as inputs with pull-ups.
-  // The LMV339 comparator outputs are open-drain compatible; pull-ups ensure
+  // The LM339LVPWR comparator outputs are open-drain compatible; pull-ups ensure
   // a defined logic level when no COM or SEG line is being driven.
   for (int i = 0; i < 4;  i++) pinMode(COM_PINS[i], INPUT_PULLUP);
   for (int i = 0; i < 15; i++) pinMode(SEG_PINS[i], INPUT_PULLUP);
@@ -687,7 +687,7 @@ void loop() {
   // ---------------------------------------------------------------------------
   // Buzzer latch — sticky HIGH with configurable hold-off timer
   //
-  // The DTM0660 drives the buzzer as an AC tone, so the LMV339 output toggles
+  // The DTM0660 drives the buzzer as an AC tone, so the LM339LVPWR output toggles
   // between HIGH and LOW at the buzzer frequency (~1–2kHz). The loop runs at
   // roughly 250–1000 iterations/second, so a plain digitalRead() will frequently
   // land on a LOW half-cycle even when the buzzer is genuinely active.
