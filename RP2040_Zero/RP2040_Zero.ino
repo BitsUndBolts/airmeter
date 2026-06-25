@@ -129,7 +129,7 @@ const int LED_HEARTBEAT = 10;   // Number of TX cycles to show heartbeat
 // SECTION 2 — TRANSMISSION PROTOCOL CONSTANTS
 // =============================================================================
 
-// HC-12 UART interface — TX only
+// HC-12 UART interface
 const int HC12_TX_PIN = 12;    // GP12 → HC-12 RXD (RP2040 TX → module RX)
 const int HC12_RX_PIN = 17;    // GP17 → HC-12 TXD (RP2040 RX ← module TX)
 const int HC12_BAUD   = 9600;
