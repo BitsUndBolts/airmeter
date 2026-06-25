@@ -594,6 +594,13 @@ String deobfuscate(const String& hex, const char* key) {
 
 void startAccessPoint() {
   is_ap_mode = true;
+  
+  // 1. Explicitly stop any active Wi-Fi processes and clear memory
+  WiFi.softAPdisconnect(true); 
+  WiFi.disconnect(true);
+  delay(100); // Give the radio subsystem a moment to shut down
+
+  // 2. Set the mode fresh
   WiFi.mode(WIFI_AP);
 
   const IPAddress local_IP(192, 168, 7, 1);
@@ -601,6 +608,11 @@ void startAccessPoint() {
   const IPAddress subnet(255, 255, 255, 0);
 
   WiFi.softAPConfig(local_IP, gateway, subnet);
+  
+  // 3. Lower the TX power immediately before broadcasting (Crucial for SuperMini)
+  // High TX power during software reset causes severe brownouts on this specific board
+  WiFi.setTxPower(WIFI_POWER_8_5dBm); 
+
   WiFi.softAP("AirMeter-Setup", "airmeter123");
 
   dnsServer.start(DNS_PORT, "*", WiFi.softAPIP());
@@ -647,6 +659,8 @@ void setupWebServer() {
       preferences.end();
 
       WiFi.mode(WIFI_AP_STA);
+      WiFi.setTxPower(WIFI_POWER_8_5dBm);  // CLAMP POWER IMMEDIATELY BEFORE BEGIN()
+      esp_wifi_set_ps(WIFI_PS_MIN_MODEM);  // Force power-saving optimization
       WiFi.begin(test_ssid.c_str(), test_pass.c_str());
       connectionAttemptStart = millis();
 
@@ -1276,10 +1290,13 @@ void setup() {
     startAccessPoint();
   } else {
     Serial.printf("[NETWORK] Connecting to: %s\n", wifi_ssid.c_str());
+
+    WiFi.mode(WIFI_STA);                 // Explicitly initialize Station Mode first
+    WiFi.setTxPower(WIFI_POWER_8_5dBm);  // Cap the radio power immediately
+    esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
     WiFi.begin(wifi_ssid.c_str(), wifi_password.c_str());
-    WiFi.setSleep(false);
-    esp_wifi_set_ps(WIFI_PS_NONE); // Disable radio sleep for lowest latency
-    Serial.println("[SYSTEM] Wi-Fi power saving disabled.");
+    
+    Serial.println("[SYSTEM] Wi-Fi power saving set to MIN_MODEM.");
 
     int retries = 0;
     while (WiFi.status() != WL_CONNECTED && retries < 120) { // 60 s max
