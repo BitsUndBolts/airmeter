@@ -496,10 +496,10 @@
                 {
                   chipFamily: 'ESP32-C3',
                   parts: [
-                    { path: `${PROXY_BASE}/${encodeURIComponent(tag)}/${encodeURIComponent(firmwareAsset.name)}`, offset: 0 },
-                    { path: `${PROXY_BASE}/${encodeURIComponent(tag)}/${encodeURIComponent(bootAsset.name)}`, offset: 57344 },
+                    { path: `${PROXY_BASE}/${encodeURIComponent(tag)}/${encodeURIComponent(firmwareAsset.name)}?ver=1`, offset: 0 },
+                    { path: `${PROXY_BASE}/${encodeURIComponent(tag)}/${encodeURIComponent(bootAsset.name)}?ver=1`, offset: 57344 },
                     // LittleFS "spiffs" partition from partitions.csv: 0x290000
-                    { path: `${PROXY_BASE}/${encodeURIComponent(tag)}/${encodeURIComponent(fsAsset.name)}`, offset: 2686976 }
+                    { path: `${PROXY_BASE}/${encodeURIComponent(tag)}/${encodeURIComponent(fsAsset.name)}?ver=1`, offset: 2686976 }
                   ]
                 }
               ]
