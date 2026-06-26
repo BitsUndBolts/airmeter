@@ -115,7 +115,7 @@ static uint32_t          ticketIdCounter = 1; // monotonic; never 0 (0 = "no tic
 // FIRMWARE METADATA
 // =============================================================================
 
-const char* FIRMWARE_VERSION = "1.1";
+const char* FIRMWARE_VERSION = "1.2";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -680,7 +680,13 @@ void setupWebServer() {
   // ── Root ──────────────────────────────────────────────────────────────────
   server.on("/", HTTP_GET, [](AsyncWebServerRequest* request) {
     const char* page = is_ap_mode ? "/setup.html" : "/index.html";
-    if (littlefs_available && LittleFS.exists(page)) {
+    String gzPage = String(page) + ".gz";
+
+    if (littlefs_available && LittleFS.exists(gzPage)) {
+      AsyncWebServerResponse* response = request->beginResponse(LittleFS, gzPage, "text/html");
+      response->addHeader("Content-Encoding", "gzip");
+      request->send(response);
+    } else if (littlefs_available && LittleFS.exists(page)) {
       request->send(LittleFS, page, "text/html");
     } else {
       char msg[64];
@@ -1259,33 +1265,43 @@ void setupWebServer() {
 
   // ── Catch-All / Dynamic HTML Rewrite ─────────────────────────────────────
   server.onNotFound([](AsyncWebServerRequest* request) {
-    const String path = request->url();
+    String path = request->url();
 
-    // Block direct access to known system paths without extensions
-    if (path == "/" || path == "/save" ||
-        path.startsWith("/api/") || path == "/events") {
+    // Reserved/dynamic routes — never let these fall through to file serving.
+    // Prefix checks auto-cover every current and future /api/ and /ota/ route;
+    // the exact entries cover the remaining standalone, non-prefixed routes.
+    if (path == "/" || path == "/save" || path == "/events" ||
+        path.startsWith("/api/") || path.startsWith("/ota/")) {
       request->send(404, "text/plain", "404: Not Found");
+      return;
+    }
+
+    if (!littlefs_available) {
+      request->send(404, "text/plain", "Error 404: '" + path + "' not found on this device.");
       return;
     }
 
     // Extensionless path → try appending .html (e.g., /meter → /meter.html)
     if (path.indexOf('.') == -1) {
-      const String htmlPath = path + ".html";
-      if (littlefs_available && LittleFS.exists(htmlPath)) {
-        request->send(LittleFS, htmlPath, "text/html");
-        return;
-      }
+      path += ".html";
     }
 
-    // Exact file match with extension
-    if (littlefs_available && LittleFS.exists(path)) {
-      request->send(LittleFS, path);
+    const String contentType = getContentType(path);
+    const String gzPath = path + ".gz";
+
+    if (LittleFS.exists(gzPath)) {
+      AsyncWebServerResponse* response = request->beginResponse(LittleFS, gzPath, contentType);
+      response->addHeader("Content-Encoding", "gzip");
+      request->send(response);
       return;
     }
 
-    // True 404
-    request->send(404, "text/plain",
-                  "Error 404: '" + path + "' not found on this device.");
+    if (LittleFS.exists(path)) {
+      request->send(LittleFS, path, contentType);
+      return;
+    }
+
+    request->send(404, "text/plain", "Error 404: '" + path + "' not found on this device.");
   });
 
   // Clear out any stale boot-up garbage bytes
@@ -1295,6 +1311,18 @@ void setupWebServer() {
 
   server.begin();
   Serial.println("[SYSTEM] Web server started.");
+}
+
+String getContentType(const String& path) {
+  if (path.endsWith(".html")) return "text/html";
+  if (path.endsWith(".css"))  return "text/css";
+  if (path.endsWith(".js"))   return "application/javascript";
+  if (path.endsWith(".json")) return "application/json";
+  if (path.endsWith(".svg"))  return "image/svg+xml";
+  if (path.endsWith(".png"))  return "image/png";
+  if (path.endsWith(".jpg") || path.endsWith(".jpeg")) return "image/jpeg";
+  if (path.endsWith(".ico"))  return "image/x-icon";
+  return "text/plain";
 }
 
 // =============================================================================
