@@ -5,7 +5,7 @@
 
 // =============================================================================
 // ESP32 Wireless Multimeter Bridge
-// Firmware Version: 1.0
+// Firmware Version: 1.1
 //
 // Architecture:
 //   HC-12 (9600 baud, UART1) → ESP32 → Wi-Fi (STA or AP) → Browser (SSE)
@@ -16,6 +16,7 @@
 //   GPIO 20 — Receiving:   HC-12 TXD        → ESP32 UART1 RX
 //   GPIO 21 — Sending:     ESP32 UART1 TX   → HC-12 RXD
 // =============================================================================
+
 #include <WiFi.h>
 #include <Update.h>
 #include <esp_wifi.h>
@@ -25,6 +26,7 @@
 #include <Preferences.h>
 #include <DNSServer.h>
 #include <ArduinoJson.h>
+#include "esp_bt.h"
 
 //#define DEBUG_LCD_VISUAL  // Comment out to suppress per-packet LCD debug output
 
@@ -113,10 +115,10 @@ static uint32_t          ticketIdCounter = 1; // monotonic; never 0 (0 = "no tic
 // FIRMWARE METADATA
 // =============================================================================
 
-const char* FIRMWARE_VERSION = "1.0";
+const char* FIRMWARE_VERSION = "1.1";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
- 
+
 // Shared flag so the upload handler and the response handler can coordinate.
 // ESPAsyncWebServer calls the upload handler in chunks, then the request
 // handler once at the end — we need to pass the error state between them.
@@ -125,7 +127,7 @@ struct UploadContext {
   String   errorMsg = "";
   File     fsFile;            // used by the LittleFS handler only
 };
- 
+
 // One context per concurrent request. For a single-user OTA page this is fine.
 // If you ever need to support parallel uploads, use a map keyed on request ptr.
 static UploadContext otaCtx;
@@ -149,18 +151,19 @@ static const int HC12_BAUD   = 9600;
 HardwareSerial HC12(1); // UART1
 
 // =============================================================================
-// PROTOCOL CONSTANTS  (must match the transmitter firmware)
+// PROTOCOL CONSTANTS (must match the transmitter firmware)
 // =============================================================================
 
-static const uint8_t PREAMBLE_1  = 0x55;
-static const uint8_t PREAMBLE_2  = 0xAA;
-static const uint8_t PAYLOAD_LEN = 0x09;  // 9 payload bytes received from RP2040
+static const uint8_t PREAMBLE_1       = 0x55;
+static const uint8_t PREAMBLE_2       = 0xAA;
+static const uint8_t PAYLOAD_LEN_IN   = 0x09;  // 9 payload bytes received from RP2040
+static const uint8_t PAYLOAD_LEN_OUT  = 0x03;  // 3 payload bytes sent to RP2040
 
 // =============================================================================
 // NETWORK & SERVER OBJECTS
 // =============================================================================
 
-static const byte DNS_PORT               = 53;  // Standard DNS port
+static const byte DNS_PORT = 53;  // Standard DNS port
 
 
 AsyncWebServer    server(80);
@@ -201,13 +204,24 @@ enum RxState : uint8_t {
   WAIT_CRC
 };
 
-static RxState  rx_state       = WAIT_PREAMBLE_1;
-static uint8_t  rx_payload[PAYLOAD_LEN];
-static uint8_t  rx_seq         = 0;
-static uint8_t  rx_len         = 0;
-static uint8_t  rx_payload_idx = 0;
+static RxState  rx_state        = WAIT_PREAMBLE_1;
+static uint8_t  rx_payload[PAYLOAD_LEN_IN];
+static uint8_t  rx_seq          = 0;
+static uint8_t  rx_len          = 0;
+static uint8_t  rx_payload_idx  = 0;
 static uint32_t rx_packet_count = 0;
 static uint32_t rx_error_count  = 0;
+
+// =============================================================================
+// SETTINGS CACHE
+//
+// loadSettings() / saveSettings() keep an in-RAM copy so that frequent async
+// API handlers (e.g. /api/settings GET, /api/meter/delete) never block the
+// network task waiting for NVS flash reads. Flash is only written when the
+// value actually changes. The cache is primed once during setup().
+// =============================================================================
+
+static String settingsCache = "";
 
 // =============================================================================
 // FORWARD DECLARATIONS
@@ -226,6 +240,8 @@ String  getNetworksJSON();
 void    sendMeterUpdateRF(uint8_t oldCh, uint8_t newCh, uint8_t fpsIdx, uint8_t flagsByte);
 void    commitChannelChange(uint8_t oldChannel, uint8_t newChannel);
 void    tickMeterUpdate();
+void    handleFirmwareUpload(AsyncWebServerRequest*, const String&, size_t, uint8_t*, size_t, bool);
+void    handleFileUpload(AsyncWebServerRequest*, const String&, size_t, uint8_t*, size_t, bool);
 
 // =============================================================================
 // CRC-8  (Dallas/Maxim — must match transmitter)
@@ -250,9 +266,9 @@ uint8_t calculate_crc8(const uint8_t* data, uint8_t len) {
 // Called both from /api/meter/update (first send) and tickMeterUpdate() (retries).
 void sendMeterUpdateRF(uint8_t oldCh, uint8_t newCh, uint8_t fpsIdx, uint8_t flagsByte) {
   uint8_t tx[7];
-  tx[0] = 0xAA;
-  tx[1] = 0x55;
-  tx[2] = 0x03;
+  tx[0] = PREAMBLE_2; // PREAMBLES flipped for outgoing messages
+  tx[1] = PREAMBLE_1;
+  tx[2] = PAYLOAD_LEN_OUT;
   tx[3] = oldCh;
   tx[4] = ((fpsIdx & 0x07) << 5) | (newCh & 0x1F);
   tx[5] = flagsByte;
@@ -267,7 +283,7 @@ void sendMeterUpdateRF(uint8_t oldCh, uint8_t newCh, uint8_t fpsIdx, uint8_t fla
 // Called from decodePacket() the moment a confirming packet arrives.
 // Only called when oldChannel != newChannel.
 void commitChannelChange(uint8_t oldChannel, uint8_t newChannel) {
-  // 1. Rename settings key on flash
+  // 1. Rename settings key on flash (goes through cache — fast path)
   String raw = loadSettings();
   JsonDocument cfg;
   deserializeJson(cfg, raw);
@@ -330,7 +346,7 @@ void decodePacket(const uint8_t* payload) {
   // Extract META fields from byte 0
   const uint8_t meta_byte = payload[0];
   const uint8_t fps_index = (meta_byte >> 5) & 0x07;
-  const uint8_t channel  = meta_byte & 0x1F;
+  const uint8_t channel   = meta_byte & 0x1F;
 
   // Reconstruct the four 16-bit COM rows (skipping payload[0])
   uint16_t com[4];
@@ -352,7 +368,7 @@ void decodePacket(const uint8_t* payload) {
   com[1] &= 0x7FFF;
 
   // Build 60-character bit string: COM0[bit0..14] + COM1 + COM2 + COM3
-  char bitString[61]; 
+  char bitString[61];
   bitString[60] = '\0';
   for (int c = 0; c < 4; c++) {
     for (int s = 0; s < 15; s++) {
@@ -374,8 +390,8 @@ void decodePacket(const uint8_t* payload) {
   // On confirmation: commit any channel rename on flash, mark ticket SUCCESS,
   // store the confirmed values for the UI to consume via /api/meter/status.
   if (activeTicket.status == TICKET_PENDING &&
-      channel    == activeTicket.newChannel  &&
-      fps_index  == activeTicket.fpsIdx      &&
+      channel           == activeTicket.newChannel  &&
+      fps_index         == activeTicket.fpsIdx      &&
       power_save_status == activeTicket.powerSave) {
 
     if (activeTicket.oldChannel != activeTicket.newChannel) {
@@ -448,7 +464,7 @@ void processHC12() {
 
       case WAIT_LEN:
         rx_len = b;
-        if (rx_len == PAYLOAD_LEN) {
+        if (rx_len == PAYLOAD_LEN_IN) {
           rx_state = WAIT_SEQ;
         } else {
           Serial.printf("[HC12] Bad LEN byte: 0x%02X — resyncing\n", b);
@@ -481,7 +497,6 @@ void processHC12() {
 
         if (b == expected_crc) {
           rx_packet_count++;
-          
           decodePacket(rx_payload);
         } else {
           rx_error_count++;
@@ -527,19 +542,33 @@ String getNetworksJSON() {
 
 // =============================================================================
 // NON-VOLATILE SETTINGS — save / load
+//
+// An in-RAM cache (settingsCache) is primed once during setup() and kept in
+// sync on every write. Async request handlers call loadSettings() and get the
+// cached string immediately without touching NVS flash. Flash is only written
+// in saveSettings() when the value actually changes, which prevents unnecessary
+// wear and eliminates the multi-millisecond NVS stall from the async task.
 // =============================================================================
 
 void saveSettings(const char* settings) {
+  // Update RAM cache first so subsequent reads within the same request cycle
+  // see the new value without waiting for the flash write to complete.
+  settingsCache = settings;
+
   preferences.begin("settings", false);
   preferences.putString("data", settings);
   preferences.end();
 }
 
 String loadSettings() {
+  // Return cached value if available — avoids NVS read on the hot path.
+  if (settingsCache.length() > 0) return settingsCache;
+
+  // Cold path: first call after boot before cache is primed by setup().
   preferences.begin("settings", true);
-  String saved = preferences.getString("data", "{}");
+  settingsCache = preferences.getString("data", "{}");
   preferences.end();
-  return saved;
+  return settingsCache;
 }
 
 // =============================================================================
@@ -557,6 +586,7 @@ void wipe(bool fullReset) {
     preferences.begin("settings", false);
     preferences.clear();
     preferences.end();
+    settingsCache = ""; // invalidate RAM cache so next read hits NVS
   }
 }
 
@@ -573,6 +603,7 @@ void factoryReset(bool fullReset, const char* source) {
 // =============================================================================
 // DEOBFUSCATION — decodes hex-encoded XOR strings using a key
 // =============================================================================
+
 String deobfuscate(const String& hex, const char* key) {
   if (hex.length() == 0 || hex.length() % 2 != 0) return "";  // Malformed input
   size_t keyLen = strlen(key);
@@ -590,13 +621,31 @@ String deobfuscate(const String& hex, const char* key) {
 
 // =============================================================================
 // ACCESS POINT MODE — captive portal for initial Wi-Fi provisioning
+//
+// Brownout fix for ESP32-C3 SuperMini:
+//   The SuperMini's onboard LDO cannot sustain the current surge that occurs
+//   when the radio fires up at full TX power immediately after a software
+//   reset (e.g. right after OTA flashing). The symptoms are the AP appearing
+//   in serial output but never broadcasting a visible SSID — the radio browns
+//   out silently before the first beacon can be sent.
+//
+//   Fix — three steps applied in order:
+//     1. Explicitly tear down any prior radio state with softAPdisconnect()
+//        and disconnect() before switching mode. This clears leftover state
+//        from the flash/reboot cycle that can cause the radio driver to start
+//        in a partially-initialised condition.
+//     2. Set mode to WIFI_AP first, then clamp TX power to WIFI_POWER_8_5dBm
+//        BEFORE calling softAP(). At 8.5 dBm the peak current draw stays
+//        within what the SuperMini's LDO can supply.
+//     3. The same TX power clamp is applied before WiFi.begin() in STA mode
+//        for the same reason.
 // =============================================================================
 
 void startAccessPoint() {
   is_ap_mode = true;
-  
+
   // 1. Explicitly stop any active Wi-Fi processes and clear memory
-  WiFi.softAPdisconnect(true); 
+  WiFi.softAPdisconnect(true);
   WiFi.disconnect(true);
   delay(100); // Give the radio subsystem a moment to shut down
 
@@ -608,10 +657,10 @@ void startAccessPoint() {
   const IPAddress subnet(255, 255, 255, 0);
 
   WiFi.softAPConfig(local_IP, gateway, subnet);
-  
+
   // 3. Lower the TX power immediately before broadcasting (Crucial for SuperMini)
   // High TX power during software reset causes severe brownouts on this specific board
-  WiFi.setTxPower(WIFI_POWER_8_5dBm); 
+  WiFi.setTxPower(WIFI_POWER_8_5dBm);
 
   WiFi.softAP("AirMeter-Setup", "airmeter123");
 
@@ -659,8 +708,8 @@ void setupWebServer() {
       preferences.end();
 
       WiFi.mode(WIFI_AP_STA);
-      WiFi.setTxPower(WIFI_POWER_8_5dBm);  // CLAMP POWER IMMEDIATELY BEFORE BEGIN()
-      esp_wifi_set_ps(WIFI_PS_MIN_MODEM);  // Force power-saving optimization
+      WiFi.setTxPower(WIFI_POWER_8_5dBm);  // Clamp power immediately before begin()
+      esp_wifi_set_ps(WIFI_PS_MIN_MODEM);   // Power-saving mode reduces current draw
       WiFi.begin(test_ssid.c_str(), test_pass.c_str());
       connectionAttemptStart = millis();
 
@@ -671,20 +720,31 @@ void setupWebServer() {
   });
 
   // ── API: Wi-Fi Scan ───────────────────────────────────────────────────────
+  // Debounced to 3s to prevent rapid clicks from cancelling an in-progress
+  // scan. Each call that arrives while WIFI_SCAN_RUNNING just returns 202
+  // without re-triggering a new scan.
   server.on("/api/scan", HTTP_GET, [](AsyncWebServerRequest* request) {
     if (!is_ap_mode) {
       request->send(403, "text/plain", "Forbidden");
       return;
     }
 
+    static unsigned long lastScanTrigger = 0;
     const int status = WiFi.scanComplete();
+
     if (status == WIFI_SCAN_RUNNING) {
       request->send(202, "application/json", "{\"status\":\"scanning\"}");
     } else if (status >= 0) {
       request->send(200, "application/json", getNetworksJSON());
     } else {
-      WiFi.scanDelete();
-      WiFi.scanNetworks(true, false); // background async scan
+      // Only trigger a new scan if 3 s have elapsed since the last trigger.
+      // This prevents rapid "Rescan" clicks from restarting and cancelling
+      // each other in quick succession.
+      if (millis() - lastScanTrigger > 3000) {
+        lastScanTrigger = millis();
+        WiFi.scanDelete();
+        WiFi.scanNetworks(true, false); // background async scan
+      }
       request->send(202, "application/json", "{\"status\":\"scanning\"}");
     }
   });
@@ -693,17 +753,17 @@ void setupWebServer() {
   server.on("/api/system", HTTP_GET, [](AsyncWebServerRequest* request) {
     JsonDocument doc;
 
-    doc["firmware"] = FIRMWARE_VERSION;
+    doc["firmware"]  = FIRMWARE_VERSION;
     doc["ipAddress"] = WiFi.localIP().toString();
-    doc["ssid"] = WiFi.SSID();
-    doc["rssi"] = WiFi.RSSI();
+    doc["ssid"]      = WiFi.SSID();
+    doc["rssi"]      = WiFi.RSSI();
 
     // Dedicated ESP32 object with chip details
     JsonObject espObj = doc["esp"].to<JsonObject>();
     // --- Dynamic Values (Polled live every time) ---
     espObj["memory"] = ESP.getFreeHeap();
     espObj["temp"]   = temperatureRead();
-    espObj["freq"]   = ESP.getCpuFreqMHz(); 
+    espObj["freq"]   = ESP.getCpuFreqMHz();
     // --- Static Values (Read from your fast RAM struct cache) ---
     espObj["model"]  = espStaticDetails.model;
     espObj["cores"]  = espStaticDetails.cores;
@@ -713,7 +773,7 @@ void setupWebServer() {
     // Per-meter tracking array — only meters seen since boot
     JsonArray meters = doc["meters"].to<JsonArray>();
     const unsigned long now = millis();
-    
+
     for (uint8_t ch = 0; ch < 32; ch++) {
       if (!meterRegistry[ch].registered) continue;
       JsonObject m = meters.add<JsonObject>();
@@ -741,10 +801,11 @@ void setupWebServer() {
 
   // ── API: Settings Read ────────────────────────────────────────────────────
   server.on("/api/settings", HTTP_GET, [](AsyncWebServerRequest* request) {
+    // loadSettings() returns from RAM cache — no NVS flash read on this path
     request->send(200, "application/json", loadSettings());
   });
 
-  // ── API: List all files on LittleFS ────────────────────────────────────
+  // ── API: List all files on LittleFS ──────────────────────────────────────
   server.on("/api/files/all", HTTP_GET, [](AsyncWebServerRequest* request) {
     if (!littlefs_available) {
       request->send(200, "application/json", "[]");
@@ -770,7 +831,7 @@ void setupWebServer() {
     request->send(200, "application/json", out);
   });
 
-  // ── API: List WebP images of Multimeters on LittleFS ────────────────────────────────────
+  // ── API: List WebP images of Multimeters on LittleFS ─────────────────────
   server.on("/api/files/meters", HTTP_GET, [](AsyncWebServerRequest* request) {
     if (!littlefs_available) {
       request->send(200, "application/json", "[]");
@@ -795,7 +856,7 @@ void setupWebServer() {
     request->send(200, "application/json", out);
   });
 
-  // ── API: Deletes a file on LittleFS ────────────────────────────────────
+  // ── API: Delete a file on LittleFS ───────────────────────────────────────
   server.on("/api/files/delete", HTTP_POST, [](AsyncWebServerRequest* request) {}, NULL,
     [](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
       JsonDocument doc;
@@ -834,7 +895,7 @@ void setupWebServer() {
     }
   );
 
-  // ── API: Renames a file on LittleFS ────────────────────────────────────
+  // ── API: Rename a file on LittleFS ───────────────────────────────────────
   server.on("/api/files/rename", HTTP_POST, [](AsyncWebServerRequest* request) {}, NULL,
     [](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
       JsonDocument doc;
@@ -968,7 +1029,7 @@ void setupWebServer() {
     pendingReboot = true;
   });
 
-  // ── API: Restart ─────────────────────────────────────────────────────────
+  // ── API: Restart ──────────────────────────────────────────────────────────
   server.on("/api/restart", HTTP_POST, [](AsyncWebServerRequest* request) {
     if (is_ap_mode) {
       request->send(403, "application/json",
@@ -1072,7 +1133,7 @@ void setupWebServer() {
     }
   );
 
-  // ── API: Meter Status ──────────────────────────────────────────────────────
+  // ── API: Meter Status ─────────────────────────────────────────────────────
   // GET /api/meter/status/<ticket>
   //
   //   202 → ticket still pending; poll again in 1s
@@ -1082,7 +1143,7 @@ void setupWebServer() {
   //         The update failed — show failure UI.
   server.on("/api/meter/status", HTTP_GET, [](AsyncWebServerRequest* request) {
     // Extract ticket ID from the URL path: /api/meter/status/<id>
-    const String path     = request->url();          // e.g. "/api/meter/status/42"
+    const String path      = request->url();          // e.g. "/api/meter/status/42"
     const int    lastSlash = path.lastIndexOf('/');
     const uint32_t requestedId = (lastSlash >= 0)
       ? (uint32_t)path.substring(lastSlash + 1).toInt()
@@ -1134,7 +1195,7 @@ void setupWebServer() {
       }
       const uint8_t channel = doc["channel"].as<uint8_t>();
 
-      // Remove from stored settings
+      // Remove from stored settings (goes through cache — fast path)
       String raw = loadSettings();
       JsonDocument cfg;
       deserializeJson(cfg, raw);
@@ -1149,7 +1210,7 @@ void setupWebServer() {
     }
   );
 
-  // ── API: File Upload ─────────────────────────────────────────────────────────
+  // ── API: File Upload ──────────────────────────────────────────────────────
   server.on("/ota/file", HTTP_POST, [](AsyncWebServerRequest* request) {
       if (fileCtx.error) {
         request->send(500, "text/plain", fileCtx.errorMsg);
@@ -1157,34 +1218,34 @@ void setupWebServer() {
       }
       request->send(200, "text/plain", "OK");
     },
- 
-    // ── Upload handler ────────────────────────────────────────────────────
     handleFileUpload
   );
 
-  // ── API: Firmware Upload ─────────────────────────────────────────────────────────
+  // ── API: Firmware Upload ──────────────────────────────────────────────────
   server.on("/ota/firmware", HTTP_POST, [](AsyncWebServerRequest* request) {
       if (otaCtx.error) {
         request->send(500, "text/plain", otaCtx.errorMsg);
         return;
       }
- 
+
       // Send 200 first, then reboot — gives the browser time to receive the
       // response before the device disappears off the network.
       request->send(200, "text/plain", "OK");
- 
+
       // Schedule restart so the TCP stack can flush the response.
-      rebootTimer = millis(); 
-      pendingReboot = true;   
+      rebootTimer   = millis();
+      pendingReboot = true;
     },
- 
-    // ── Upload handler (called per chunk) ─────────────────────────────────
     handleFirmwareUpload
   );
 
   // ── Static Assets (LittleFS) ──────────────────────────────────────────────
+  // Cache-Control: max-age=3600 tells browsers to serve CSS/JS/images from
+  // their local cache for up to one hour. This eliminates redundant HTTP
+  // round-trips on every page load. OTA updates force a full page reload
+  // after flashing, so stale caches are not a concern in practice.
   if (littlefs_available) {
-    server.serveStatic("/", LittleFS, "/");
+    server.serveStatic("/", LittleFS, "/").setCacheControl("max-age=3600");
   }
 
   // ── SSE Handler ───────────────────────────────────────────────────────────
@@ -1228,12 +1289,128 @@ void setupWebServer() {
   });
 
   // Clear out any stale boot-up garbage bytes
-  while(HC12.available() > 0) {
+  while (HC12.available() > 0) {
     HC12.read();
   }
 
   server.begin();
   Serial.println("[SYSTEM] Web server started.");
+}
+
+// =============================================================================
+// OTA UPLOAD HANDLERS
+//   POST /ota/firmware  — streams a .bin into the OTA partition, then reboots
+//   POST /ota/file      — writes any file to LittleFS
+// =============================================================================
+
+// ── /ota/firmware ─────────────────────────────────────────────────────────────
+
+void handleFirmwareUpload(AsyncWebServerRequest* request,
+                          const String& filename,
+                          size_t index,
+                          uint8_t* data,
+                          size_t len,
+                          bool final)
+{
+  if (index == 0) {
+    // First chunk — initialise
+    otaCtx = UploadContext{};
+
+    Serial.printf("[OTA] Firmware upload started: %s\n", filename.c_str());
+
+    // content_len() is -1 when the browser doesn't send Content-Length inside
+    // the multipart part, but the overall request length is usually available.
+    size_t fileSize = request->contentLength();
+
+    if (!Update.begin(fileSize > 0 ? fileSize : UPDATE_SIZE_UNKNOWN)) {
+      otaCtx.error    = true;
+      otaCtx.errorMsg = "Update.begin() failed: " + String(Update.errorString());
+      Serial.println("[OTA] " + otaCtx.errorMsg);
+      return;
+    }
+  }
+
+  if (otaCtx.error) return;   // skip remaining chunks after an error
+
+  if (Update.write(data, len) != len) {
+    otaCtx.error    = true;
+    otaCtx.errorMsg = "Write error: " + String(Update.errorString());
+    Serial.println("[OTA] " + otaCtx.errorMsg);
+    Update.abort();
+    return;
+  }
+
+  if (final) {
+    if (!Update.end(true)) {
+      otaCtx.error    = true;
+      otaCtx.errorMsg = "Finalise error: " + String(Update.errorString());
+      Serial.println("[OTA] " + otaCtx.errorMsg);
+    } else {
+      Serial.printf("[OTA] Firmware flashed successfully (%u bytes)\n",
+                    index + len);
+    }
+  }
+}
+
+// ── /ota/file ─────────────────────────────────────────────────────────────────
+
+void handleFileUpload(AsyncWebServerRequest* request,
+                      const String& filename,
+                      size_t index,
+                      uint8_t* data,
+                      size_t len,
+                      bool final)
+{
+  if (index == 0) {
+    fileCtx = UploadContext{};
+
+    // The HTML sends the desired target path in a 'path' field.
+    // Fall back to /filename if not provided.
+    String targetPath = "/" + filename;
+    if (request->hasParam("path", true)) {
+      targetPath = request->getParam("path", true)->value();
+      // Ensure leading slash
+      if (!targetPath.startsWith("/")) targetPath = "/" + targetPath;
+    }
+
+    // Sanity-check free space
+    size_t fileSize = request->contentLength();
+    if (fileSize > 0 && fileSize > LittleFS.totalBytes() - LittleFS.usedBytes()) {
+      fileCtx.error    = true;
+      fileCtx.errorMsg = "Insufficient LittleFS space";
+      Serial.println("[OTA] " + fileCtx.errorMsg);
+      return;
+    }
+
+    Serial.printf("[OTA] File upload started: %s → %s\n",
+                  filename.c_str(), targetPath.c_str());
+
+    fileCtx.fsFile = LittleFS.open(targetPath, "w");
+    if (!fileCtx.fsFile) {
+      fileCtx.error    = true;
+      fileCtx.errorMsg = "Failed to open " + targetPath + " for writing";
+      Serial.println("[OTA] " + fileCtx.errorMsg);
+      return;
+    }
+  }
+
+  if (fileCtx.error) return;
+
+  if (len > 0) {
+    size_t written = fileCtx.fsFile.write(data, len);
+    if (written != len) {
+      fileCtx.error    = true;
+      fileCtx.errorMsg = "Write error (disk full?)";
+      fileCtx.fsFile.close();
+      Serial.println("[OTA] " + fileCtx.errorMsg);
+      return;
+    }
+  }
+
+  if (final) {
+    fileCtx.fsFile.close();
+    Serial.printf("[OTA] File written successfully (%u bytes)\n", index + len);
+  }
 }
 
 // =============================================================================
@@ -1243,6 +1420,12 @@ void setupWebServer() {
 void setup() {
   Serial.begin(115200);
   Serial.println("\n--- ESP32 Booting ---");
+
+  // ── Completely Deactivate and Purge Bluetooth ──────────────────────────
+  // 1. Release the BLE controller memory back to the global heap allocator.
+  //    This must be called BEFORE initializing or using any BLE functionality.
+  esp_bt_mem_release(ESP_BT_MODE_BLE);
+  Serial.println("[SYSTEM] Bluetooth hardware purged. RAM released to heap.");
 
   // Cache static hardware specs once
   espStaticDetails.model = ESP.getChipModel();
@@ -1266,6 +1449,14 @@ void setup() {
   } else {
     Serial.println("[CRITICAL] LittleFS mount failed!");
   }
+
+  // ── Prime settings cache from NVS ─────────────────────────────────────────
+  // Done once here so every subsequent loadSettings() call in async handlers
+  // returns immediately from RAM without touching flash.
+  preferences.begin("settings", true);
+  settingsCache = preferences.getString("data", "{}");
+  preferences.end();
+  Serial.println("[SETTINGS] Cache primed from NVS.");
 
   // ── Load Wi-Fi Credentials ────────────────────────────────────────────────
   preferences.begin("wifi-config", true);
@@ -1291,15 +1482,15 @@ void setup() {
   } else {
     Serial.printf("[NETWORK] Connecting to: %s\n", wifi_ssid.c_str());
 
-    WiFi.mode(WIFI_STA);                 // Explicitly initialize Station Mode first
-    WiFi.setTxPower(WIFI_POWER_8_5dBm);  // Cap the radio power immediately
-    esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
+    WiFi.mode(WIFI_STA);                  // Explicitly initialise Station Mode first
+    WiFi.setTxPower(WIFI_POWER_8_5dBm);   // Cap the radio power immediately
+    esp_wifi_set_ps(WIFI_PS_MIN_MODEM);   // Power-saving mode (reduces idle current & temperature)
     WiFi.begin(wifi_ssid.c_str(), wifi_password.c_str());
-    
+
     Serial.println("[SYSTEM] Wi-Fi power saving set to MIN_MODEM.");
 
     int retries = 0;
-    while (WiFi.status() != WL_CONNECTED && retries < 120) { // 60 s max
+    while (WiFi.status() != WL_CONNECTED && retries < 120) { // 60s max
       delay(500);
       Serial.print('.');
       retries++;
@@ -1322,122 +1513,6 @@ void setup() {
 
   // ── HTTP Routes ───────────────────────────────────────────────────────────
   setupWebServer();
-}
-
-// =============================================================================
-// OTA UPLOAD HANDLERS
-//   POST /ota/firmware  — streams a .bin into the OTA partition, then reboots
-//   POST /ota/file      — writes any file to LittleFS
-// =============================================================================
-
-// ── /ota/firmware ─────────────────────────────────────────────────────────────
- 
-void handleFirmwareUpload(AsyncWebServerRequest* request,
-                          const String& filename,
-                          size_t index,
-                          uint8_t* data,
-                          size_t len,
-                          bool final)
-{
-  if (index == 0) {
-    // First chunk — initialise
-    otaCtx = UploadContext{};   // reset
- 
-    Serial.printf("[OTA] Firmware upload started: %s\n", filename.c_str());
- 
-    // content_len() is -1 when the browser doesn't send Content-Length inside
-    // the multipart part, but the overall request length is usually available.
-    size_t fileSize = request->contentLength();
- 
-    if (!Update.begin(fileSize > 0 ? fileSize : UPDATE_SIZE_UNKNOWN)) {
-      otaCtx.error    = true;
-      otaCtx.errorMsg = "Update.begin() failed: " + String(Update.errorString());
-      Serial.println("[OTA] " + otaCtx.errorMsg);
-      return;
-    }
-  }
- 
-  if (otaCtx.error) return;   // skip remaining chunks after an error
- 
-  if (Update.write(data, len) != len) {
-    otaCtx.error    = true;
-    otaCtx.errorMsg = "Write error: " + String(Update.errorString());
-    Serial.println("[OTA] " + otaCtx.errorMsg);
-    Update.abort();
-    return;
-  }
- 
-  if (final) {
-    if (!Update.end(true)) {
-      otaCtx.error    = true;
-      otaCtx.errorMsg = "Finalise error: " + String(Update.errorString());
-      Serial.println("[OTA] " + otaCtx.errorMsg);
-    } else {
-      Serial.printf("[OTA] Firmware flashed successfully (%u bytes)\n",
-                    index + len);
-    }
-  }
-}
- 
-// ── /ota/file ─────────────────────────────────────────────────────────────────
- 
-void handleFileUpload(AsyncWebServerRequest* request,
-                      const String& filename,
-                      size_t index,
-                      uint8_t* data,
-                      size_t len,
-                      bool final)
-{
-  if (index == 0) {
-    fileCtx = UploadContext{};  // reset
- 
-    // The HTML sends the desired target path in a 'path' field.
-    // Fall back to /filename if not provided.
-    String targetPath = "/" + filename;
-    if (request->hasParam("path", true)) {
-      targetPath = request->getParam("path", true)->value();
-      // Ensure leading slash
-      if (!targetPath.startsWith("/")) targetPath = "/" + targetPath;
-    }
- 
-    // Sanity-check free space
-    size_t fileSize = request->contentLength();
-    if (fileSize > 0 && fileSize > LittleFS.totalBytes() - LittleFS.usedBytes()) {
-      fileCtx.error    = true;
-      fileCtx.errorMsg = "Insufficient LittleFS space";
-      Serial.println("[OTA] " + fileCtx.errorMsg);
-      return;
-    }
- 
-    Serial.printf("[OTA] File upload started: %s → %s\n",
-                  filename.c_str(), targetPath.c_str());
- 
-    fileCtx.fsFile = LittleFS.open(targetPath, "w");
-    if (!fileCtx.fsFile) {
-      fileCtx.error    = true;
-      fileCtx.errorMsg = "Failed to open " + targetPath + " for writing";
-      Serial.println("[OTA] " + fileCtx.errorMsg);
-      return;
-    }
-  }
- 
-  if (fileCtx.error) return;
- 
-  if (len > 0) {
-    size_t written = fileCtx.fsFile.write(data, len);
-    if (written != len) {
-      fileCtx.error    = true;
-      fileCtx.errorMsg = "Write error (disk full?)";
-      fileCtx.fsFile.close();
-      Serial.println("[OTA] " + fileCtx.errorMsg);
-      return;
-    }
-  }
- 
-  if (final) {
-    fileCtx.fsFile.close();
-    Serial.printf("[OTA] File written successfully (%u bytes)\n", index + len);
-  }
 }
 
 // =============================================================================
@@ -1470,6 +1545,36 @@ void loop() {
   if (pendingReboot && millis() - rebootTimer > 500) {
     Serial.println("[SYSTEM] Executing reboot...");
     ESP.restart();
+  }
+
+  // ── Wi-Fi Reconnection Watchdog ───────────────────────────────────────────
+  // In STA mode, check every 10s whether the Wi-Fi connection is still up.
+  // If it has dropped (router restart, DHCP lease expiry, signal loss) call
+  // WiFi.reconnect() to re-associate without a full reboot. The watchdog is
+  // skipped while pendingReboot is set so it doesn't interfere with OTA
+  // restart timing.
+  if (!is_ap_mode && !pendingReboot) {
+    static unsigned long lastWifiCheck = 0;
+    if (millis() - lastWifiCheck > 10000) {
+      lastWifiCheck = millis();
+      if (WiFi.status() != WL_CONNECTED) {
+        Serial.println("[NETWORK] Wi-Fi lost — reconnecting...");
+        WiFi.reconnect();
+      }
+    }
+  }
+
+  // ── SSE Keep-Alive ────────────────────────────────────────────────────────
+  // Send a ping event every 25s so routers and reverse proxies do not
+  // close idle SSE connections before the next meter packet arrives.
+  // Browsers treat unknown event types as no-ops, so this is invisible
+  // to the UI event listeners which only subscribe to "meter-data-<N>".
+  {
+    static unsigned long lastSSEPing = 0;
+    if (millis() - lastSSEPing > 25000) {
+      lastSSEPing += 25000;
+      events.send("", "ping");
+    }
   }
 
   // ── Meter Update Ticket ───────────────────────────────────────────────────
