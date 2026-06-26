@@ -46,13 +46,16 @@ SoftwareSerial hc12B(RX_B, TX_B);
 
 // --- Timing & config constants ---
 const long DEFAULT_BAUD          = 9600;   // standard HC-12 operating baud
-const long FU4_BAUD              = 1200;   // HC-12 FU4 only supports 1200bps
+const long FU4_BAUD              = 1200;   // HC-12 FU4 only supports 1200bps UART
 const int  SET_PIN_SETTLE_MS     = 100;    // delay after toggling SET pin
 const int  AT_CMD_DELAY_MS       = 250;    // time to wait for an AT command reply
 const int  CONFIG_READ_DELAY_MS  = 250;    // time to wait for AT+RX full config dump
 const int  RECOVERY_SETTLE_MS    = 200;    // SET settle time during emergency recovery
 const int  RECOVERY_CMD_DELAY_MS = 300;    // AT command delay during emergency recovery
-const int  PING_TIMEOUT_MS       = 500;    // time to wait for a wireless ping reply
+const int  PING_TIMEOUT_MS       = 500;    // ping timeout for FU1 (9600 bps air rate)
+// FIX 1: FU4 uses 250 bps over-the-air. A 9-char packet takes ~360 ms to transmit
+// alone, leaving no margin at 500 ms. 2000 ms gives comfortable headroom.
+const int  PING_TIMEOUT_FU4_MS   = 2000;  // ping timeout for FU4 (250 bps air rate)
 
 const String DEFAULT_CHANNEL = "C003";
 const String DEFAULT_POWER   = "P3";
@@ -116,7 +119,7 @@ void loop() {
 
 void printMenu() {
   Serial.println(F("\n===================================="));
-  Serial.println(F("        HC-12 DIAGNOSTIC TOOL       "));
+  Serial.println(F("    HC-12 MASTER DIAGNOSTIC TOOL    "));
   Serial.println(F("===================================="));
   Serial.println(F("1) Read Configuration: Module A"));
   Serial.println(F("2) Read Configuration: Module B"));
@@ -305,8 +308,8 @@ void runAdvancedSoftwareDiagnostic() {
   bool baselineAtoB = false;
   bool baselineBtoA = false;
   if (progA1 && progB1) {
-    baselineAtoB = verifyWirelessLink(hc12A, hc12B, "PING_FU1_A");
-    baselineBtoA = verifyWirelessLink(hc12B, hc12A, "PING_FU1_B");
+    baselineAtoB = verifyWirelessLink(hc12A, hc12B, "PING_FU1_A", PING_TIMEOUT_MS);
+    baselineBtoA = verifyWirelessLink(hc12B, hc12A, "PING_FU1_B", PING_TIMEOUT_MS);
   } else {
     Serial.println(F("Skipping FU1 link test: baseline programming failed."));
   }
@@ -325,19 +328,28 @@ void runAdvancedSoftwareDiagnostic() {
   bool stressAtoB = false;
   bool stressBtoA = false;
   if (progA4 && progB4) {
-    stressAtoB = verifyWirelessLink(hc12A, hc12B, "PING_FU4_A");
-    stressBtoA = verifyWirelessLink(hc12B, hc12A, "PING_FU4_B");
+    // FIX 1: Use the longer FU4 timeout — 250 bps air rate needs ~360 ms just
+    // to transmit a 9-char packet; PING_TIMEOUT_FU4_MS gives safe headroom.
+    stressAtoB = verifyWirelessLink(hc12A, hc12B, "PING_FU4_A", PING_TIMEOUT_FU4_MS);
+    stressBtoA = verifyWirelessLink(hc12B, hc12A, "PING_FU4_B", PING_TIMEOUT_FU4_MS);
   } else {
     Serial.println(F("Skipping FU4 link test: stress-profile programming failed."));
   }
 
+  // FIX 2: Revert sequence — call listen() before sending AT commands to each
+  // module. Without this, SoftwareSerial may still be listening on the other
+  // module, causing AT commands to be silently dropped and responses to bleed
+  // across, producing the spurious "ERROR / OK+FU1" output.
   Serial.println(F("\nReverting to stable baseline..."));
   digitalWrite(SET_A, LOW);
   digitalWrite(SET_B, LOW);
   delay(SET_PIN_SETTLE_MS);
 
+  hc12A.listen();
   hc12A.print("AT+B9600"); delay(AT_CMD_DELAY_MS); clearRecoveryBuffer(hc12A);
   hc12A.print("AT+FU1");   delay(AT_CMD_DELAY_MS); clearRecoveryBuffer(hc12A);
+
+  hc12B.listen();
   hc12B.print("AT+B9600"); delay(AT_CMD_DELAY_MS); clearRecoveryBuffer(hc12B);
   hc12B.print("AT+FU1");   delay(AT_CMD_DELAY_MS); clearRecoveryBuffer(hc12B);
 
@@ -370,11 +382,12 @@ void runAdvancedSoftwareDiagnostic() {
   printMenu();
 }
 
-bool verifyWirelessLink(SoftwareSerial &txModule, SoftwareSerial &rxModule, String packet) {
+// FIX 1: timeout parameter added so FU1 and FU4 pings can use different wait times.
+bool verifyWirelessLink(SoftwareSerial &txModule, SoftwareSerial &rxModule, String packet, int timeout) {
   rxModule.listen();
   delay(10);
   txModule.print(packet);
-  delay(PING_TIMEOUT_MS);
+  delay(timeout);
 
   String buffer = "";
   while (rxModule.available()) {
