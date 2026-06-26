@@ -425,7 +425,7 @@
                         </svg>
                     </span>
 
-                    <span class="sym on control_sym ml-auto" id="home" onclick="window.location.href='/'" title="Home">
+                    <span class="sym on control_sym ml-auto" id="home" onclick="closeMeter()" title="Home">
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M3 12 L12 3 L21 12" />
@@ -616,38 +616,74 @@
     <script>
         const DEFAULT_THEME = "Classic";
         const THEMES = {
-            "Classic": { bg: "#c8d8c0", on: "#1a1a1a", off: "#c0d0b7aa", border: "#030303" },
-            "Monotone": { bg: "#c8c8c0", on: "#101010", off: "#bcbcb466", border: "#050505" },
-            "Blue Wave": { bg: "#0a1a3a", on: "#d0e8ff", off: "#0e224844", border: "#06101f" },
-            "Sport": { bg: "#1c1c1c", on: "#d4e84a", off: "#2525203F", border: "#090909" },
-            "Amber": { bg: "#1a0e00", on: "#ffb000", off: "#2a1a0044", border: "#0d0700" },
-            "Amber Warm": { bg: "#1f1200", on: "#e8900a", off: "#2c1c0444", border: "#0f0900" },
-            "Emerald": { bg: "#041209", on: "#4dcc6a", off: "#071a0c55", border: "#020804" },
-            "Phosphor White": { bg: "#0d0d0d", on: "#e8e8e0", off: "#1a1a1844", border: "#060606" },
-            "Red Alert": { bg: "#1a0000", on: "#ff3333", off: "#28050566", border: "#0a0000" },
-            "Neon Cyan": { bg: "#001a1a", on: "#00ffe0", off: "#00262633", border: "#000d0d" },
-            "Paper & Ink": { bg: "#f0ece0", on: "#1a1610", off: "#e4e0d488", border: "#c8c4b8" },
-            "Purple Haze": { bg: "#120020", on: "#cc88ff", off: "#1c003066", border: "#080010" },
-            "Deep Sea": { bg: "#020d1a", on: "#00bfff", off: "#051a3044", border: "#01060d" },
-            "Outrun": { bg: "#14001a", on: "#ff007f", off: "#28003344", border: "#0a000d" },
-            "Terminal": { bg: "#051105", on: "#18e318", off: "#0b240b33", border: "#020802" },
-            "Glacier": { bg: "#10161a", on: "#a3c2c2", off: "#1a242a33", border: "#080b0d" },
+            "Amber": { bg: "#1a0e00", on: "#ffb000", off: "#2a1a0033", border: "#0d0700" },
+            "Amber Warm": { bg: "#1f1200", on: "#e8900a", off: "#2c1c0433", border: "#0f0900" },
+            "Bioluminescence": { bg: "#03191e", on: "#00f5d4", off: "#073b4422", border: "#010b0d" },
+            "Blue Wave": { bg: "#0a1a3a", on: "#d0e8ff", off: "#0e224855", border: "#06101f" },
+            "Bubblegum": { bg: "#0f111a", on: "#ff79c6", off: "#2125362A", border: "#07080d" },
+            "Classic": { bg: "#c8d8c0", on: "#1a1a1a", off: "#c0d0b7AA", border: "#030303" },
+            "Crimson Velvet": { bg: "#1f0308", on: "#ff4d6d", off: "#3d0b142A", border: "#0a0103" },
+            "Deep Sea": { bg: "#020d1a", on: "#00bfff", off: "#051a304A", border: "#01060d" },
+            "Denim": { bg: "#1e293b", on: "#93c5fd", off: "#33415524", border: "#0f172a" },
+            "Glacier": { bg: "#10161a", on: "#a3c2c2", off: "#1a242a32", border: "#080b0d" },
+            "Glass Amber": { bg: "transparent", on: "#ff9f1c", off: "#ff9f1c1A", border: "transparent", themes_bg: "#141210" },
+            "Glass Amethyst": { bg: "transparent", on: "#bf5af2", off: "#bf5af21A", border: "transparent", themes_bg: "#120f14" },
+            "Glass Bright": { bg: "transparent", on: "#e6f2ff", off: "#3a4d661A", border: "transparent", themes_bg: "#0d1117" },
             "Glass Dark": { bg: "transparent", on: "#1a1a1a", off: "#8080801A", border: "transparent", themes_bg: "#f4f5f6" },
-            "Glass Bright": { bg: "transparent", on: "#e6f2ff", off: "#3a4d661A", border: "transparent", themes_bg: "#0d1117" }
+            "Matcha Latte": { bg: "#f3f4ed", on: "#556b2f", off: "#e3e5da55", border: "#c2c4b6" },
+            "Midnight Forest": { bg: "#081c15", on: "#52b788", off: "#1b433222", border: "#020a07" },
+            "Monotone": { bg: "#c8c8c0", on: "#101010", off: "#bcbcb455", border: "#050505" },
+            "Nordic Frost": { bg: "#2e3440", on: "#88c0d0", off: "#3b425233", border: "#1c212b" },
+            "Outrun": { bg: "#14001a", on: "#ff007f", off: "#28003344", border: "#0a000d" },
+            "Paper & Ink": { bg: "#f0ece0", on: "#1a1610", off: "#e4e0d466", border: "#c8c4b8" },
+            "Phosphor White": { bg: "#0d0d0d", on: "#e8e8e0", off: "#1a1a184A", border: "#060606" },
+            "Plum Wine": { bg: "#2b1022", on: "#f0a8d8", off: "#421c362A", border: "#140710" },
+            "Purple Haze": { bg: "#160033", on: "#a855f7", off: "#2e00662A", border: "#0b001a" },
+            "Red Alert": { bg: "#1a0000", on: "#ff3333", off: "#28050566", border: "#0a0000" },
+            "Sakura Petal": { bg: "#fff0f5", on: "#ff69b4", off: "#ffd6e844", border: "#fcc0dc" },
+            "Sandstorm": { bg: "#2c251e", on: "#e6c280", off: "#3d342a33", border: "#17130f" },
+            "Sport": { bg: "#1c1c1c", on: "#d4e84a", off: "#2525204A", border: "#090909" },
+            "Steel": { bg: "#252a34", on: "#00adb5", off: "#393e462A", border: "#181b22" },
+            "Terminal": { bg: "#051105", on: "#18e318", off: "#0b240b33", border: "#020802" },
+            "Volcanic Ash": { bg: "#1a1a24", on: "#ff4500", off: "#2d2d3d24", border: "#0d0d12" }
         };
 
         let currentTheme = "Classic";
         const ZOOM_LEVELS = [25, 50, 75, 100, 125, 150, 175, 200, 250, 300, 400, 500];
         let currentZoomIndex = ZOOM_LEVELS.indexOf(100);
 
+        // Delay saving settings to avoid unnecessary flash wear
+        let settingsChanged = false; 
+        let fallbackSaveTimeout = null;
+
+        function queueSettingsChange() {
+            settingsChanged = true;
+            clearTimeout(fallbackSaveTimeout);
+            
+            fallbackSaveTimeout = setTimeout(() => {
+                conditionalSaveSettings();
+            }, 30000);
+        }
+
+        function conditionalSaveSettings(onComplete) {
+            if (settingsChanged) {
+                clearTimeout(fallbackSaveTimeout);
+                settingsChanged = false;
+                saveSettings(onComplete);
+            } else {
+                if (typeof onComplete === 'function') onComplete();
+            }
+        }
+
         function updateZoom() {
             const pct = ZOOM_LEVELS[currentZoomIndex];
             document.documentElement.style.setProperty('--zoom-level', pct / 100);
         }
 
-        function zoomIn()    { if (currentZoomIndex < ZOOM_LEVELS.length - 1) { currentZoomIndex++; updateZoom(); saveSettings() } }
-        function zoomOut()   { if (currentZoomIndex > 0)                      { currentZoomIndex--; updateZoom(); saveSettings() } }
-        function resetZoom() { currentZoomIndex = ZOOM_LEVELS.indexOf(100);     updateZoom(); saveSettings() }
+        function zoomIn()     { if (currentZoomIndex < ZOOM_LEVELS.length - 1) { currentZoomIndex++; updateZoom(); queueSettingsChange() } }
+        function zoomOut()    { if (currentZoomIndex > 0)                      { currentZoomIndex--; updateZoom(); queueSettingsChange() } }
+        function resetZoom()  { currentZoomIndex = ZOOM_LEVELS.indexOf(100);     updateZoom(); queueSettingsChange() }
+        function closeMeter() { conditionalSaveSettings(() => { window.location.href = '/'; }); }
 
         // Build caches once, after DOM is ready
         const SYM  = {};
@@ -836,7 +872,7 @@
         function toggleDropdown() { themeSelect.classList.toggle('open') }
         function pickTheme(name) {
             applyTheme(name);
-            saveSettings();
+            queueSettingsChange();
             themeSelect.classList.remove('open');
         }
         document.addEventListener('click', e => {
@@ -880,8 +916,7 @@
                 });
         }
 
-        function saveSettings() {
-            // Read full settings first, then merge our meter slice
+        function saveSettings(onComplete) {
             fetch('/api/settings', { method: 'GET' })
                 .then(r => r.json())
                 .then(data => {
@@ -896,8 +931,14 @@
                     });
                 })
                 .then(r => r.json())
-                .then(d => { /* if (d.status === 'success') console.log('Settings saved!'); */ })
-                .catch(e => console.error('Error saving settings:', e));
+                .then(d => { 
+                    if (d.status === 'success') console.log('Settings saved!');
+                    if (typeof onComplete === 'function') onComplete(); 
+                 })
+                .catch(e => {
+                    console.error('Error saving settings:', e);
+                    if (typeof onComplete === 'function') onComplete(); 
+                });
         }
 
         if (window.location.protocol !== 'file:') {
@@ -908,7 +949,7 @@
             currentZoomIndex = 9;
             updateZoom();
             const t = THEMES[DEFAULT_THEME];
-            if (t) document.documentElement.style.setProperty('--lcd-off', t.on);
+            //if (t) document.documentElement.style.setProperty('--lcd-off', t.on);
         }
 
         // ── SSE — subscribe to specific channel ────────────────────────
@@ -956,7 +997,7 @@
         window.addEventListener('keydown', function(e) {
 
             if (e.key === 'Escape' || e.key === 'Esc') {
-                window.location.href = '/';
+                closeMeter();
                 return;
             }
 
@@ -964,10 +1005,19 @@
             if (targetValue !== undefined) {
                 currentZoomIndex = ZOOM_LEVELS.indexOf(targetValue);
                 updateZoom(); 
-                saveSettings()
+                queueSettingsChange()
             }
         });
 
+        document.addEventListener("DOMContentLoaded", () => {
+            const screenElement = document.querySelector('.screen');
+            
+            if (screenElement) {
+                screenElement.addEventListener('mouseleave', () => {
+                    conditionalSaveSettings();
+                });
+            }
+        });
     </script>
 </body>
 
