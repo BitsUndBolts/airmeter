@@ -325,13 +325,16 @@
         <span class="header-title">Diagnostics</span>
       </div>
       <div class="header-right">
-        <button class="btn-icon" id="pause-btn" title="Pause / Resume">
-          <svg id="pause-icon" viewBox="0 0 16 16" fill="none">
-            <rect x="3" y="2" width="3.5" height="12" rx="1" fill="currentColor"/>
-            <rect x="9.5" y="2" width="3.5" height="12" rx="1" fill="currentColor"/>
+
+        <a class="icon-btn" id="pause-btn" title="Pause / Resume" href="javascript:void(0)">
+          <svg id="pause-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="5" y="3" width="4" height="18" rx="1"/>
+            <rect x="15" y="3" width="4" height="18" rx="1"/>
           </svg>
-        </button>
-        <a class="home-btn" href="/" title="Home">
+        </a>
+
+        <a class="icon-btn" href="/" title="Home">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M3 12L12 3L21 12"/><path d="M5 10L5 21L19 21L19 10"/>
@@ -1122,10 +1125,10 @@
     btn.classList.toggle('paused', paused);
     btn.title = paused ? 'Resume' : 'Pause';
     if (paused) {
-      icon.innerHTML = `<polygon points="5,2 14,8 14,8 5,14" fill="currentColor"/>`;
+      icon.innerHTML = `<polygon points="6,3 20,12 20,12 6,21" fill="currentColor" stroke="none"/>`;
     } else {
-      icon.innerHTML = `<rect x="3" y="2" width="3.5" height="12" rx="1" fill="currentColor"/>
-                        <rect x="9.5" y="2" width="3.5" height="12" rx="1" fill="currentColor"/>`;
+      icon.innerHTML = `<rect x="5" y="3" width="4" height="18" rx="1" fill="currentColor" stroke="none"/>
+                        <rect x="15" y="3" width="4" height="18" rx="1" fill="currentColor" stroke="none"/>`;
     }
   });
 

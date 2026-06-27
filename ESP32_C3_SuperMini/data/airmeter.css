@@ -170,7 +170,7 @@ body {
 }
 
 /* ── HOME BUTTON ── */
-.home-btn {
+.icon-btn {
   margin-left: auto;
   width: 2.8em;
   height: 2.8em;
@@ -187,13 +187,13 @@ body {
   flex-shrink: 0;
 }
 
-.home-btn:hover {
+.icon-btn:hover {
   color: var(--text);
   border-color: var(--text-2);
   background: var(--panel);
 }
 
-.home-btn svg {
+.icon-btn svg {
   width: 1.4em;
   height: 1.4em;
 }
