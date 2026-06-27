@@ -715,7 +715,7 @@ void setupWebServer() {
 
       WiFi.mode(WIFI_AP_STA);
       WiFi.setTxPower(WIFI_POWER_8_5dBm);  // Clamp power immediately before begin()
-      esp_wifi_set_ps(WIFI_PS_MIN_MODEM);   // Power-saving mode reduces current draw
+      esp_wifi_set_ps(WIFI_PS_NONE);       // Disable Power-saving due to latency increase to 200ms+
       WiFi.begin(test_ssid.c_str(), test_pass.c_str());
       connectionAttemptStart = millis();
 
@@ -1555,7 +1555,7 @@ void setup() {
 
     WiFi.mode(WIFI_STA);                  // Explicitly initialise Station Mode first
     WiFi.setTxPower(WIFI_POWER_8_5dBm);   // Cap the radio power immediately
-    esp_wifi_set_ps(WIFI_PS_MIN_MODEM);   // Power-saving mode (reduces idle current & temperature)
+    esp_wifi_set_ps(WIFI_PS_NONE);        // Disable Power-saving due to latency increase to 200ms+
     WiFi.begin(wifi_ssid.c_str(), wifi_password.c_str());
 
     Serial.println("[SYSTEM] Wi-Fi power saving set to MIN_MODEM.");

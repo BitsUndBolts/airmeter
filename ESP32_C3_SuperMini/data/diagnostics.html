@@ -24,7 +24,7 @@
 
     .status-tile {
       flex: 1;
-      min-width: 12em;
+      min-width: 11em;
       background: var(--panel-2);
       border: 1px solid var(--border-bright);
       border-radius: 0.4em;
@@ -51,15 +51,59 @@
       line-height: 1;
     }
 
-    .tile-value.good    { color: var(--green); }
-    .tile-value.warn    { color: var(--yellow); }
-    .tile-value.bad     { color: var(--red); }
+    .tile-value.good { color: var(--green); }
+    .tile-value.warn { color: var(--yellow); }
+    .tile-value.bad  { color: var(--red); }
 
     .tile-sub {
       font-family: var(--mono);
       font-size: 0.9em;
       color: var(--text-3);
       letter-spacing: 0.04em;
+    }
+
+    /* Link health tile */
+    .tile-link-health {
+      display: flex;
+      align-items: center;
+      gap: 0.7em;
+    }
+
+    .link-health-score {
+      font-family: var(--mono);
+      font-size: 1.8em;
+      font-weight: 600;
+      line-height: 1;
+    }
+
+    .link-health-bar-wrap {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 0.3em;
+    }
+
+    .link-health-bar-track {
+      height: 0.45em;
+      background: var(--border-bright);
+      border-radius: 1em;
+      overflow: hidden;
+    }
+
+    .link-health-bar-fill {
+      height: 100%;
+      border-radius: 1em;
+      transition: width 0.4s ease, background 0.3s;
+      background: var(--green);
+    }
+
+    .link-health-bar-fill.warn { background: var(--yellow); }
+    .link-health-bar-fill.bad  { background: var(--red); }
+
+    .link-health-label {
+      font-family: var(--mono);
+      font-size: 0.85em;
+      color: var(--text-3);
     }
 
     /* ── CHART AREA ── */
@@ -80,6 +124,7 @@
       display: flex;
       align-items: center;
       gap: 0.8em;
+      flex-wrap: wrap;
     }
 
     .chart-legend {
@@ -118,7 +163,7 @@
       border: 1px solid var(--border-bright);
       border-radius: 0.4em;
       overflow: hidden;
-      height: 14em;
+      height: 17em;
     }
 
     .chart-wrap canvas {
@@ -129,22 +174,96 @@
 
     .chart-y-label {
       position: absolute;
-      top: 0.5em;
-      left: 0.6em;
+      transform: rotate(270deg);
+      top: 5.5em;
+      left: -0.8em;
       font-family: var(--mono);
-      font-size: 0.75em;
+      font-size: 1.4em;
+      font-weight: 600;
       color: var(--text-3);
       pointer-events: none;
     }
 
     .chart-y-label-r {
       position: absolute;
-      top: 0.5em;
-      right: 0.6em;
+      top: 5.5em;
+      right: -0.6em;
+      transform: rotate(270deg);
       font-family: var(--mono);
-      font-size: 0.75em;
+      font-size: 1.4em;
+      font-weight: 600;
       color: var(--text-3);
       pointer-events: none;
+    }
+
+    /* ── POWER CONSERVATION CALLOUT ── */
+    .pcons-callout {
+      display: none;
+      margin: 0 1.2em 1.2em;
+      background: rgba(245, 166, 35, 0.07);
+      border: 1px solid rgba(245, 166, 35, 0.35);
+      border-radius: 0.4em;
+      overflow: hidden;
+    }
+
+    .pcons-callout.visible { display: block; }
+
+    .pcons-callout-header {
+      display: flex;
+      align-items: center;
+      gap: 0.9em;
+      padding: 1em 1.4em;
+      border-bottom: 1px solid rgba(245, 166, 35, 0.2);
+    }
+
+    .pcons-callout-icon {
+      width: 2em;
+      height: 2em;
+      border-radius: 0.3em;
+      background: var(--accent-dim);
+      border: 1px solid var(--accent-glow);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      color: var(--accent);
+    }
+
+    .pcons-callout-icon svg { width: 1.1em; height: 1.1em; }
+
+    .pcons-callout-title {
+      font-family: var(--mono);
+      font-size: 1em;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--accent);
+      flex: 1;
+    }
+
+    .pcons-callout-body {
+      padding: 1em 1.4em;
+      display: flex;
+      align-items: center;
+      gap: 1.2em;
+      flex-wrap: wrap;
+    }
+
+    .pcons-callout-text {
+      font-size: 1.15em;
+      color: var(--text-2);
+      line-height: 1.55;
+      flex: 1;
+      min-width: 16em;
+    }
+
+    .pcons-callout-text strong { color: var(--accent); }
+
+    .pcons-channels {
+      font-family: var(--mono);
+      font-size: 0.9em;
+      color: var(--text-3);
+      margin-top: 0.4em;
     }
 
     /* ── ANALYTICS TABLE ── */
@@ -185,6 +304,9 @@
     .analytics-table tbody tr:last-child { border-bottom: none; }
     .analytics-table tbody tr:hover { background: rgba(255,255,255,0.02); }
 
+    /* Power-save muted rows */
+    .analytics-table tbody tr.pcons-row { opacity: 0.65; }
+
     .analytics-table td {
       padding: 0.75em 1.1em;
       font-family: var(--mono);
@@ -194,12 +316,11 @@
     }
 
     .analytics-table td.right { text-align: right; }
-
     .analytics-table td.good  { color: var(--green); }
     .analytics-table td.warn  { color: var(--yellow); }
     .analytics-table td.bad   { color: var(--red); }
 
-    /* loss bar inside cell */
+    /* loss bar */
     .loss-bar-wrap {
       display: flex;
       align-items: center;
@@ -234,6 +355,46 @@
       text-align: right;
     }
 
+    /* reliability cell */
+    .rel-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4em;
+      font-family: var(--mono);
+      font-size: 0.85em;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      padding: 0.2em 0.6em;
+      border-radius: 0.25em;
+      white-space: nowrap;
+    }
+
+    .rel-badge.ok {
+      color: var(--green);
+      background: var(--green-dim);
+      border: 1px solid rgba(61,220,132,0.22);
+    }
+
+    .rel-badge.limited {
+      color: var(--accent);
+      background: var(--accent-dim);
+      border: 1px solid var(--accent-glow);
+    }
+
+    .rel-badge svg { width: 0.9em; height: 0.9em; flex-shrink: 0; }
+
+    /* suppressed loss display */
+    .loss-suppressed {
+      display: flex;
+      align-items: center;
+      gap: 0.5em;
+      color: var(--text-3);
+      font-size: 0.9em;
+    }
+
+    .loss-suppressed svg { width: 1em; height: 1em; flex-shrink: 0; color: var(--accent); }
+
     /* ── DIAGNOSIS PANEL ── */
     .diagnosis-section { padding: 0 1.2em 1.2em; }
 
@@ -259,9 +420,7 @@
       gap: 0.6em;
     }
 
-    .diagnosis-list {
-      padding: 0.6em 0;
-    }
+    .diagnosis-list { padding: 0.6em 0; }
 
     .diagnosis-item {
       display: flex;
@@ -283,12 +442,15 @@
       margin-top: 0.1em;
     }
 
-    .diag-icon.ok     { color: var(--green); }
-    .diag-icon.warn   { color: var(--yellow); }
-    .diag-icon.bad    { color: var(--red); }
-    .diag-icon.info   { color: var(--blue); }
+    .diag-icon.ok   { color: var(--green); }
+    .diag-icon.warn { color: var(--yellow); }
+    .diag-icon.bad  { color: var(--red); }
+    .diag-icon.info { color: var(--blue); }
+    .diag-icon.muted { color: var(--accent); }
 
     .diag-text strong { color: var(--text); }
+    .diag-text a { color: var(--accent); text-decoration: none; font-family: var(--mono); font-size: 0.92em; }
+    .diag-text a:hover { text-decoration: underline; }
 
     .diagnosis-empty {
       padding: 1.8em 1.2em;
@@ -299,11 +461,68 @@
       letter-spacing: 0.06em;
     }
 
-    /* ── FOOTER ── */
-    .uptime-val {
+    /* ── FOOTER TWO-GROUP LAYOUT ── */
+    .footer-groups {
+      display: flex;
+      gap: 2em;
+      flex-wrap: wrap;
+    }
+
+    .footer-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.6em;
+      flex: 1;
+      min-width: 14em;
+    }
+
+    .footer-group-label {
       font-family: var(--mono);
-      font-size: 1.1em;
+      font-size: 0.8em;
+      font-weight: 600;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--text-3);
+      padding-bottom: 0.4em;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 0.2em;
+    }
+
+    .footer-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1em;
+    }
+
+    .footer-row-key {
+      font-family: var(--mono);
+      font-size: 0.9em;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      color: var(--text-3);
+      white-space: nowrap;
+    }
+
+    .footer-row-val {
+      font-family: var(--mono);
+      font-size: 1em;
       color: var(--text-2);
+      text-align: right;
+    }
+
+    .footer-row-val.good { color: var(--green); }
+    .footer-row-val.warn { color: var(--yellow); }
+    .footer-row-val.bad  { color: var(--red); }
+
+    .footer-quality-dot {
+      display: inline-block;
+      width: 0.55em;
+      height: 0.55em;
+      border-radius: 50%;
+      margin-right: 0.4em;
+      vertical-align: middle;
+      flex-shrink: 0;
     }
 
     /* ── PAUSE BUTTON STATE ── */
@@ -325,7 +544,6 @@
         <span class="header-title">Diagnostics</span>
       </div>
       <div class="header-right">
-
         <a class="icon-btn" id="pause-btn" title="Pause / Resume" href="javascript:void(0)">
           <svg id="pause-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
               stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -333,7 +551,6 @@
             <rect x="15" y="3" width="4" height="18" rx="1"/>
           </svg>
         </a>
-
         <a class="icon-btn" href="/" title="Home">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -350,45 +567,47 @@
 
       <div class="status-tile">
         <span class="tile-label">WiFi Signal</span>
-        <span class="tile-value" id="tile-rssi">—</span>
+        <span class="tile-value" id="tile-rssi">-</span>
         <span class="tile-sub" id="tile-rssi-sub">dBm</span>
       </div>
 
       <div class="status-tile">
         <span class="tile-label">Round-Trip Latency</span>
-        <span class="tile-value" id="tile-latency">—</span>
-        <span class="tile-sub">ms  (last poll)</span>
+        <span class="tile-value" id="tile-latency">-</span>
+        <span class="tile-sub">ms · last poll</span>
       </div>
 
       <div class="status-tile">
         <span class="tile-label">Poll Success Rate</span>
-        <span class="tile-value" id="tile-poll-rate">—</span>
+        <span class="tile-value" id="tile-poll-rate">-</span>
         <span class="tile-sub" id="tile-poll-sub">last 30 polls</span>
       </div>
 
       <div class="status-tile">
-        <span class="tile-label">HC-12 Packets</span>
-        <span class="tile-value" id="tile-hc12-total">—</span>
-        <span class="tile-sub" id="tile-hc12-sub">received since boot</span>
-      </div>
-
-      <div class="status-tile">
-        <span class="tile-label">HC-12 CRC Errors</span>
-        <span class="tile-value" id="tile-hc12-err">—</span>
-        <span class="tile-sub" id="tile-hc12-err-sub">error rate: —</span>
+        <span class="tile-label">HC-12 Link Health</span>
+        <div class="tile-link-health">
+          <span class="link-health-score" id="tile-link-score">-</span>
+          <div class="link-health-bar-wrap">
+            <div class="link-health-bar-track">
+              <div class="link-health-bar-fill" id="tile-link-bar" style="width:0%"></div>
+            </div>
+            <span class="link-health-label" id="tile-link-label">Waiting for data</span>
+          </div>
+        </div>
+        <span class="tile-sub" id="tile-link-sub">packets · errors since boot</span>
       </div>
 
     </div>
 
     <!-- ── WIFI CHART ── -->
-    <div class="section-label">WiFi · Signal &amp; Latency (60 s)</div>
+    <div class="section-label">WiFi · Signal &amp; Latency</div>
     <div class="chart-block">
       <div class="chart-title">
         <span>RSSI &amp; Poll Latency</span>
         <div class="chart-legend">
           <div class="legend-item"><span class="legend-dot" style="background:#4d9fff"></span>RSSI (dBm)</div>
           <div class="legend-item"><span class="legend-dot" style="background:#f5a623"></span>Latency (ms)</div>
-          <div class="legend-item"><span class="legend-dash" style="color:#ff5555"></span>Weak threshold (−75 dBm)</div>
+          <div class="legend-item"><span class="legend-dash" style="color:#ff5555"></span>Weak -75 dBm</div>
         </div>
       </div>
       <div class="chart-wrap">
@@ -399,7 +618,7 @@
     </div>
 
     <!-- ── HC-12 CHART ── -->
-    <div class="section-label">HC-12 · Measured Packet Rate (60 s)</div>
+    <div class="section-label">HC-12 · Measured Packet Rate</div>
     <div class="chart-block">
       <div class="chart-title">
         <span>Packets / Second per Channel</span>
@@ -411,6 +630,31 @@
       </div>
     </div>
 
+    <!-- ── POWER CONSERVATION CALLOUT ── -->
+    <div class="pcons-callout" id="pcons-callout">
+      <div class="pcons-callout-header">
+        <div class="pcons-callout-icon">
+          <svg viewBox="0 0 16 16" fill="none">
+            <path d="M8 2v5M8 10v.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            <circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.1"/>
+          </svg>
+        </div>
+        <span class="pcons-callout-title">Measurement accuracy limited</span>
+        <a href="/meterConfig" class="btn btn-sm btn-outline-warning" style="flex-shrink:0">Configure Meters</a>
+      </div>
+      <div class="pcons-callout-body">
+        <div>
+          <div class="pcons-callout-text">
+            <strong>Power Conservation is ON</strong> for one or more meters. When active, the meter
+            skips transmissions whenever the display is unchanged - which appears as packet loss on
+            this page even when the RF link is perfectly healthy. For accurate packet loss and
+            rate measurements, disable Power Conservation in Meter Configuration.
+          </div>
+          <div class="pcons-channels" id="pcons-channels"></div>
+        </div>
+      </div>
+    </div>
+
     <!-- ── ANALYTICS TABLE ── -->
     <div class="section-label">HC-12 · Channel Analytics</div>
     <div class="analytics-section">
@@ -418,11 +662,11 @@
         <thead>
           <tr>
             <th>Channel</th>
-            <th>Configured Rate</th>
+            <th>Reliability</th>
+            <th>Target Rate</th>
             <th>Measured Rate</th>
             <th class="right">Packet Loss</th>
             <th class="right">Last Seen</th>
-            <th class="right">Power Save</th>
           </tr>
         </thead>
         <tbody id="analytics-tbody">
@@ -435,47 +679,69 @@
       </table>
     </div>
 
-    <!-- ── DIAGNOSIS ── -->
+    <!-- ── DIAGNOSIS PANEL ── -->
     <div class="section-label">Auto-Diagnosis</div>
     <div class="diagnosis-section">
       <div class="diagnosis-box">
         <div class="diagnosis-header">
           <svg viewBox="0 0 16 16" fill="none" style="width:1.1em;height:1.1em">
             <circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.2"/>
-            <path d="M8 5v4M8 10.5v.5" stroke="currentColor" stroke-width="1.3"
-                  stroke-linecap="round"/>
+            <path d="M8 5v4M8 10.5v.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
           </svg>
           Analysis
         </div>
         <div id="diagnosis-list" class="diagnosis-list">
-          <div class="diagnosis-empty">Collecting data — diagnosis appears after ~10 s</div>
+          <div class="diagnosis-empty">Collecting data - diagnosis appears after ~10 s</div>
         </div>
       </div>
     </div>
 
     <!-- ── FOOTER ── -->
     <div class="card-footer">
-      <div class="footer-kv">
-        <div class="footer-item">
-          <span class="footer-key">WiFi Channel</span>
-          <span class="footer-val" id="foot-wifi-ch">—</span>
+      <div class="footer-groups">
+
+        <!-- WiFi group -->
+        <div class="footer-group">
+          <div class="footer-group-label">WiFi</div>
+          <div class="footer-row">
+            <span class="footer-row-key">Channel</span>
+            <span class="footer-row-val" id="foot-wifi-ch">-</span>
+          </div>
+          <div class="footer-row">
+            <span class="footer-row-key">BSSID</span>
+            <span class="footer-row-val" id="foot-bssid">-</span>
+          </div>
+          <div class="footer-row">
+            <span class="footer-row-key">TX Power</span>
+            <span class="footer-row-val" id="foot-txpow">-</span>
+          </div>
+          <div class="footer-row">
+            <span class="footer-row-key">Uptime</span>
+            <span class="footer-row-val" id="foot-uptime">-</span>
+          </div>
         </div>
-        <div class="footer-item">
-          <span class="footer-key">BSSID</span>
-          <span class="footer-val" id="foot-bssid">—</span>
+
+        <!-- HC-12 group -->
+        <div class="footer-group">
+          <div class="footer-group-label">HC-12</div>
+          <div class="footer-row">
+            <span class="footer-row-key">Valid Packets</span>
+            <span class="footer-row-val" id="foot-pkt-total">-</span>
+          </div>
+          <div class="footer-row">
+            <span class="footer-row-key">CRC Errors</span>
+            <span class="footer-row-val" id="foot-err-total">-</span>
+          </div>
+          <div class="footer-row">
+            <span class="footer-row-key">Error Rate</span>
+            <span class="footer-row-val" id="foot-err-rate">-</span>
+          </div>
+          <div class="footer-row">
+            <span class="footer-row-key">Active Channels</span>
+            <span class="footer-row-val" id="foot-channels">-</span>
+          </div>
         </div>
-        <div class="footer-item">
-          <span class="footer-key">TX Power</span>
-          <span class="footer-val" id="foot-txpow">—</span>
-        </div>
-        <div class="footer-item">
-          <span class="footer-key">Uptime</span>
-          <span class="footer-val" id="foot-uptime">—</span>
-        </div>
-        <div class="footer-item">
-          <span class="footer-key">HC-12 Total Errors</span>
-          <span class="footer-val" id="foot-err-total">—</span>
-        </div>
+
       </div>
     </div>
 
@@ -485,41 +751,34 @@
   /* ════════════════════════════════════════════════════════════════════════
      CONSTANTS & CONFIG
   ════════════════════════════════════════════════════════════════════════ */
-  const POLL_INTERVAL_MS   = 1000;   // /api/diagnostics poll cadence
-  const HISTORY_SECONDS    = 60;     // rolling window length
-  const RATE_WINDOW_S      = 10;     // packet-rate averaging window (seconds)
-  const POLL_HISTORY_LEN   = 30;     // poll outcomes tracked for success-rate tile
-  const RSSI_WEAK          = -75;    // dBm threshold — "weak" warning
-  const RSSI_POOR          = -85;    // dBm threshold — "poor / bad"
-  const FPS_OPTIONS        = [1, 2, 3, 5, 10];  // must match firmware
+  const POLL_INTERVAL_MS  = 1000;
+  const HISTORY_SECONDS   = 60;
+  const RATE_WINDOW_S     = 10;
+  const POLL_HISTORY_LEN  = 30;
+  const RSSI_WEAK         = -75;
+  const RSSI_POOR         = -85;
+  const FPS_OPTIONS       = [1, 2, 3, 5, 10];
 
   /* ════════════════════════════════════════════════════════════════════════
      STATE
   ════════════════════════════════════════════════════════════════════════ */
   let paused = false;
 
-  // Rolling history arrays (one entry per second)
-  const rssiHistory    = [];   // { t, v } — dBm values
-  const latencyHistory = [];   // { t, v } — ms round-trip
-  // per-channel packet arrival timestamps (ring of epoch ms)
-  const channelArrivals = {};  // Map<channel, number[]>
-  // per-channel measured rate history for chart
-  const channelRateHistory = {}; // Map<channel, { t, v }[]>
-
-  // Poll outcome ring buffer (true = success, false = failure)
+  const rssiHistory    = [];
+  const latencyHistory = [];
+  const channelArrivals = {};
+  const channelRateHistory = {};
   const pollOutcomes = [];
 
-  // Last known diagnostics snapshot (for diagnosis engine)
-  let lastDiag      = null;
-  let diagHistory   = [];      // { t, rssi, latency, pollOk } last 30s
-  let dataAge       = 0;       // seconds since first poll
+  let lastDiag    = null;
+  let diagHistory = [];
+  let dataAge     = 0;
 
-  // Channel colours — assigned on first encounter, stable thereafter
   const CH_COLORS = [
     '#f5a623','#4d9fff','#3ddc84','#ff5555','#a855f7',
     '#00bfff','#f1c40f','#ff79c6','#52b788','#e8900a',
   ];
-  const channelColor = {}; // Map<channel, cssColor>
+  const channelColor = {};
   let colorCursor = 0;
 
   function getChannelColor(ch) {
@@ -531,7 +790,7 @@
   }
 
   /* ════════════════════════════════════════════════════════════════════════
-     CHART ENGINE  (vanilla Canvas — no external deps)
+     CHART ENGINE
   ════════════════════════════════════════════════════════════════════════ */
   function setupCanvas(canvas) {
     const wrap = canvas.parentElement;
@@ -543,37 +802,25 @@
     return { ctx, w: wrap.clientWidth, h: wrap.clientHeight };
   }
 
-  // Resolve CSS variable to a concrete colour string
   function cssVar(name) {
     return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   }
 
-  /*
-   * drawLineChart — generic multi-series line chart
-   *
-   * series: [{ data: [{t, v}], color, dashed, yAxis }]
-   *   yAxis: 'left' | 'right'
-   * leftRange / rightRange: { min, max }
-   * refLines: [{ y, color, yAxis, label }]   — horizontal dashed reference lines
-   */
   function drawLineChart(canvas, series, leftRange, rightRange, refLines) {
     const { ctx, w, h } = setupCanvas(canvas);
-    const PAD = { top: 10, right: 52, bottom: 24, left: 48 };
+    const PAD = { top: 14, right: 78, bottom: 42, left: 76 };
     const plotW = w - PAD.left - PAD.right;
     const plotH = h - PAD.top  - PAD.bottom;
     const now   = Date.now();
     const t0    = now - HISTORY_SECONDS * 1000;
 
-    const borderColor  = cssVar('--border-bright');
-    const textColor    = cssVar('--text-3');
+    const borderColor = cssVar('--border-bright');
+    const textColor   = cssVar('--text-3');
 
     ctx.clearRect(0, 0, w, h);
-
-    // Background
     ctx.fillStyle = cssVar('--panel-2');
     ctx.fillRect(0, 0, w, h);
 
-    // Grid lines (horizontal, left axis)
     ctx.strokeStyle = borderColor;
     ctx.lineWidth   = 0.5;
     const gridCount = 4;
@@ -584,45 +831,40 @@
       ctx.lineTo(PAD.left + plotW, y);
       ctx.stroke();
 
-      // Left axis label
       const val = leftRange.max - (leftRange.max - leftRange.min) * (i / gridCount);
-      ctx.fillStyle  = textColor;
-      ctx.font       = `${10}px ui-monospace, monospace`;
-      ctx.textAlign  = 'right';
+      ctx.fillStyle    = textColor;
+      ctx.font         = `600 ${22}px ui-monospace, monospace`;
+      ctx.textAlign    = 'right';
       ctx.textBaseline = 'middle';
-      ctx.fillText(Math.round(val), PAD.left - 5, y);
+      ctx.fillText(Math.round(val), PAD.left - 10, y);
     }
 
-    // Right axis labels (latency)
     if (rightRange) {
       for (let i = 0; i <= gridCount; i++) {
         const y   = PAD.top + (plotH / gridCount) * i;
         const val = rightRange.max - (rightRange.max - rightRange.min) * (i / gridCount);
         ctx.fillStyle    = textColor;
-        ctx.font         = `${10}px ui-monospace, monospace`;
+        ctx.font         = `600 ${22}px ui-monospace, monospace`;
         ctx.textAlign    = 'left';
         ctx.textBaseline = 'middle';
-        ctx.fillText(Math.round(val), PAD.left + plotW + 5, y);
+        ctx.fillText(Math.round(val), PAD.left + plotW + 10, y);
       }
     }
 
-    // Time axis labels
     ctx.fillStyle    = textColor;
-    ctx.font         = `${10}px ui-monospace, monospace`;
+    ctx.font         = `600 ${22}px ui-monospace, monospace`;
     ctx.textAlign    = 'center';
     ctx.textBaseline = 'top';
     for (let s = 0; s <= HISTORY_SECONDS; s += 15) {
       const x = PAD.left + (s / HISTORY_SECONDS) * plotW;
-      ctx.fillText(`-${HISTORY_SECONDS - s}s`, x, h - PAD.bottom + 4);
+      ctx.fillText(`-${HISTORY_SECONDS - s}s`, x, h - PAD.bottom + 8);
     }
 
-    // Clip to plot area
     ctx.save();
     ctx.beginPath();
     ctx.rect(PAD.left, PAD.top, plotW, plotH);
     ctx.clip();
 
-    // Reference lines
     (refLines || []).forEach(ref => {
       const range = ref.yAxis === 'right' ? rightRange : leftRange;
       if (!range) return;
@@ -638,7 +880,6 @@
       ctx.setLineDash([]);
     });
 
-    // Data series
     series.forEach(s => {
       if (!s.data || s.data.length < 2) return;
       const range = s.yAxis === 'right' ? rightRange : leftRange;
@@ -661,35 +902,31 @@
       ctx.stroke();
       ctx.setLineDash([]);
 
-      // Fill under the line (subtle)
       if (!s.dashed) {
         ctx.beginPath();
         points.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
         ctx.lineTo(points[points.length - 1].x, PAD.top + plotH);
         ctx.lineTo(points[0].x, PAD.top + plotH);
         ctx.closePath();
-        ctx.fillStyle = s.color + '18'; // very low opacity
+        ctx.fillStyle = s.color + '18';
         ctx.fill();
       }
     });
 
     ctx.restore();
 
-    // Border
     ctx.strokeStyle = borderColor;
     ctx.lineWidth   = 1;
     ctx.strokeRect(PAD.left, PAD.top, plotW, plotH);
   }
 
   /* ════════════════════════════════════════════════════════════════════════
-     PACKET RATE CALCULATION
-     Counts arrivals in a rolling RATE_WINDOW_S window.
+     PACKET RATE
   ════════════════════════════════════════════════════════════════════════ */
   function measuredRate(channel) {
     const arrivals = channelArrivals[channel];
     if (!arrivals || arrivals.length === 0) return 0;
     const cutoff = Date.now() - RATE_WINDOW_S * 1000;
-    // Prune old entries first
     while (arrivals.length && arrivals[0] < cutoff) arrivals.shift();
     return arrivals.length / RATE_WINDOW_S;
   }
@@ -702,30 +939,21 @@
     const measured  = measuredRate(channel);
     const expected  = expectedRate(fpsIdx);
     if (expected === 0) return null;
-    const loss = Math.max(0, (1 - measured / expected) * 100);
-    return Math.min(loss, 100);
+    return Math.min(Math.max(0, (1 - measured / expected) * 100), 100);
   }
 
-  // Prevent bfcache: this page has live SSE connections and polling loops
-  // that cannot be meaningfully restored from a frozen snapshot.
+  // bfcache prevention
   window.addEventListener('pageshow', (e) => {
-    if (e.persisted) {
-      // Page was restored from bfcache — force a clean reload
-      window.location.reload();
-    }
+    if (e.persisted) window.location.reload();
   });
 
   /* ════════════════════════════════════════════════════════════════════════
-     SSE — count per-channel packet arrivals
+     SSE
   ════════════════════════════════════════════════════════════════════════ */
   function initSSE() {
     const src = new EventSource('/events');
+    src.onmessage = () => {};
 
-    // Generic handler that matches meter-data-<N>
-    src.onmessage = () => {};   // catches events without a type (ping etc.)
-
-    // We can't bind a wildcard, so we use a low-level approach:
-    // override addEventListener to catch anything starting with 'meter-data-'
     const origAdd = src.addEventListener.bind(src);
     function registerChannel(ch) {
       origAdd(`meter-data-${ch}`, () => {
@@ -735,35 +963,31 @@
       });
     }
 
-    // Pre-register all 32 channels upfront — each listener is tiny and
-    // EventSource only fires the ones that actually arrive.
     for (let ch = 0; ch < 32; ch++) registerChannel(ch);
-
     src.addEventListener('error', () => {});
     window.addEventListener('beforeunload', () => src.close());
     window.addEventListener('pagehide',     () => src.close());
   }
 
   /* ════════════════════════════════════════════════════════════════════════
-     POLL  /api/diagnostics
+     POLL
   ════════════════════════════════════════════════════════════════════════ */
   async function poll() {
     if (paused) { setTimeout(poll, POLL_INTERVAL_MS); return; }
 
-    const t0 = Date.now();
-    let ok = false;
+    const t0  = Date.now();
+    let ok   = false;
     let data = null;
 
     try {
       const res = await fetch('/api/diagnostics');
       data = await res.json();
-      ok = true;
-    } catch (_) { /* network failure */ }
+      ok   = true;
+    } catch (_) {}
 
     const latency = Date.now() - t0;
     const now     = Date.now();
 
-    // Record poll outcome
     pollOutcomes.push(ok);
     if (pollOutcomes.length > POLL_HISTORY_LEN) pollOutcomes.shift();
 
@@ -771,12 +995,10 @@
       rssiHistory.push({ t: now, v: data.rssi });
       latencyHistory.push({ t: now, v: latency });
 
-      // Trim to window
       const cutoff = now - HISTORY_SECONDS * 1000;
       while (rssiHistory.length    && rssiHistory[0].t    < cutoff) rssiHistory.shift();
       while (latencyHistory.length && latencyHistory[0].t < cutoff) latencyHistory.shift();
 
-      // Per-channel rate history snapshot (every poll tick)
       (data.meters || []).forEach(m => {
         const ch = m.channel;
         getChannelColor(ch);
@@ -790,22 +1012,36 @@
       lastDiag = data;
       dataAge++;
 
-      // Diagnosis history
       diagHistory.push({ t: now, rssi: data.rssi, latency, pollOk: ok });
       if (diagHistory.length > 30) diagHistory.shift();
 
       updateTiles(data, latency);
       updateFooter(data);
+      updatePConsCallout(data);
       updateAnalytics(data);
       renderCharts(data);
       if (dataAge >= 10) updateDiagnosis(data);
     } else {
-      // Poll failed — still record latency as high
       latencyHistory.push({ t: now, v: latency });
       updatePollTile();
     }
 
     setTimeout(poll, POLL_INTERVAL_MS);
+  }
+
+  /* ════════════════════════════════════════════════════════════════════════
+     LINK HEALTH SCORE
+     Combines CRC error rate + poll success into a single 0-100 score.
+  ════════════════════════════════════════════════════════════════════════ */
+  function linkHealthScore(hc12Total, hc12Errors) {
+    const total    = hc12Total + hc12Errors;
+    const errRate  = total > 0 ? hc12Errors / total : 0;
+    const pollRate = pollOutcomes.length
+      ? pollOutcomes.filter(Boolean).length / pollOutcomes.length
+      : 1;
+    // 70% weight on packet error rate, 30% on poll reliability
+    const score = Math.round(((1 - errRate) * 0.7 + pollRate * 0.3) * 100);
+    return Math.max(0, Math.min(100, score));
   }
 
   /* ════════════════════════════════════════════════════════════════════════
@@ -841,7 +1077,7 @@
 
   function updateTiles(data, latency) {
     // RSSI
-    const rssiEl  = $('tile-rssi');
+    const rssiEl = $('tile-rssi');
     rssiEl.textContent = data.rssi + ' dBm';
     rssiEl.className   = 'tile-value ' + rssiClass(data.rssi);
     $('tile-rssi-sub').textContent = rssiLabel(data.rssi);
@@ -854,34 +1090,72 @@
     // Poll success
     updatePollTile();
 
-    // HC-12 totals
-    $('tile-hc12-total').textContent = data.hc12RxTotal.toLocaleString();
-    const total    = data.hc12RxTotal + data.hc12ErrTotal;
-    const errRate  = total > 0 ? ((data.hc12ErrTotal / total) * 100).toFixed(1) : '0.0';
-    const errEl    = $('tile-hc12-err');
-    errEl.textContent = data.hc12ErrTotal.toLocaleString();
-    errEl.className   = 'tile-value ' + (parseFloat(errRate) < 2 ? 'good' : parseFloat(errRate) < 10 ? 'warn' : 'bad');
-    $('tile-hc12-err-sub').textContent = `error rate: ${errRate}%`;
+    // Link health
+    const score   = linkHealthScore(data.hc12RxTotal, data.hc12ErrTotal);
+    const hClass  = score >= 90 ? 'good' : score >= 70 ? 'warn' : 'bad';
+    const hLabel  = score >= 90 ? 'Excellent' : score >= 70 ? 'Degraded' : 'Poor';
+    const scoreEl = $('tile-link-score');
+    scoreEl.textContent  = score + '%';
+    scoreEl.className    = 'link-health-score ' + hClass;
+    const bar = $('tile-link-bar');
+    bar.style.width      = score + '%';
+    bar.className        = 'link-health-bar-fill' + (hClass !== 'good' ? ' ' + hClass : '');
+    $('tile-link-label').textContent = hLabel;
+
+    const total   = data.hc12RxTotal + data.hc12ErrTotal;
+    const errRate = total > 0 ? ((data.hc12ErrTotal / total) * 100).toFixed(1) : '0.0';
+    $('tile-link-sub').textContent =
+      `${data.hc12RxTotal.toLocaleString()} pkts · ${data.hc12ErrTotal.toLocaleString()} err · ${errRate}% err rate`;
   }
 
   function updateFooter(data) {
-    $('foot-wifi-ch').textContent  = data.channel ? `CH ${data.channel}` : '—';
-    $('foot-bssid').textContent    = data.bssid    || '—';
-    $('foot-txpow').textContent    = data.txPower != null ? `${data.txPower} dBm` : '—';
-    $('foot-err-total').textContent = (data.hc12ErrTotal || 0).toLocaleString();
+    $('foot-wifi-ch').textContent  = data.channel  ? `CH ${data.channel}` : '-';
+    $('foot-bssid').textContent    = data.bssid     || '-';
+    $('foot-txpow').textContent    = data.txPower != null ? `${data.txPower} dBm` : '-';
 
-    const upMs  = data.uptimeMs || 0;
-    const upSec = Math.floor(upMs / 1000);
-    const h     = Math.floor(upSec / 3600);
-    const m     = Math.floor((upSec % 3600) / 60);
-    const s     = upSec % 60;
+    const upSec = Math.floor((data.uptimeMs || 0) / 1000);
+    const h = Math.floor(upSec / 3600);
+    const m = Math.floor((upSec % 3600) / 60);
+    const s = upSec % 60;
     $('foot-uptime').textContent =
       `${h}h ${String(m).padStart(2,'0')}m ${String(s).padStart(2,'0')}s`;
+
+    const total   = data.hc12RxTotal + data.hc12ErrTotal;
+    const errRate = total > 0 ? ((data.hc12ErrTotal / total) * 100).toFixed(1) : '0.0';
+    const errCls  = parseFloat(errRate) < 2 ? 'good' : parseFloat(errRate) < 10 ? 'warn' : 'bad';
+
+    $('foot-pkt-total').textContent = data.hc12RxTotal.toLocaleString();
+    $('foot-err-total').textContent = data.hc12ErrTotal.toLocaleString();
+
+    const errRateEl = $('foot-err-rate');
+    errRateEl.textContent = errRate + '%';
+    errRateEl.className   = 'footer-row-val ' + errCls;
+
+    const meters = data.meters || [];
+    $('foot-channels').textContent = meters.length > 0
+      ? meters.map(m => `CH ${m.channel}`).join(' · ')
+      : '-';
   }
 
+  /* ── Power Conservation Callout ── */
+  function updatePConsCallout(data) {
+    const meters   = data.meters || [];
+    const pconsChs = meters.filter(m => m.powerSave === 1).map(m => m.channel);
+    const callout  = $('pcons-callout');
+
+    if (pconsChs.length > 0) {
+      callout.classList.add('visible');
+      $('pcons-channels').textContent =
+        'Affected: ' + pconsChs.map(ch => `CH ${ch}`).join(', ');
+    } else {
+      callout.classList.remove('visible');
+    }
+  }
+
+  /* ── Analytics table ── */
   function updateAnalytics(data) {
-    const tbody   = $('analytics-tbody');
-    const meters  = data.meters || [];
+    const tbody  = $('analytics-tbody');
+    const meters = data.meters || [];
 
     if (meters.length === 0) {
       tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--text-3);padding:1.6em">
@@ -891,18 +1165,56 @@
 
     tbody.innerHTML = '';
     meters.forEach(m => {
-      const color    = getChannelColor(m.channel);
-      const expRate  = expectedRate(m.fpsIdx);
-      const measRate = measuredRate(m.channel).toFixed(2);
-      const loss     = lossPercent(m.channel, m.fpsIdx);
-      const lossPct  = loss != null ? loss.toFixed(1) : '—';
-      const lossNum  = loss != null ? loss : 0;
-      const lossClass= lossNum < 10 ? '' : lossNum < 30 ? 'warn' : 'bad';
-      const barClass = lossNum < 10 ? '' : lossNum < 30 ? 'warn' : 'bad';
+      const color     = getChannelColor(m.channel);
+      const isPCons   = m.powerSave === 1;
+      const expRate   = expectedRate(m.fpsIdx);
+      const measRate  = measuredRate(m.channel).toFixed(2);
+      const loss      = lossPercent(m.channel, m.fpsIdx);
+
+      // Reliability badge
+      const relBadgeHtml = isPCons
+        ? `<span class="rel-badge limited">
+            <svg viewBox="0 0 16 16" fill="none">
+              <path d="M8 2v5M8 10v.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              <circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.1"/>
+            </svg>
+            Limited
+           </span>`
+        : `<span class="rel-badge ok">
+            <svg viewBox="0 0 16 16" fill="none">
+              <path d="M3 8l4 4 6-7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Accurate
+           </span>`;
+
+      // Packet loss cell - suppress meaningful display when power save is on
+      let lossHtml;
+      if (isPCons) {
+        lossHtml = `<div class="loss-suppressed">
+          <svg viewBox="0 0 16 16" fill="none">
+            <path d="M8 2v5M8 10v.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            <circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.1"/>
+          </svg>
+          Not measured
+        </div>`;
+      } else if (loss == null) {
+        lossHtml = `<span style="color:var(--text-3)">…</span>`;
+      } else {
+        const lossNum  = loss;
+        const barClass = lossNum < 10 ? '' : lossNum < 30 ? 'warn' : 'bad';
+        const valClass = lossNum < 10 ? '' : lossNum < 30 ? 'warn' : 'bad';
+        lossHtml = `<div class="loss-bar-wrap">
+          <div class="loss-bar-track">
+            <div class="loss-bar-fill ${barClass}" style="width:${Math.min(lossNum,100)}%"></div>
+          </div>
+          <span class="loss-val ${valClass ? valClass : ''}">${lossNum.toFixed(1)}%</span>
+        </div>`;
+      }
 
       const seenClass = m.seen < 3 ? 'good' : m.seen < 10 ? 'warn' : 'bad';
 
       const tr = document.createElement('tr');
+      if (isPCons) tr.classList.add('pcons-row');
       tr.innerHTML = `
         <td>
           <span style="display:inline-flex;align-items:center;gap:0.5em">
@@ -910,19 +1222,11 @@
             CH ${m.channel}
           </span>
         </td>
+        <td>${relBadgeHtml}</td>
         <td>${expRate} Hz</td>
-        <td>${measRate} pkt/s</td>
-        <td class="right">
-          <div class="loss-bar-wrap">
-            <div class="loss-bar-track">
-              <div class="loss-bar-fill ${barClass}"
-                   style="width:${Math.min(lossNum,100)}%"></div>
-            </div>
-            <span class="loss-val ${lossClass}">${lossPct}%</span>
-          </div>
-        </td>
+        <td>${isPCons ? '<span style="color:var(--text-3)">-</span>' : measRate + ' pkt/s'}</td>
+        <td class="right">${lossHtml}</td>
         <td class="right ${seenClass}">${m.seen}s ago</td>
-        <td class="right">${m.powerSave ? '✓ On' : '— Off'}</td>
       `;
       tbody.appendChild(tr);
     });
@@ -932,10 +1236,9 @@
      CHART RENDERING
   ════════════════════════════════════════════════════════════════════════ */
   function renderCharts(data) {
-    // ── WiFi chart ────────────────────────────────────────────────────────
+    // WiFi chart
     const wifiCanvas = $('wifi-chart');
-    const maxLatency = Math.max(300,
-      ...latencyHistory.map(d => d.v), 10);
+    const maxLatency = Math.max(300, ...latencyHistory.map(d => d.v), 10);
 
     drawLineChart(
       wifiCanvas,
@@ -943,50 +1246,37 @@
         { data: rssiHistory,    color: '#4d9fff', yAxis: 'left'  },
         { data: latencyHistory, color: '#f5a623', yAxis: 'right' },
       ],
-      { min: -100, max: -30 },          // left axis: dBm range
-      { min: 0,    max: maxLatency },   // right axis: latency ms
+      { min: -100, max: -30 },
+      { min: 0,    max: maxLatency },
       [
-        { y: RSSI_WEAK, color: '#ff555588', yAxis: 'left', label: 'Weak' },
-        { y: RSSI_POOR, color: '#ff000055', yAxis: 'left', label: 'Poor' },
+        { y: RSSI_WEAK, color: '#ff555588', yAxis: 'left' },
+        { y: RSSI_POOR, color: '#ff000055', yAxis: 'left' },
       ]
     );
 
-    // ── HC-12 chart ───────────────────────────────────────────────────────
+    // HC-12 chart
     const hc12Canvas = $('hc12-chart');
-    const meters      = data.meters || [];
+    const meters     = data.meters || [];
 
-    // Build series — one per active channel
     const series = [];
     meters.forEach(m => {
       const ch    = m.channel;
       const color = getChannelColor(ch);
       const exp   = expectedRate(m.fpsIdx);
+      const now   = Date.now();
 
-      // Measured rate history
       if (channelRateHistory[ch]) {
         series.push({ data: channelRateHistory[ch], color, yAxis: 'left' });
       }
 
-      // Expected rate as a dashed reference line (horizontal)
-      // We fake it as a two-point series at the expected value
-      const now = Date.now();
       series.push({
         data:   [{ t: now - HISTORY_SECONDS*1000, v: exp }, { t: now, v: exp }],
-        color,
-        dashed: true,
-        yAxis:  'left',
+        color, dashed: true, yAxis: 'left',
       });
     });
 
-    // Max y: highest expected rate + 1 for headroom
-    const maxRate = Math.max(
-      10,
-      ...meters.map(m => expectedRate(m.fpsIdx) + 1)
-    );
-
+    const maxRate = Math.max(10, ...meters.map(m => expectedRate(m.fpsIdx) + 1));
     drawLineChart(hc12Canvas, series, { min: 0, max: maxRate }, null, []);
-
-    // Legend
     updateHC12Legend(meters);
   }
 
@@ -1009,14 +1299,13 @@
 
   /* ════════════════════════════════════════════════════════════════════════
      AUTO-DIAGNOSIS ENGINE
-     Runs after 10 s of data. Analyses recent history to classify the
-     problem source (WiFi, HC-12, both, or none).
   ════════════════════════════════════════════════════════════════════════ */
   const SVG = {
-    ok:   `<svg class="diag-icon ok"   viewBox="0 0 16 16" fill="none"><path d="M3 8l4 4 6-7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
-    warn: `<svg class="diag-icon warn" viewBox="0 0 16 16" fill="none"><path d="M8 5v4M8 10.5v.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.1"/></svg>`,
-    bad:  `<svg class="diag-icon bad"  viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.1"/><path d="M5.5 5.5l5 5M10.5 5.5l-5 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`,
-    info: `<svg class="diag-icon info" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.1"/><path d="M8 7v5M8 5.5V5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`,
+    ok:    `<svg class="diag-icon ok"    viewBox="0 0 16 16" fill="none"><path d="M3 8l4 4 6-7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+    warn:  `<svg class="diag-icon warn"  viewBox="0 0 16 16" fill="none"><path d="M8 5v4M8 10.5v.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.1"/></svg>`,
+    bad:   `<svg class="diag-icon bad"   viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.1"/><path d="M5.5 5.5l5 5M10.5 5.5l-5 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`,
+    info:  `<svg class="diag-icon info"  viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.1"/><path d="M8 7v5M8 5.5V5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`,
+    muted: `<svg class="diag-icon muted" viewBox="0 0 16 16" fill="none"><path d="M8 5v4M8 10.5v.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.1"/></svg>`,
   };
 
   function diagItem(icon, html) {
@@ -1024,89 +1313,121 @@
   }
 
   function updateDiagnosis(data) {
-    const items = [];
-    const recent = diagHistory.slice(-20);  // last 20 poll ticks
+    const items  = [];
+    const recent = diagHistory.slice(-20);
 
     // ── WiFi metrics ──────────────────────────────────────────────────────
-    const rssiVals    = recent.map(d => d.rssi).filter(v => v != null);
-    const latVals     = recent.map(d => d.latency);
-    const avgRssi     = rssiVals.length ? rssiVals.reduce((a,b)=>a+b,0)/rssiVals.length : null;
-    const avgLat      = latVals.length  ? latVals.reduce((a,b)=>a+b,0)/latVals.length   : 0;
-    const failCount   = recent.filter(d => !d.pollOk).length;
-    const failPct     = recent.length ? (failCount / recent.length) * 100 : 0;
+    const rssiVals  = recent.map(d => d.rssi).filter(v => v != null);
+    const latVals   = recent.map(d => d.latency);
+    const avgRssi   = rssiVals.length ? rssiVals.reduce((a,b)=>a+b,0)/rssiVals.length : null;
+    const avgLat    = latVals.length  ? latVals.reduce((a,b)=>a+b,0)/latVals.length   : 0;
+    const failCount = recent.filter(d => !d.pollOk).length;
+    const failPct   = recent.length ? (failCount / recent.length) * 100 : 0;
 
-    // RSSI
     if (avgRssi !== null) {
       if (avgRssi >= RSSI_WEAK) {
-        items.push(diagItem('ok', `<strong>WiFi signal strong</strong> — average ${avgRssi.toFixed(0)} dBm over the last ${recent.length}s.`));
+        items.push(diagItem('ok',   `<strong>WiFi signal strong</strong> - ${avgRssi.toFixed(0)} dBm average over the last ${recent.length}s.`));
       } else if (avgRssi >= RSSI_POOR) {
-        items.push(diagItem('warn', `<strong>WiFi signal weak</strong> — average ${avgRssi.toFixed(0)} dBm. Move the ESP32 closer to your router or reduce obstructions.`));
+        items.push(diagItem('warn', `<strong>WiFi signal weak</strong> - ${avgRssi.toFixed(0)} dBm average. Move the ESP32 closer to your router or reduce obstructions.`));
       } else {
-        items.push(diagItem('bad', `<strong>WiFi signal poor</strong> — average ${avgRssi.toFixed(0)} dBm. Connection quality is severely degraded. Check ESP32 placement.`));
+        items.push(diagItem('bad',  `<strong>WiFi signal poor</strong> - ${avgRssi.toFixed(0)} dBm average. Connection quality is severely degraded. Check ESP32 placement.`));
       }
     }
 
-    // Latency
     if (avgLat > 200) {
-      items.push(diagItem('bad', `<strong>High poll latency</strong> — ${avgLat.toFixed(0)} ms average. The WiFi link or ESP32 is heavily loaded. This indicates WiFi congestion, not HC-12 issues.`));
+      items.push(diagItem('bad',  `<strong>High poll latency</strong> - ${avgLat.toFixed(0)} ms average. This indicates WiFi congestion, not HC-12 issues.`));
     } else if (avgLat > 80) {
-      items.push(diagItem('warn', `<strong>Elevated latency</strong> — ${avgLat.toFixed(0)} ms average. WiFi may be congested. HC-12 packet rate is unaffected by this.`));
+      items.push(diagItem('warn', `<strong>Elevated latency</strong> - ${avgLat.toFixed(0)} ms average. WiFi may be congested; HC-12 packet rate is unaffected.`));
     } else {
-      items.push(diagItem('ok', `<strong>WiFi latency normal</strong> — ${avgLat.toFixed(0)} ms average.`));
+      items.push(diagItem('ok',   `<strong>WiFi latency normal</strong> - ${avgLat.toFixed(0)} ms average.`));
     }
 
-    // Poll failures
     if (failPct > 20) {
-      items.push(diagItem('bad', `<strong>Poll failures: ${failPct.toFixed(0)}%</strong> — the ESP32 is frequently unreachable over WiFi. This is a WiFi problem independent of HC-12.`));
+      items.push(diagItem('bad',  `<strong>Poll failures: ${failPct.toFixed(0)}%</strong> - ESP32 frequently unreachable over WiFi. This is a WiFi problem, independent of HC-12.`));
     } else if (failPct > 5) {
-      items.push(diagItem('warn', `<strong>Occasional poll failures: ${failPct.toFixed(0)}%</strong> — intermittent WiFi connectivity.`));
+      items.push(diagItem('warn', `<strong>Occasional poll failures: ${failPct.toFixed(0)}%</strong> - intermittent WiFi connectivity.`));
     }
 
     // ── HC-12 per-channel ─────────────────────────────────────────────────
-    const meters = data.meters || [];
+    const meters    = data.meters || [];
+    const totalPkts = data.hc12RxTotal + data.hc12ErrTotal;
+    const errRate   = totalPkts > 0 ? (data.hc12ErrTotal / totalPkts) * 100 : 0;
+
     if (meters.length === 0) {
-      items.push(diagItem('info', '<strong>No HC-12 channels active</strong> — no multimeter data has been received since boot.'));
+      items.push(diagItem('info', '<strong>No HC-12 channels active</strong> - no multimeter data received since boot.'));
     } else {
       meters.forEach(m => {
+        const isPCons = m.powerSave === 1;
+
+        if (isPCons) {
+          // Power conservation active - measurement is unreliable, say so clearly
+          items.push(diagItem('muted',
+            `<strong>CH ${m.channel}: packet loss measurement paused.</strong> Power Conservation is ON - ` +
+            `the meter intentionally skips transmissions when the display is stable. ` +
+            `<a href="/meterConfig">Disable Power Conservation</a> for accurate loss measurements.`
+          ));
+          return;
+        }
+
+        // Only evaluate loss for channels with reliable measurements
         const loss    = lossPercent(m.channel, m.fpsIdx);
         const mRate   = measuredRate(m.channel).toFixed(2);
         const expRate = expectedRate(m.fpsIdx);
 
         if (loss == null) {
-          items.push(diagItem('info', `<strong>CH ${m.channel}:</strong> Rate calculation pending (need ${RATE_WINDOW_S}s of data).`));
+          items.push(diagItem('info', `<strong>CH ${m.channel}:</strong> Rate calculation pending - need ${RATE_WINDOW_S}s of data.`));
         } else if (loss < 10) {
-          items.push(diagItem('ok', `<strong>CH ${m.channel} HC-12 link healthy</strong> — receiving ${mRate} pkt/s of ${expRate} expected (${(100-loss).toFixed(0)}% delivery).`));
+          items.push(diagItem('ok',   `<strong>CH ${m.channel} HC-12 link healthy</strong> - ${mRate} pkt/s of ${expRate} expected (${(100-loss).toFixed(0)}% delivery).`));
         } else if (loss < 30) {
-          items.push(diagItem('warn', `<strong>CH ${m.channel} moderate packet loss: ${loss.toFixed(0)}%</strong> — receiving ${mRate} pkt/s, expected ${expRate} Hz. Move the multimeter closer to the HC-12 receiver or reduce obstructions.`));
+          items.push(diagItem('warn', `<strong>CH ${m.channel} moderate packet loss: ${loss.toFixed(0)}%</strong> - ${mRate} pkt/s, expected ${expRate} Hz. Move the meter closer to the HC-12 receiver.`));
         } else {
-          items.push(diagItem('bad', `<strong>CH ${m.channel} severe packet loss: ${loss.toFixed(0)}%</strong> — receiving only ${mRate} pkt/s of ${expRate} expected. The HC-12 RF link is severely degraded. This is independent of your WiFi connection.`));
+          items.push(diagItem('bad',  `<strong>CH ${m.channel} severe packet loss: ${loss.toFixed(0)}%</strong> - only ${mRate} pkt/s of ${expRate} expected. RF link is degraded; this is independent of WiFi quality.`));
         }
       });
     }
 
-    // ── CRC error rate ────────────────────────────────────────────────────
-    const total   = data.hc12RxTotal + data.hc12ErrTotal;
-    const errRate = total > 0 ? (data.hc12ErrTotal / total) * 100 : 0;
+    // CRC error rate
     if (errRate >= 10) {
-      items.push(diagItem('warn', `<strong>HC-12 CRC error rate: ${errRate.toFixed(1)}%</strong> — elevated framing errors suggest RF interference or marginal signal levels rather than pure range loss.`));
+      items.push(diagItem('warn', `<strong>HC-12 CRC error rate: ${errRate.toFixed(1)}%</strong> - elevated framing errors suggest RF interference or marginal signal levels.`));
+    } else if (errRate > 0 && errRate < 10) {
+      items.push(diagItem('ok', `<strong>HC-12 CRC error rate normal</strong> - ${errRate.toFixed(1)}% framing errors since boot.`));
     }
 
-    // ── Isolation conclusion ──────────────────────────────────────────────
-    const wifiBad   = (avgRssi != null && avgRssi < RSSI_POOR) || failPct > 20 || avgLat > 200;
-    const hc12Bad   = meters.some(m => (lossPercent(m.channel, m.fpsIdx) ?? 0) > 30);
-    const wifiWarn  = (avgRssi != null && avgRssi < RSSI_WEAK) || avgLat > 80;
-    const hc12Warn  = meters.some(m => (lossPercent(m.channel, m.fpsIdx) ?? 0) > 10);
+    // ── Isolation conclusion - only for channels with accurate measurements ──
+    const measuredMeters = meters.filter(m => m.powerSave !== 1);
+    const pConsMeters    = meters.filter(m => m.powerSave === 1);
 
-    if (wifiBad && hc12Bad) {
-      items.push(diagItem('bad', '<strong>Both links degraded.</strong> The ESP32 is far from the router AND the multimeter is far from the HC-12 receiver. Address WiFi first, then test HC-12 range.'));
-    } else if (wifiBad && !hc12Bad) {
-      items.push(diagItem('bad', '<strong>WiFi is the bottleneck.</strong> HC-12 packets are arriving normally — the problem is between the ESP32 and your router, not between the meters.'));
-    } else if (!wifiBad && hc12Bad) {
-      items.push(diagItem('bad', '<strong>HC-12 is the bottleneck.</strong> WiFi is healthy — the problem is RF range between the multimeter and the HC-12 receiver on the ESP32.'));
-    } else if (wifiWarn || hc12Warn) {
-      items.push(diagItem('warn', '<strong>Both links functional but marginal.</strong> Consider moving ESP32 closer to the router and/or multimeter closer to the receiver.'));
-    } else if (meters.length > 0) {
-      items.push(diagItem('ok', '<strong>All links healthy.</strong> No action needed.'));
+    const wifiBad  = (avgRssi != null && avgRssi < RSSI_POOR) || failPct > 20 || avgLat > 200;
+    const hc12Bad  = measuredMeters.some(m => (lossPercent(m.channel, m.fpsIdx) ?? 0) > 30);
+    const wifiWarn = (avgRssi != null && avgRssi < RSSI_WEAK) || avgLat > 80;
+    const hc12Warn = measuredMeters.some(m => (lossPercent(m.channel, m.fpsIdx) ?? 0) > 10);
+
+    if (pConsMeters.length > 0 && measuredMeters.length === 0) {
+      // Every active meter has power save on - can't draw conclusions about RF
+      items.push(diagItem('muted',
+        `<strong>RF link quality cannot be assessed.</strong> All active channels have Power Conservation ON. ` +
+        `<a href="/meterConfig">Disable Power Conservation</a> on at least one meter for a full diagnosis.`
+      ));
+    } else if (measuredMeters.length > 0) {
+      if (wifiBad && hc12Bad) {
+        items.push(diagItem('bad',  '<strong>Both links degraded.</strong> ESP32 is far from the router AND the meter is far from the HC-12 receiver. Address WiFi first, then test HC-12 range.'));
+      } else if (wifiBad && !hc12Bad) {
+        items.push(diagItem('bad',  '<strong>WiFi is the bottleneck.</strong> HC-12 packets arrive normally - the problem is between the ESP32 and your router.'));
+      } else if (!wifiBad && hc12Bad) {
+        items.push(diagItem('bad',  '<strong>HC-12 is the bottleneck.</strong> WiFi is healthy - the problem is RF range between the meter and the HC-12 receiver.'));
+      } else if (wifiWarn || hc12Warn) {
+        items.push(diagItem('warn', '<strong>Both links functional but marginal.</strong> Consider moving ESP32 closer to the router and/or the meter closer to the receiver.'));
+      } else {
+        items.push(diagItem('ok',   '<strong>All measured links healthy.</strong> No action needed.'));
+      }
+
+      if (pConsMeters.length > 0) {
+        items.push(diagItem('muted',
+          `<strong>${pConsMeters.length} channel${pConsMeters.length > 1 ? 's' : ''} excluded from RF verdict</strong> ` +
+          `(CH ${pConsMeters.map(m => m.channel).join(', ')}) - Power Conservation ON. ` +
+          `<a href="/meterConfig">Disable to include in diagnosis.</a>`
+        ));
+      }
     }
 
     const list = $('diagnosis-list');
@@ -1133,7 +1454,7 @@
   });
 
   /* ════════════════════════════════════════════════════════════════════════
-     RESIZE — redraw charts when window resizes
+     RESIZE
   ════════════════════════════════════════════════════════════════════════ */
   let resizeTimer;
   window.addEventListener('resize', () => {
