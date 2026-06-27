@@ -805,6 +805,49 @@ void setupWebServer() {
     request->send(200, "application/json", jsonResponse);
   });
 
+  // ── API: Diagnostics ─────────────────────────────────────────────────────
+  // Dedicated endpoint for the diagnostics page. Exposes radio counters
+  // and WiFi metrics that /api/system intentionally omits (kept lean for
+  // the dashboard). Poll this at whatever rate the diagnostics page needs
+  // without affecting dashboard cadence.
+  server.on("/api/diagnostics", HTTP_GET, [](AsyncWebServerRequest* request) {
+    JsonDocument doc;
+
+    // ── WiFi ──────────────────────────────────────────────────────────────
+    doc["rssi"]          = WiFi.RSSI();
+    doc["channel"]       = WiFi.channel();       // RF channel (1-13)
+    doc["bssid"]         = WiFi.BSSIDstr();      // AP MAC — useful for roaming diagnosis
+    doc["txPower"]       = WiFi.getTxPower();    // dBm — confirms 8.5 dBm cap is active
+    // ── HC-12 packet counters ──────────────────────────────────────────────
+    doc["hc12RxTotal"]   = rx_packet_count;      // valid packets decoded since boot
+    doc["hc12ErrTotal"]  = rx_error_count;       // CRC or framing errors since boot
+
+    // ── Per-meter snapshot ────────────────────────────────────────────────
+    // Mirrors the meters array from /api/system but adds nothing new —
+    // the diagnostics page needs fpsIdx to compute expected packet rate,
+    // and lastSeen to detect stale channels. Keeping it here means the page
+    // never has to poll two endpoints simultaneously.
+    JsonArray meters = doc["meters"].to<JsonArray>();
+    const unsigned long now = millis();
+
+    for (uint8_t ch = 0; ch < 32; ch++) {
+      if (!meterRegistry[ch].registered) continue;
+      JsonObject m = meters.add<JsonObject>();
+      m["channel"]   = ch;
+      m["seen"]      = (long)((now - meterRegistry[ch].lastSeen) / 1000);
+      m["fpsIdx"]    = meterRegistry[ch].lastFpsIndex;
+      m["powerSave"] = meterRegistry[ch].lastPowerSave;
+    }
+
+    // ── Uptime ────────────────────────────────────────────────────────────
+    // millis() overflows after ~49 days; cast to unsigned long is intentional.
+    doc["uptimeMs"]  = (unsigned long)millis();
+
+    String out;
+    serializeJson(doc, out);
+    request->send(200, "application/json", out);
+  });
+
   // ── API: Settings Read ────────────────────────────────────────────────────
   server.on("/api/settings", HTTP_GET, [](AsyncWebServerRequest* request) {
     // loadSettings() returns from RAM cache — no NVS flash read on this path
