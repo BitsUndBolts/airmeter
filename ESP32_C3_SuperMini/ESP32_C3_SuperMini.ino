@@ -842,6 +842,11 @@ void setupWebServer() {
     doc["channel"]       = WiFi.channel();       // RF channel (1-13)
     doc["bssid"]         = WiFi.BSSIDstr();      // AP MAC — useful for roaming diagnosis
     doc["txPower"]       = WiFi.getTxPower();    // dBm — confirms 8.5 dBm cap is active
+    {
+      wifi_ps_type_t psMode = WIFI_PS_NONE;
+      esp_wifi_get_ps(&psMode);
+      doc["wifiPs"] = (psMode != WIFI_PS_NONE); // true = power saving ON
+    }
     // ── HC-12 packet counters ──────────────────────────────────────────────
     doc["hc12RxTotal"]   = rx_packet_count;      // valid packets decoded since boot
     doc["hc12ErrTotal"]  = rx_error_count;       // CRC or framing errors since boot

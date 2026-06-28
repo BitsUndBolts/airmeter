@@ -327,11 +327,11 @@
 
       <!-- Home button -->
       <a class="icon-btn" href="/" title="Home">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M3 12 L12 3 L21 12" />
-          <path d="M5 10 L5 21 L19 21 L19 10" />
-          <path d="M9 21 L9 15 L15 15 L15 21" />
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 12L12 3L21 12"/>
+          <path d="M5 10L5 21L19 21L19 10"/>
+          <path d="M9 21L9 15L15 15L15 21"/>
         </svg>
       </a>
     </div>
@@ -430,7 +430,7 @@
           <path d="M24 6l8 8h-8V6z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
           <path d="M14 20h16M14 26h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
         </svg>
-        No files found — Storage is empty.
+        No files found - Storage is empty.
       </div>
 
       <!-- File table -->
@@ -452,7 +452,7 @@
         <div class="storage-bar-track">
           <div class="storage-bar-fill" id="fs-bar-fill"></div>
         </div>
-        <div class="storage-bar-label" id="fs-bar-label"><span>—</span> free</div>
+        <div class="storage-bar-label" id="fs-bar-label"><span>-</span> free</div>
       </div>
 
     </div>
@@ -608,7 +608,7 @@
       if (pendingFileBytes > freeSpaceBytes) {
         const reason = `only ${fmtBytes(freeSpaceBytes)} free`;
         spaceWarningTxt.textContent =
-          `Files total ${fmtBytes(pendingFileBytes)} — ${reason}.`;
+          `Files total ${fmtBytes(pendingFileBytes)} - ${reason}.`;
         spaceWarning.classList.add('visible');
         warnBlocks = true;
       } else {
@@ -694,7 +694,7 @@
         showStatus('success', 'All files uploaded. Firmware flashed --- device is rebooting…');
         startRebootCountdown(10);
       } else {
-        overallLabel.textContent = `Done — ${done} file${done !== 1 ? 's' : ''} uploaded.`;
+        overallLabel.textContent = `Done - ${done} file${done !== 1 ? 's' : ''} uploaded.`;
         showStatus('success', `${done} file${done !== 1 ? 's' : ''} successfully written to Storage.`);
         // Clear done entries, keep failed ones
         queue = queue.filter(e => e.status !== 'done');
@@ -934,7 +934,7 @@
           cancelRename(oldName);
         }
       } catch (e) {
-        showStatus('error', 'Rename failed — check connection.');
+        showStatus('error', 'Rename failed - check connection.');
         cancelRename(oldName);
       }
     }
@@ -982,7 +982,7 @@
           showStatus('error', `Delete failed: ${r.message || 'unknown error'}`);
         }
       } catch (e) {
-        showStatus('error', 'Delete failed — check connection.');
+        showStatus('error', 'Delete failed - check connection.');
       }
     }
 
