@@ -193,7 +193,7 @@
     }
 
     .freq-btn {
-      width: 3.5em;
+      min-width: 3.4em;
       font-family: var(--mono);
       font-size: 1em;
       font-weight: 600;
@@ -370,10 +370,6 @@
           <span class="footer-val"><span id="esp_model">ESP32</span></span>
         </div>
         <div class="footer-item">
-          <span class="footer-key">Radio</span>
-          <span class="footer-val">HC-12</span>
-        </div>
-        <div class="footer-item">
           <span class="footer-key">Memory</span>
           <span class="footer-val"><span id="free_memory"></span></span>
         </div>
@@ -387,6 +383,15 @@
             <span class="freq-toggle" id="freq-toggle">
               <button class="freq-btn" id="freq-80"  onclick="setFreq(80)"  title="Switch to 80 MHz">80</button>
               <button class="freq-btn" id="freq-160" onclick="setFreq(160)" title="Switch to 160 MHz">160</button>
+            </span>
+          </span>
+        </div>
+        <div class="footer-item">
+          <span class="footer-key">Wi-Fi Power</span>
+          <span class="footer-val cpu-val">
+            <span class="freq-toggle" id="ps-toggle">
+              <button class="freq-btn" id="ps-on"  onclick="setWifiPs(true)"  title="Power saving ON — lower power, ~220ms latency">Eco</button>
+              <button class="freq-btn" id="ps-off" onclick="setWifiPs(false)" title="Power saving OFF — higher power, &lt;15ms latency">Max</button>
             </span>
           </span>
         </div>
@@ -510,41 +515,30 @@
     let pendingFreq   = null;
 
     function updateFreqToggle(liveFreq) {
-      // If this matches our pending request, clear pending state.
-      if (pendingFreq !== null && liveFreq === pendingFreq) {
-        pendingFreq = null;
-      }
+      if (pendingFreq !== null && liveFreq === pendingFreq) pendingFreq = null;
       confirmedFreq = liveFreq;
 
       const b80  = $('freq-80');
       const b160 = $('freq-160');
-
-      // Clear all state classes first
       b80.classList.remove('active', 'pending');
       b160.classList.remove('active', 'pending');
 
       if (pendingFreq !== null) {
-        // We sent a request and haven't seen it confirmed yet — show pending
-        // on the button we're waiting for, active on the current confirmed one.
-        const pendingBtn    = pendingFreq === 80  ? b80  : b160;
-        const confirmedBtn  = pendingFreq === 80  ? b160 : b80;
+        const pendingBtn   = pendingFreq === 80 ? b80 : b160;
+        const confirmedBtn = pendingFreq === 80 ? b160 : b80;
         confirmedBtn.classList.add('active');
         pendingBtn.classList.add('pending');
       } else {
-        // Steady state — just highlight the confirmed freq.
-        const activeBtn = liveFreq === 80 ? b80 : b160;
-        activeBtn.classList.add('active');
+        (liveFreq === 80 ? b80 : b160).classList.add('active');
       }
     }
 
     async function setFreq(mhz) {
-      // Ignore clicks while a change is already in flight, or clicking
-      // the already-confirmed value with nothing pending.
       if (pendingFreq !== null) return;
       if (mhz === confirmedFreq) return;
 
       pendingFreq = mhz;
-      updateFreqToggle(confirmedFreq); // immediately show pending state in UI
+      updateFreqToggle(confirmedFreq);
 
       try {
         await fetch('/api/system/freq', {
@@ -552,12 +546,55 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ freq: mhz })
         });
-        // Don't update confirmedFreq here — wait for the next api/system poll
-        // to confirm the change actually took effect on the device.
       } catch (_) {
-        // Network error or device unreachable — revert pending state.
         pendingFreq = null;
         updateFreqToggle(confirmedFreq);
+      }
+    }
+
+    // ── Wi-Fi power saving toggle state ────────────────────────────────
+    // confirmedWifiPs: true = MAX_MODEM (power saving ON), false = WIFI_PS_NONE.
+    // pendingWifiPs:   the value we requested but haven't seen confirmed yet.
+    // null = not yet known.
+    let confirmedWifiPs = null;
+    let pendingWifiPs   = null;
+
+    function updateWifiPsToggle(livePs) {
+      if (pendingWifiPs !== null && livePs === pendingWifiPs) pendingWifiPs = null;
+      confirmedWifiPs = livePs;
+
+      const bOn  = $('ps-on');   // power saving ON  (MAX_MODEM, low power)
+      const bOff = $('ps-off');  // power saving OFF (WIFI_PS_NONE, turbo)
+      bOn.classList.remove('active', 'pending');
+      bOff.classList.remove('active', 'pending');
+
+      if (pendingWifiPs !== null) {
+        const pendingBtn   = pendingWifiPs ? bOn : bOff;
+        const confirmedBtn = pendingWifiPs ? bOff : bOn;
+        confirmedBtn.classList.add('active');
+        pendingBtn.classList.add('pending');
+      } else {
+        (livePs ? bOn : bOff).classList.add('active');
+      }
+    }
+
+    async function setWifiPs(psOn) {
+      if (pendingWifiPs !== null) return;
+      if (psOn === confirmedWifiPs) return;
+
+      pendingWifiPs = psOn;
+      updateWifiPsToggle(confirmedWifiPs);
+
+      try {
+        await fetch('/api/system/wifi-ps', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ps: psOn })
+        });
+        // Wait for the next api/system poll to confirm the change.
+      } catch (_) {
+        pendingWifiPs = null;
+        updateWifiPsToggle(confirmedWifiPs);
       }
     }
 
@@ -785,6 +822,11 @@
           // and only when no change is currently in flight.
           if (esp.freq !== undefined) {
             updateFreqToggle(esp.freq);
+          }
+
+          // Wi-Fi power saving toggle — same pattern as freq toggle.
+          if (esp.wifiPs !== undefined) {
+            updateWifiPsToggle(esp.wifiPs);
           }
 
           // Storage

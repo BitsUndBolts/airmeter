@@ -619,6 +619,25 @@ String deobfuscate(const String& hex, const char* key) {
   return result;
 }
 
+
+/**
+ * Changes the Wi-Fi power saving mode instantly on-the-fly.
+ * Does NOT disconnect or drop the Wi-Fi link.
+ * 
+ * @param enable False for ultra-low latency (<15ms), True for maximum power savings (~220ms).
+ */
+void setWifiPowerSaving(bool enable) {
+    if (enable) {
+        // Turns on max power savings. The radio sleeps when idle.
+        esp_wifi_set_ps(WIFI_PS_MAX_MODEM);
+        Serial.println("[Wi-Fi] Power Savings ON (~220ms latency, lower power)");
+    } else {
+        // Turns off power savings. The radio stays fully awake.
+        esp_wifi_set_ps(WIFI_PS_NONE);
+        Serial.println("[Wi-Fi] Power Savings OFF (<15ms latency, higher power)");
+    }
+}
+
 // =============================================================================
 // ACCESS POINT MODE — captive portal for initial Wi-Fi provisioning
 //
@@ -715,7 +734,7 @@ void setupWebServer() {
 
       WiFi.mode(WIFI_AP_STA);
       WiFi.setTxPower(WIFI_POWER_8_5dBm);  // Clamp power immediately before begin()
-      esp_wifi_set_ps(WIFI_PS_NONE);       // Disable Power-saving due to latency increase to 200ms+
+      setWifiPowerSaving(false);
       WiFi.begin(test_ssid.c_str(), test_pass.c_str());
       connectionAttemptStart = millis();
 
@@ -770,6 +789,11 @@ void setupWebServer() {
     espObj["memory"] = ESP.getFreeHeap();
     espObj["temp"]   = temperatureRead();
     espObj["freq"]   = ESP.getCpuFreqMHz();
+    {
+      wifi_ps_type_t psMode = WIFI_PS_NONE;
+      esp_wifi_get_ps(&psMode);
+      espObj["wifiPs"] = (psMode != WIFI_PS_NONE); // true = power saving ON
+    }
     // --- Static Values (Read from your fast RAM struct cache) ---
     espObj["model"]  = espStaticDetails.model;
     espObj["cores"]  = espStaticDetails.cores;
@@ -1117,13 +1141,48 @@ void setupWebServer() {
       // Apply immediately — setCpuFrequencyMhz() is safe to call at runtime.
       setCpuFrequencyMhz(newFreq);
 
-      // Persist to Preferences so the setting survives a reboot.
-      preferences.begin("cpu-config", false);
-      preferences.putUInt("freq_mhz", newFreq);
-      preferences.end();
+      // Persist into the shared JSON settings blob so factory reset covers it.
+      {
+        JsonDocument cfg;
+        deserializeJson(cfg, loadSettings());
+        cfg["cpu_freq_mhz"] = newFreq;
+        String out; serializeJson(cfg, out);
+        saveSettings(out.c_str());
+      }
 
       Serial.printf("[CPU] Frequency changed to %u MHz\n", newFreq);
 
+      request->send(200, "application/json", "{\"status\":\"success\"}");
+    }
+  );
+
+  // ── API: Wi-Fi Power Saving ───────────────────────────────────────────────
+  // POST /api/system/wifi-ps  body: { "ps": true } or { "ps": false }
+  //   true  → WIFI_PS_MAX_MODEM (~220ms latency, lower power draw)
+  //   false → WIFI_PS_NONE      (<15ms latency,  higher power draw)
+  // Applied immediately without a reboot; persisted to the JSON settings blob.
+  server.on("/api/system/wifi-ps", HTTP_POST, [](AsyncWebServerRequest* request) {}, NULL,
+    [](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+      JsonDocument doc;
+      if (deserializeJson(doc, data, len) || !doc["ps"].is<bool>()) {
+        request->send(400, "application/json",
+                      "{\"status\":\"error\",\"message\":\"Invalid JSON or missing ps field\"}");
+        return;
+      }
+
+      const bool psOn = doc["ps"].as<bool>(); // true = power saving ON (MAX_MODEM)
+      setWifiPowerSaving(psOn);
+
+      // Persist: wifi_ps_none = !psOn (we store the inverse so false is the safe default)
+      {
+        JsonDocument cfg;
+        deserializeJson(cfg, loadSettings());
+        cfg["wifi_ps"] = !psOn;
+        String out; serializeJson(cfg, out);
+        saveSettings(out.c_str());
+      }
+
+      Serial.printf("[Wi-Fi] Power saving set to %s via Web UI\n", psOn ? "ON" : "OFF");
       request->send(200, "application/json", "{\"status\":\"success\"}");
     }
   );
@@ -1535,16 +1594,25 @@ void setup() {
   wifi_password  = preferences.getString("pass", "");
   preferences.end();
 
-  // ── Apply saved CPU frequency (before Wi-Fi init so the radio clock is set) ──
-  // Safe values with Wi-Fi on ESP32-C3: 80 MHz and 160 MHz only.
-  // Default to 160 MHz if no saved value exists.
+  // ── Apply saved CPU frequency and Wi-Fi power saving from JSON settings ──
+  // Both settings live in the "settings" JSON blob so factory reset covers them.
+  // Safe CPU values with Wi-Fi on ESP32-C3: 80 MHz and 160 MHz only.
+  // Defaults: 80 MHz (low power start), Wi-Fi power saving ON (MAX_MODEM).
+  // The device always boots into low-power mode; the user opts in to performance
+  // via the dashboard toggles.
   {
-    preferences.begin("cpu-config", true);
-    const uint32_t savedFreq = preferences.getUInt("freq_mhz", 160);
-    preferences.end();
-    const uint32_t safeFreq = (savedFreq == 80) ? 80 : 160;
+    JsonDocument cfgDoc;
+    deserializeJson(cfgDoc, settingsCache);
+
+    const uint32_t savedFreq  = cfgDoc["cpu_freq_mhz"] | 80;
+    const uint32_t safeFreq   = (savedFreq == 160) ? 160 : 80;
     setCpuFrequencyMhz(safeFreq);
     Serial.printf("[CPU] Frequency set to %u MHz\n", safeFreq);
+
+    // Wi-Fi power saving: boot default is MAX_MODEM (true).
+    // Only disable (WIFI_PS_NONE) when the user has explicitly saved wifi_ps_none=true.
+    const bool wifiPsNone = cfgDoc["wifi_ps"] | false;
+    setWifiPowerSaving(!wifiPsNone);
   }
 
   // ── Network Strategy ──────────────────────────────────────────────────────
@@ -1555,10 +1623,10 @@ void setup() {
 
     WiFi.mode(WIFI_STA);                  // Explicitly initialise Station Mode first
     WiFi.setTxPower(WIFI_POWER_8_5dBm);   // Cap the radio power immediately
-    esp_wifi_set_ps(WIFI_PS_NONE);        // Disable Power-saving due to latency increase to 200ms+
+    // Use WIFI_PS_NONE during the connection attempt for reliability —
+    // re-apply the saved setting once connected.
+    setWifiPowerSaving(false);
     WiFi.begin(wifi_ssid.c_str(), wifi_password.c_str());
-
-    Serial.println("[SYSTEM] Wi-Fi power saving set to MIN_MODEM.");
 
     int retries = 0;
     while (WiFi.status() != WL_CONNECTED && retries < 120) { // 60s max
@@ -1568,6 +1636,13 @@ void setup() {
     }
 
     if (WiFi.status() == WL_CONNECTED) {
+      // Re-apply the saved power saving preference now that the link is up.
+      {
+        JsonDocument cfgDoc;
+        deserializeJson(cfgDoc, settingsCache);
+        const bool wifiPsNone = cfgDoc["wifi_ps"] | false;
+        setWifiPowerSaving(!wifiPsNone);
+      }
       digitalWrite(ONBOARD_LED_PIN, HIGH); // LED OFF — connected
       Serial.printf("\n[NETWORK] Connected! IP: %s\n",
                     WiFi.localIP().toString().c_str());
