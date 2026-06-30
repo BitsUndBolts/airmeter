@@ -115,7 +115,7 @@ static uint32_t          ticketIdCounter = 1; // monotonic; never 0 (0 = "no tic
 // FIRMWARE METADATA
 // =============================================================================
 
-const char* FIRMWARE_VERSION = "1.2";
+const char* FIRMWARE_VERSION = "1.3";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
