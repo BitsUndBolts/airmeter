@@ -222,9 +222,10 @@
     .fn-icon.ext-html                                          { color: var(--accent); }
     .fn-icon.ext-js                                            { color: var(--yellow); }
     .fn-icon.ext-css                                           { color: var(--blue); }
-    .fn-icon.ext-webp, .fn-icon.ext-png, .fn-icon.ext-jpg     { color: var(--green); }
-    .fn-icon.ext-json                                          { color: #c792ea; }
+    .fn-icon.ext-webp, .fn-icon.ext-png, .fn-icon.ext-jpg      { color: var(--green); }
+    .fn-icon.ext-json                                          { color: var(--lavender); }
     .fn-icon.ext-bin                                           { color: var(--accent); }
+    .fn-icon.ext-gz                                            { color: var(--purple); }
 
     .fn-name {
       font-family: var(--mono);
@@ -800,7 +801,7 @@
       const ext = name.split('.').pop().toLowerCase();
       const map = { html:'ext-html', js:'ext-js', css:'ext-css',
                     webp:'ext-webp', png:'ext-png', jpg:'ext-jpg',
-                    jpeg:'ext-jpg', json:'ext-json', bin:'ext-bin' };
+                    jpeg:'ext-jpg', json:'ext-json', bin:'ext-bin', gz:"ext-gz" };
       return map[ext] || '';
     }
 
