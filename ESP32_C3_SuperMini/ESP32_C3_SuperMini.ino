@@ -34,10 +34,11 @@
 // STORED METER DATA SINCE BOOT - REFRESHES WITH EACH PACKET ARRIVAL
 // =============================================================================
 struct MeterData {
-    unsigned long lastSeen    = 0;
-    uint8_t lastFpsIndex      = 0;
-    uint8_t lastPowerSave     = 0;  // 1 = power conservation enabled, 0 = disabled
-    bool    registered        = false; // true once this slot has been populated
+    unsigned long lastSeen        = 0;
+    uint8_t lastFpsIndex          = 0;
+    uint8_t lastPowerSave         = 0;  // 1 = power conservation enabled, 0 = disabled
+    uint8_t lastRadioTxEnabled    = 1;  // 1 = normal transmission, 0 = silent (registration-only)
+    bool    registered            = false; // true once this slot has been populated
 };
 
 // Fixed 32-slot array indexed by channel (0–31). No heap allocation, O(1)
@@ -99,12 +100,14 @@ struct MeterUpdateTicket {
   uint8_t      fpsIdx      = 0;
   uint8_t      flagsByte   = 0;
   uint8_t      powerSave   = 0;        // expected powerSave value (bit 0 of flagsByte)
+  uint8_t      radioTxEnabled = 1;     // expected radioTxEnabled value (bit 1 of flagsByte)
   uint8_t      retryCount  = 0;
   unsigned long nextRetryAt = 0;       // millis() timestamp for next RF resend
   // Confirmed values stored here on success, ready for the UI to consume
   uint8_t      confirmedChannel  = 0;
   uint8_t      confirmedFpsIdx   = 0;
   uint8_t      confirmedPowerSave = 0;
+  uint8_t      confirmedRadioTxEnabled = 0;
 };
 
 static MeterUpdateTicket activeTicket;
@@ -363,9 +366,14 @@ void decodePacket(const uint8_t* payload) {
   const bool powerSave = (com[1] & 0x8000) != 0;
   int power_save_status = powerSave ? 1 : 0;
 
+  // Extract radio-transmission-enabled flag from bit 15 of COM2 BEFORE masking
+  const bool radioTxEnabled = (com[2] & 0x8000) != 0;
+  int radio_tx_enabled_status = radioTxEnabled ? 1 : 0;
+
   // Strip injected status bits — only SEG0-SEG14 (bits 0-14) carry valid LCD data
   com[0] &= 0x7FFF;
   com[1] &= 0x7FFF;
+  com[2] &= 0x7FFF;
 
   // Build 60-character bit string: COM0[bit0..14] + COM1 + COM2 + COM3
   char bitString[61];
@@ -376,11 +384,13 @@ void decodePacket(const uint8_t* payload) {
     }
   }
 
-  // Track per-meter last-seen timestamp, fps_index, and power conservation flag
-  meterRegistry[channel].lastSeen      = millis();
-  meterRegistry[channel].lastFpsIndex  = fps_index;
-  meterRegistry[channel].lastPowerSave = power_save_status;
-  meterRegistry[channel].registered    = true;
+  // Track per-meter last-seen timestamp, fps_index, power conservation and
+  // radio-transmission-enabled flags
+  meterRegistry[channel].lastSeen           = millis();
+  meterRegistry[channel].lastFpsIndex       = fps_index;
+  meterRegistry[channel].lastPowerSave      = power_save_status;
+  meterRegistry[channel].lastRadioTxEnabled = radio_tx_enabled_status;
+  meterRegistry[channel].registered         = true;
 
   // ── Ticket confirmation check ──────────────────────────────────────────────
   // If there is a pending update ticket, check whether this packet is the
@@ -390,21 +400,23 @@ void decodePacket(const uint8_t* payload) {
   // On confirmation: commit any channel rename on flash, mark ticket SUCCESS,
   // store the confirmed values for the UI to consume via /api/meter/status.
   if (activeTicket.status == TICKET_PENDING &&
-      channel           == activeTicket.newChannel  &&
-      fps_index         == activeTicket.fpsIdx      &&
-      power_save_status == activeTicket.powerSave) {
+      channel                 == activeTicket.newChannel  &&
+      fps_index               == activeTicket.fpsIdx      &&
+      power_save_status       == activeTicket.powerSave   &&
+      radio_tx_enabled_status == activeTicket.radioTxEnabled) {
 
     if (activeTicket.oldChannel != activeTicket.newChannel) {
       commitChannelChange(activeTicket.oldChannel, activeTicket.newChannel);
     }
 
-    activeTicket.status              = TICKET_SUCCESS;
-    activeTicket.confirmedChannel    = channel;
-    activeTicket.confirmedFpsIdx     = fps_index;
-    activeTicket.confirmedPowerSave  = power_save_status;
+    activeTicket.status                    = TICKET_SUCCESS;
+    activeTicket.confirmedChannel          = channel;
+    activeTicket.confirmedFpsIdx           = fps_index;
+    activeTicket.confirmedPowerSave        = power_save_status;
+    activeTicket.confirmedRadioTxEnabled   = radio_tx_enabled_status;
 
-    Serial.printf("[TICKET] %u confirmed — channel %u fpsIdx %u powerSave %u\n",
-                  activeTicket.id, channel, fps_index, power_save_status);
+    Serial.printf("[TICKET] %u confirmed — channel %u fpsIdx %u powerSave %u radioTxEnabled %u\n",
+                  activeTicket.id, channel, fps_index, power_save_status, radio_tx_enabled_status);
   }
 
   // Broadcast over SSE — CHANNEL is now encoded in the event name
@@ -811,6 +823,7 @@ void setupWebServer() {
       m["seen"]      = (long)((now - meterRegistry[ch].lastSeen) / 1000);
       m["fpsIdx"]    = meterRegistry[ch].lastFpsIndex;
       m["powerSave"] = meterRegistry[ch].lastPowerSave;
+      m["radioTxEnabled"] = meterRegistry[ch].lastRadioTxEnabled;
     }
 
     if (littlefs_available) {
@@ -866,6 +879,7 @@ void setupWebServer() {
       m["seen"]      = (long)((now - meterRegistry[ch].lastSeen) / 1000);
       m["fpsIdx"]    = meterRegistry[ch].lastFpsIndex;
       m["powerSave"] = meterRegistry[ch].lastPowerSave;
+      m["radioTxEnabled"] = meterRegistry[ch].lastRadioTxEnabled;
     }
 
     // ── Uptime ────────────────────────────────────────────────────────────
@@ -1216,22 +1230,24 @@ void setupWebServer() {
         return;
       }
 
-      const uint8_t oldChannel = doc["oldChannel"].as<uint8_t>();
-      const uint8_t newChannel = doc["newChannel"].as<uint8_t>();
-      const uint8_t fpsIdx     = doc["fpsIdx"].as<uint8_t>();
-      const uint8_t flagsByte  = doc["flags"].is<uint8_t>() ? doc["flags"].as<uint8_t>() : 0x00;
-      const uint8_t powerSave  = flagsByte & 0x01;
+      const uint8_t oldChannel    = doc["oldChannel"].as<uint8_t>();
+      const uint8_t newChannel    = doc["newChannel"].as<uint8_t>();
+      const uint8_t fpsIdx        = doc["fpsIdx"].as<uint8_t>();
+      const uint8_t flagsByte     = doc["flags"].is<uint8_t>() ? doc["flags"].as<uint8_t>() : 0x00;
+      const uint8_t powerSave     = flagsByte & 0x01;
+      const uint8_t radioTxEnabled = (flagsByte >> 1) & 0x01;
 
       // Create (or replace) the active ticket
-      activeTicket.status      = TICKET_PENDING;
-      activeTicket.id          = ticketIdCounter++;
-      activeTicket.oldChannel  = oldChannel;
-      activeTicket.newChannel  = newChannel;
-      activeTicket.fpsIdx      = fpsIdx;
-      activeTicket.flagsByte   = flagsByte;
-      activeTicket.powerSave   = powerSave;
-      activeTicket.retryCount  = 0;
-      activeTicket.nextRetryAt = millis() + TICKET_RETRY_INTERVAL_MS;
+      activeTicket.status         = TICKET_PENDING;
+      activeTicket.id             = ticketIdCounter++;
+      activeTicket.oldChannel     = oldChannel;
+      activeTicket.newChannel     = newChannel;
+      activeTicket.fpsIdx         = fpsIdx;
+      activeTicket.flagsByte      = flagsByte;
+      activeTicket.powerSave      = powerSave;
+      activeTicket.radioTxEnabled = radioTxEnabled;
+      activeTicket.retryCount     = 0;
+      activeTicket.nextRetryAt    = millis() + TICKET_RETRY_INTERVAL_MS;
 
       // Send first RF attempt immediately
       sendMeterUpdateRF(oldChannel, newChannel, fpsIdx, flagsByte);
@@ -1280,12 +1296,13 @@ void setupWebServer() {
     }
 
     // Success → 200 with confirmed values; consume ticket immediately
-    char resp[96];
+    char resp[128];
     snprintf(resp, sizeof(resp),
-             "{\"status\":\"success\",\"channel\":%u,\"fpsIdx\":%u,\"powerSave\":%u}",
+             "{\"status\":\"success\",\"channel\":%u,\"fpsIdx\":%u,\"powerSave\":%u,\"radioTxEnabled\":%u}",
              activeTicket.confirmedChannel,
              activeTicket.confirmedFpsIdx,
-             activeTicket.confirmedPowerSave);
+             activeTicket.confirmedPowerSave,
+             activeTicket.confirmedRadioTxEnabled);
 
     activeTicket.status = TICKET_EMPTY; // consumed — next poll returns 503
 

@@ -182,6 +182,16 @@
       flex-shrink: 0;
     }
 
+    .radio-off-badge {
+      font-family: var(--mono);
+      font-size: 1.1em;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--blue);
+      white-space: nowrap;
+    }
+
     /* ── FREQ TOGGLE ── */
     .freq-toggle {
       display: inline-flex;
@@ -665,7 +675,7 @@
       return `Last seen ${days}d ago`;
     }
 
-    function buildMeterCard(channel, seen, cfg) {
+    function buildMeterCard(channel, seen, cfg, radioTxEnabled) {
       const safeChannel = parseInt(channel, 10);
       const name        = cfg?.name  || 'UNKNOWN';
       const image       = cfg?.image || null;
@@ -689,6 +699,7 @@
             <div class="nav-title">${escH(name)}</div>
             <div class="nav-desc" style="display:flex;align-items:center;gap:0.6em">
               <span class="status-dot ${dot}" style="width:0.65em;height:0.65em;flex-shrink:0"></span>
+              ${radioTxEnabled === 0 ? `<span class="radio-off-badge">RADIO OFF</span>` : ''}
               <span>${formatLastSeen(seen)}</span>
             </div>
           </div>
@@ -706,7 +717,7 @@
       const empty     = $('meters-empty');
 
       // 1. Filter out inactive meters before doing anything else
-      const activeMeters = (meters || []).filter(m => m.seen <= HIDE_METERS_AFTER_SECONDS || m.powerSave === 1);
+      const activeMeters = (meters || []).filter(m => m.seen <= HIDE_METERS_AFTER_SECONDS || m.powerSave === 1 || m.radioTxEnabled === 0);
 
       if (!activeMeters || activeMeters.length === 0) {
         label.style.display   = 'none';
@@ -727,21 +738,28 @@
       });
 
       // Update or insert each meter card
-      activeMeters.forEach(({ channel, seen }) => {
+      activeMeters.forEach(({ channel, seen, radioTxEnabled }) => {
         const cfg      = meterConfigs[channel] || {};
-        const html     = buildMeterCard(channel, seen, cfg);
+        const html     = buildMeterCard(channel, seen, cfg, radioTxEnabled);
         const existing = container.querySelector(`[data-channel="${channel}"]`);
 
         if (existing) {
-          // Patch just the dot and seen text without full re-render
-          const dotEl = existing.querySelector('.status-dot');
+          const dotEl  = existing.querySelector('.status-dot');
           const seenEl = existing.querySelector('.nav-desc span:last-child');
           if (dotEl) {
             dotEl.className = `status-dot ${dotClass(seen)}`;
             dotEl.style.cssText = 'width:0.65em;height:0.65em;flex-shrink:0';
           }
-          if (seenEl) {
-            seenEl.textContent = formatLastSeen(seen);
+          if (seenEl) seenEl.textContent = formatLastSeen(seen);
+
+          let badgeEl = existing.querySelector('.radio-off-badge');
+          if (radioTxEnabled === 0 && !badgeEl && seenEl) {
+            badgeEl = document.createElement('span');
+            badgeEl.className   = 'radio-off-badge';
+            badgeEl.textContent = 'RADIO OFF';
+            seenEl.parentNode.insertBefore(badgeEl, seenEl);
+          } else if (radioTxEnabled !== 0 && badgeEl) {
+            badgeEl.remove();
           }
         } else {
           const wrapper = document.createElement('div');
