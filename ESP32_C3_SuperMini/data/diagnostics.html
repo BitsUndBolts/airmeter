@@ -284,6 +284,25 @@
     .ps-badge:hover { opacity: 0.8; }
     .ps-badge svg   { width: 0.9em; height: 0.9em; }
 
+    .radio-off-badge {
+      display: inline-flex;
+      align-items: center;
+      font-family: var(--mono);
+      font-size: 0.78em;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      padding: 0.15em 0.5em;
+      border-radius: 0.2em;
+      color: var(--blue);
+      background: var(--blue-dim);
+      border: 1px solid rgba(77,159,255,0.25);
+      cursor: help;
+      margin-left: 0.6em;
+      vertical-align: middle;
+      white-space: nowrap;
+    }
+
     /* ── FOOTER KV ───────────────────────────────────────────────── */
     .diag-footer {
       display: flex;
@@ -1033,13 +1052,16 @@ function updateTable(data) {
     }
 
     const seenCls = m.seen < 3 ? 'good' : m.seen < 10 ? 'warn' : 'bad';
+    const radioOffHtml = m.radioTxEnabled === 0
+      ? `<span class="radio-off-badge" title="This meter does not transmit data. Toggle Radio TX in Meter Configuration to resume normal transmission.">Radio OFF</span>`
+      : '';
 
     const tr = document.createElement('tr');
     if (isStale) tr.classList.add('stale');
     tr.innerHTML = `
       <td>
         <span class="ch-dot" style="background:${color}${isStale ? ';opacity:0.4' : ''}"></span>
-        CH ${m.channel}
+        CH ${m.channel}${radioOffHtml}
       </td>
       <td>${exp} Hz</td>
       <td>${meas.toFixed(2)} pkt/s</td>

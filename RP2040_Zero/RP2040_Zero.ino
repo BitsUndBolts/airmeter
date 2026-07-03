@@ -247,10 +247,26 @@ unsigned long txIntervalMs      = FRAME_INTERVALS[FRAME_RATE_DEFAULT_INDEX];
 // FLAGS_BYTE bit mask for power conservation
 const uint8_t FLAG_POWER_CONSERVATION = 0x01;  // bit 0
 
-// Runtime FLAGS_BYTE — loaded from EEPROM on boot. Only bit 0 is currently
-// used; the remaining 7 bits are preserved and echoed back to the ESP32 for
+// FLAGS_BYTE bit mask for radio transmission. 1 = normal operation
+// (transmits on the configured schedule, same as today). 0 = the meter
+// sends exactly one packet after power-on / after this flag changes, to
+// register with the ESP32 and confirm the new config, then stops all LCD
+// sampling and HC-12 transmission until re-enabled. See radioSilent below.
+const uint8_t FLAG_RADIO_TX_ENABLED = 0x02;  // bit 1
+
+// Runtime FLAGS_BYTE — loaded from EEPROM on boot. Bits 0-1 are currently
+// used; the remaining 6 bits are preserved and echoed back to the ESP32 for
 // forward compatibility.
 uint8_t flags_byte = 0x00;
+
+// True once the meter has sent its one registration/confirmation packet
+// while FLAG_RADIO_TX_ENABLED is OFF. While true, Phase 1 (LCD sampling),
+// Phase 2 (sleep timeout) and Phase 4 (periodic TX) are all skipped — only
+// Phase 3 (listening for HC-12 config commands from the ESP32) keeps
+// running. Cleared automatically by applyNewConfiguration() whenever a
+// live config change arrives, so the meter always gets one more chance to
+// send a confirmation packet before re-silencing itself.
+bool radioSilent = false;
 
 // Global flag to record settings change
 // If changed, the next packet will be sent regardless of power mode
@@ -258,6 +274,9 @@ bool settingsChanged = false;
 
 // Convenience accessor — true when power conservation is active.
 inline bool powerConservationEnabled() { return (flags_byte & FLAG_POWER_CONSERVATION) != 0; }
+
+// Convenience accessor — true when normal (non-silent) radio operation is enabled.
+inline bool radioTransmissionEnabled() { return (flags_byte & FLAG_RADIO_TX_ENABLED) != 0; }
 
 // Last TX snapshot used for power-conservation suppression.
 // Holds the full tx_matrix (including injected buzzer / flag bits) from the
@@ -465,6 +484,16 @@ bool applyNewConfiguration(uint8_t new_channel, uint8_t new_fps_idx, uint8_t new
     EEPROM.write(EEPROM_MAGIC_ADDR, EEPROM_MAGIC_VALUE);
     EEPROM.commit();
     flashLED(3, 0, 0, 180);  // 3 flashes = config received confirmation
+
+    // Any live config change wakes a silenced meter for one more TX cycle,
+    // so the ESP32 always gets a confirming packet — even if the change
+    // itself was re-disabling radio transmission. The post-send check in
+    // loop() (Phase 4) re-silences the meter afterwards if
+    // radio_transmission_enabled is still OFF.
+    if (radioSilent) {
+      radioSilent      = false;
+      lastActivityTime = millis(); // avoid an immediate stale-timeout sleep trip
+    }
   }
 
   return changed;
@@ -592,6 +621,9 @@ void setup() {
     }
     if (savedChannel <= 31) CHANNEL = savedChannel;
     flags_byte = savedFlags;  // Accept the full byte; all bits preserved
+  } else {
+    // Fresh EEPROM (first boot ever, no magic byte) — default to normal (non-silent) radio transmission.
+    flags_byte = FLAG_RADIO_TX_ENABLED;
   }
 
   // Seed activity timer so the sleep timeout does not trigger immediately
@@ -627,6 +659,7 @@ void loop() {
   // ---------------------------------------------------------------------------
   static bool com_prev_high[4] = { false, false, false, false };
 
+  if (!radioSilent)
   for (int c = 0; c < 4; c++) {
     bool comNowHigh = (digitalRead(COM_PINS[c]) == HIGH);
 
@@ -698,12 +731,14 @@ void loop() {
   //     last HIGH sample, ensuring brief LOW samples between buzzer pulses do
   //     not extinguish the active indication prematurely.
   // ---------------------------------------------------------------------------
-  if (digitalRead(BUZZER_PIN) == HIGH) {
-    buzzer_active   = true;
-    buzzerLatchTime = currentTime;              // Arm / refresh the hold timer
-  } else if (buzzer_active &&
-             (currentTime - buzzerLatchTime >= BUZZER_HOLD_MS)) {
-    buzzer_active = false;                     // Hold expired — buzzer is truly off
+  if (!radioSilent) {
+    if (digitalRead(BUZZER_PIN) == HIGH) {
+      buzzer_active   = true;
+      buzzerLatchTime = currentTime;              // Arm / refresh the hold timer
+    } else if (buzzer_active &&
+               (currentTime - buzzerLatchTime >= BUZZER_HOLD_MS)) {
+      buzzer_active = false;                     // Hold expired — buzzer is truly off
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -714,7 +749,12 @@ void loop() {
   // to conserve power. The system wakes automatically in Phase 1 when COM
   // lines become active again.
   // ---------------------------------------------------------------------------
-  if (!systemSleeping && (currentTime - lastActivityTime >= SLEEP_TIMEOUT_MS)) {
+  // Skipped entirely while radioSilent: lastActivityTime is intentionally
+  // not being refreshed (Phase 1 is skipped too), so this check would
+  // otherwise trip immediately and call Serial1.end() — which would also
+  // kill Phase 3 (HC-12 config listening), the one thing a silenced meter
+  // still needs to keep working.
+  if (!radioSilent && !systemSleeping && (currentTime - lastActivityTime >= SLEEP_TIMEOUT_MS)) {
     systemSleeping = true;
     Serial1.end();                                // Suspend HC-12 transmission
   }
@@ -749,7 +789,11 @@ void loop() {
   //   maintained: when the display eventually changes, the next tick fires
   //   at the configured interval rather than immediately.
   // ---------------------------------------------------------------------------
-  if (!systemSleeping && (currentTime - lastTxTime >= txIntervalMs)) {
+  // Skipped entirely once radioSilent — the meter already sent its one
+  // registration/confirmation packet and radio_transmission_enabled is
+  // still OFF. applyNewConfiguration() clears radioSilent (and this block
+  // runs again once) whenever a live config change arrives.
+  if (!radioSilent && !systemSleeping && (currentTime - lastTxTime >= txIntervalMs)) {
     lastTxTime = currentTime;
 
     // Snapshot display matrix into TX buffer (isolates live state from packing)
@@ -762,6 +806,11 @@ void loop() {
     // Pack power-conservation flag into bit 15 of COM1 word (spare bit).
     // The ESP32 extracts this to reflect the active flag state in the UI.
     if (powerConservationEnabled()) tx_matrix[1] |= (1 << 15);
+
+    // Pack radio-transmission-enabled flag into bit 15 of COM2 word (spare
+    // bit). The ESP32 extracts this to reflect the active flag state in
+    // the UI and to match it against a pending config ticket.
+    if (radioTransmissionEnabled()) tx_matrix[2] |= (1 << 15);
 
     // Power conservation: suppress if the payload is unchanged since last TX
     bool payloadChanged = (memcmp(tx_matrix, last_tx_matrix, sizeof(tx_matrix)) != 0) || settingsChanged;
@@ -800,6 +849,12 @@ void loop() {
       memcpy(last_tx_matrix, tx_matrix, sizeof(last_tx_matrix));
 
       settingsChanged = false; // reset settings chagned
+
+      // This was the registration/confirmation packet — go silent until a
+      // live config change (see applyNewConfiguration()) wakes us again.
+      if (!radioTransmissionEnabled()) {
+        radioSilent = true;
+      }
     }
 
     // Heartbeat: flash LED for the first LED_HEARTBEAT transmissions

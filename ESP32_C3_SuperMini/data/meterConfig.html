@@ -616,7 +616,7 @@
     // Registry mapping hidden-input id → onChange callback function.
     const ctoggleCallbacks = new Map();
 
-    function buildCtoggle(hiddenId, checked, onChange) {
+    function buildCtoggle(hiddenId, checked, onChange, description) {
       ctoggleCallbacks.set(hiddenId, onChange);
       return `<div class="ctoggle">
         <input type="hidden" id="${hiddenId}" value="${checked ? 1 : 0}">
@@ -626,7 +626,7 @@
                  onchange="ctoggleChange(this)">
           <span class="ctoggle-rail"><span class="ctoggle-knob"></span></span>
         </label>
-        <span class="ctoggle-desc">Suppress duplicate transmissions when display is unchanged</span>
+        <span class="ctoggle-desc">${description}</span>
       </div>`;
     }
 
@@ -642,8 +642,9 @@
       const name   = cfg.name  || '';
       const image  = cfg.image || '';
       const meterData = activeMeters.get(channel);
-      const fpsIdx    = meterData?.fpsIdx    ?? 2; // default index 2 = 3 Hz
-      const powerSave = meterData?.powerSave ?? 0; // default: off
+      const fpsIdx        = meterData?.fpsIdx        ?? 2; // default index 2 = 3 Hz
+      const powerSave     = meterData?.powerSave     ?? 0; // default: off
+      const radioTxEnabled = meterData?.radioTxEnabled ?? 1; // default: on (normal transmission)
       const isActive = (meterData !== undefined && meterData.seen < 5);
 
       const displayName = name || 'UNKNOWN';
@@ -704,7 +705,13 @@
           </div>
           <div class="field-row">
             <span class="field-label">Power Save</span>
-            ${buildCtoggle(`powerSave-${channel}`, !!powerSave, () => onFieldChange(channel))}
+            ${buildCtoggle(`powerSave-${channel}`, !!powerSave, () => onFieldChange(channel),
+              'Suppress duplicate transmissions when display is unchanged.')}
+          </div>
+          <div class="field-row">
+            <span class="field-label">Radio TX</span>
+            ${buildCtoggle(`radioTx-${channel}`, !!radioTxEnabled, () => onFieldChange(channel),
+              'Turn off radio transmission. Saves battery power when you are not using AirMeter.')}
           </div>
         </div>
         <div class="meter-block-footer">
@@ -822,15 +829,17 @@
       const statusEl = $(`status-${channel}`);
       const name     = $(`name-${channel}`).value.trim();
       const image    = $(`image-${channel}`).value;
-      const newChannel = parseInt($(`newChannel-${channel}`).value, 10);
-      const fpsIdx     = parseInt($(`fps-${channel}`).value, 10);
-      const powerSave  = parseInt($(`powerSave-${channel}`).value, 10);
-      const flagsByte  = powerSave & 0x01;
+      const newChannel     = parseInt($(`newChannel-${channel}`).value, 10);
+      const fpsIdx         = parseInt($(`fps-${channel}`).value, 10);
+      const powerSave      = parseInt($(`powerSave-${channel}`).value, 10);
+      const radioTxEnabled = parseInt($(`radioTx-${channel}`).value, 10);
+      const flagsByte      = (powerSave & 0x01) | ((radioTxEnabled & 0x01) << 1);
 
       const channelChanged = newChannel !== channel;
       const prevData       = activeMeters.get(channel);
-      const fpsChanged     = (prevData?.fpsIdx    ?? -1) !== fpsIdx;
-      const flagsChanged   = (prevData?.powerSave ?? -1) !== powerSave;
+      const fpsChanged     = (prevData?.fpsIdx        ?? -1) !== fpsIdx;
+      const flagsChanged   = (prevData?.powerSave      ?? -1) !== powerSave ||
+                              (prevData?.radioTxEnabled ?? -1) !== radioTxEnabled;
       const rfChanged      = channelChanged || fpsChanged || flagsChanged;
 
       btn.disabled         = true;
@@ -885,7 +894,7 @@
 
           if (res.httpStatus === 200 && res.body.status === 'success') {
             // ── SUCCESS ──────────────────────────────────────────────────────
-            const confirmed = res.body; // { channel, fpsIdx, powerSave }
+            const confirmed = res.body; // { channel, fpsIdx, powerSave, radioTxEnabled }
             hideSaveOverlay(channel);
             statusEl.className   = 'save-status saved';
             statusEl.textContent = '✓ Applied';
@@ -894,7 +903,9 @@
             const carried = activeMeters.get(channel) || {};
             activeMeters.set(confirmed.channel, {
               ...carried, fpsIdx: confirmed.fpsIdx,
-              powerSave: confirmed.powerSave, seen: 0
+              powerSave: confirmed.powerSave,
+              radioTxEnabled: confirmed.radioTxEnabled,
+              seen: 0
             });
             if (confirmed.channel !== channel) activeMeters.delete(channel);
 
