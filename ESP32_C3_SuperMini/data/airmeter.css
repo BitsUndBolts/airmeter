@@ -17,6 +17,10 @@
   --green-dim:   rgba(61, 220, 132, 0.10);
   --yellow:      #f1c40f;
   --red:         #ff5555;
+  --indigo:      #673ab7;
+  --purple:      #9c27b0;
+  --lavender:    #c792ea;
+  --brown:       #795548;
   --red-dim:     rgba(255, 85, 85, 0.10);
   --blue:        #4d9fff;
   --blue-dim:    rgba(77, 159, 255, 0.10);
@@ -302,6 +306,7 @@ body {
   width: 1.4em;
   height: 1.4em;
   border: 0.2em solid var(--border-bright);
+  border-top-color: var(--accent);
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
   vertical-align: middle;
