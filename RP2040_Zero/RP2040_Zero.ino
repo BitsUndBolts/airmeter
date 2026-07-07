@@ -80,6 +80,7 @@
 #include <EEPROM.h>
 #include <string.h>  // memcpy / memcmp, used by frame-coherency staging (SECTION 5b)
 #include "pico/stdlib.h"
+#include "pico/time.h"
 #include "hardware/sync.h"
 #include "hardware/structs/ioqspi.h"
 #include "hardware/structs/sio.h"
@@ -169,6 +170,11 @@ uint8_t CHANNEL = 0;
 // sampling is delayed to reach the centre of the active window (~2ms wide)
 // before reading SEG lines. This avoids sampling during signal edges.
 const unsigned int COM_SETTLE_US = 1000;
+
+// Pacing sleep for the main loop while actively sampling. ~8x oversampling
+// margin under the measured ~2ms COM window - throttles the whole loop
+// iteration rate (not just COM polling) instead of busy-spinning at full clock.
+const uint32_t ACTIVE_POLL_SLEEP_US = 250;
 
 // Buzzer latch hold duration in milliseconds.
 //
@@ -639,6 +645,10 @@ void loop() {
   static unsigned long lastTxTime = 0;
   unsigned long currentTime = millis();
 
+  if (!radioSilent) { // Put the RP2040 to sleep for ACTIVE_POLL_SLEEP_US
+    sleep_us(ACTIVE_POLL_SLEEP_US);
+  }
+
   // ---------------------------------------------------------------------------
   // PHASE 1: Sample LCD mux signals
   //
@@ -668,13 +678,14 @@ void loop() {
     // same window gets sampled many times while still HIGH, corrupting the
     // sweep-tracking state below with duplicate same-index captures.
     if (comNowHigh && !com_prev_high[c]) {
-      delayMicroseconds(COM_SETTLE_US);           // Wait for signal centre
+      sleep_us(COM_SETTLE_US);                    // Wait for signal centre
 
-      if (digitalRead(COM_PINS[c]) == HIGH) {     // Confirm still active
+      uint32_t pins = gpio_get_all();              // One atomic snapshot of all GPIOs
+
+      if ((pins >> COM_PINS[c]) & 0x1) {           // Confirm still active (same snapshot)
         uint16_t row_bits = 0;
         for (int s = 0; s < 15; s++) {
-          if (digitalRead(SEG_PINS[s]) == HIGH)
-            row_bits |= (1 << s);
+          row_bits |= ((pins >> SEG_PINS[s]) & 0x1) << s;
         }
 
         unsigned long captureTimeUs = micros();
@@ -766,6 +777,10 @@ void loop() {
   // the HC-12 reverse channel. Valid packets update CHANNEL and/or
   // frameRateIndex and persist both to EEPROM immediately.
   // ---------------------------------------------------------------------------
+  if (radioSilent && !Serial1.available()) {
+    __wfi();
+  }
+
   if (processIncomingESP32()) settingsChanged = true;
 
   // ---------------------------------------------------------------------------
