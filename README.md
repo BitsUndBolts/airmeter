@@ -24,6 +24,7 @@
 - [The Backstory](#the-backstory)
   - [1. The Probe & Segment Mapping](#1-the-probe--segment-mapping)
 - [System Architecture](#system-architecture)
+  - [1. Wiring](#1-wiring)
   - [2. The Custom PCB & Comparators](#2-the-custom-pcb--comparators)
   - [3. The Transmitter Node (RP2040 Zero)](#3-the-transmitter-node-rp2040-zero)
   - [4. Power Delivery](#4-power-delivery)
@@ -170,6 +171,36 @@ Once every segment was mapped, the rest of the project was "just" wiring: a comp
    └─────────────────┘       └────────────────────┘      └───────────────────┘
 
 ```
+
+### 1. Wiring
+
+<p align="center" style="margin: 20px">
+  <img src="Screens/Wiring.webp" width="800" alt="AirMeter wiring diagram - HC-12 modules to RP2040 and ESP32">
+</p>
+
+### Receiver Side - ESP32-C3 SuperMini
+
+Powered via USB.
+
+| HC-12 Pin | Connects To |
+|---|---|
+| VCC | 3.3V on SuperMini |
+| GND | G (GND) on SuperMini |
+| RXD | GPIO21 on SuperMini |
+| TXD | GPIO20 on SuperMini |
+
+### Sender Side - RP2040 / Custom PCB
+
+The RP2040 is soldered directly to the custom PCB - **double-check orientation before soldering**, it's easy to get backwards.
+
+| HC-12 Pin | Connects To |
+|---|---|
+| VCC | 3.3V (from boost converter) |
+| GND | GND (on boost converter) |
+| RXD | GP12 on RP2040 |
+| TXD | RX pad on custom PCB |
+
+> **Note:** The `SET` pin on both HC-12 modules is left unconnected (not used in this project).
 
 ### 2. The Custom PCB & Comparators
 
@@ -386,14 +417,14 @@ The live meter view ([`meter.html`](./ESP32_C3_SuperMini/data/meter.html)) ships
 | 3 | Capacitor | C16 | C1206 | 1 | 22µF |
 | 4 | Ferrite Bead | FB1 | L0805 | 1 | 100Ω @ 100MHz |
 | 5 | Capacitor | C1, C3, C13, C15 | C0603 | 4 | 2.2µF |
-| 6 | Resistor | R1 | R0603 | 1 | 5kΩ¹ |
-| 7 | Resistor | R2 | R0603 | 1 | 20kΩ¹ |
-| 8 | Resistor | R3 | R0603 | 1 | 50kΩ² |
-| 9 | Resistor | R4 | R0603 | 1 | 6.8kΩ² |
+| 6 | Resistor | R1 | R0603 | 1 | ~270kΩ¹ |
+| 7 | Resistor | R2 | R0603 | 1 | ~1MΩ¹ |
+| 8 | Resistor | R3 | R0603 | 1 | ~1MΩ² |
+| 9 | Resistor | R4 | R0603 | 1 | ~180kΩ² |
 | 10 | Comparator | U1, U2, U3, U4, U5 | TSSOP-14 | 5 | LM339LVPWR |
 
-¹ Voltage Divider (source 3.3V) aim for ~2.5V or more, but below 2.8V<br />
-² Voltage Divider (source 3.3V) aim for ~0.5V or less, but above 0.2V
+¹ Voltage Divider (source 3.3V) aim for ~2.3V - 2.7V<br />
+² Voltage Divider (source 3.3V) aim for ~0.3V - 0.7V
 
 ## Repository Layout
 
