@@ -213,6 +213,9 @@ Reading the multiplexed lines directly from a microcontroller GPIO doesn't work 
 
 The fix is a custom PCB built around **LM339LVPWR comparators**, each referenced to fixed voltage thresholds (~0.5V and ~2.5V) so that the messy analog waveform on each trace gets cleanly digitized into a proper HIGH/LOW signal before it ever reaches a microcontroller pin.
 
+🛠️ **Custom PCB:** Order directly from the [PCBWay Shared Project Page](https://www.pcbway.com/project/shareproject/AirMeter_Wireless_Multimeter_1e73f069.html).
+
+
 ### 3. The Transmitter Node (RP2040 Zero)
 
 [`RP2040_Zero.ino`](./RP2040_Zero/RP2040_Zero.ino) sits right on top of the comparator PCB and does the actual sampling and framing:
@@ -460,7 +463,7 @@ AirMeter/
 
 **Safety note:** disconnect the test probes from any circuit and remove the battery before opening the meter or soldering anything inside it.
 
-1. **Get the comparator PCB built.** Order the board and SMD parts per the BOM, then solder the five LM339LVPWRs and supporting passives.
+1. **Get the comparator PCB built.** Order the board and SMD parts per the BOM, then solder the five LM339LVPWRs and supporting passives. Easy order through [PCBWay Shared Project Page](https://www.pcbway.com/project/shareproject/AirMeter_Wireless_Multimeter_1e73f069.html).
 2. **Map your glass (skip this if you're using a stock AN870).** Use the probing sketch in [The Probe & Segment Mapping](#1-the-probe--segment-mapping) to confirm your unit's COM/SEG layout matches the [LCD Segment Map](#lcd-segment-map) - cheap multimeters sometimes share a glass design across firmware variants, but it's worth verifying before you commit to wiring.
 3. **Wire the PCB to the RP2040 Zero**, then flash [`RP2040_Zero.ino`](./RP2040_Zero/RP2040_Zero.ino).
 4. **Pre-configure the HC-12 pair** using [`Arduino_UNO_HT-12.ino`](./Arduino_UNO_HT-12/Arduino_UNO_HT-12.ino) so both radios agree on baud rate, channel, power, and mode (see [HC-12 Radio Configuration](#hc-12-radio-configuration)) - do this before final assembly, since the modules are easiest to reach on the bench.
