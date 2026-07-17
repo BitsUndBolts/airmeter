@@ -110,7 +110,7 @@
 
     /* ── COMPAT NOTICE ── */
     .compat-notice {
-      display: flex;
+      display: none;
       align-items: flex-start;
       gap: 0.6em;
       padding: 0.75em 0.9em;
@@ -363,7 +363,7 @@
           <line x1="12" y1="8" x2="12" y2="12"/>
           <line x1="12" y1="16" x2="12.01" y2="16"/>
         </svg>
-        <p>Requires <strong>Chrome, Edge</strong> or another Chromium browser. Firefox and Safari are not supported.</p>
+        <p>Requires <strong>Chrome, Edge</strong> or another Chromium browser. <br />Safari is unsupported. Firefox requires version 151+.</p>
       </div>
 
       <!-- Steps -->
@@ -584,6 +584,10 @@
       navigator.serial.addEventListener('disconnect', refreshConnectionIndicator);
       refreshConnectionIndicator();
       setInterval(refreshConnectionIndicator, 1000); // catches permission granted while still plugged in
+    }
+
+    if (!("serial" in navigator)) {
+        document.querySelector(".compat-notice").style.display = "flex";
     }
   </script>
 
