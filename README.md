@@ -42,6 +42,7 @@
 - [Getting Started](#getting-started)
 - [Roadmap / Ideas](#roadmap--ideas)
 - [Support This Project](#support-this-project)
+- [YouTube Video](#youtube-video)
 - [License](#license)
 
 ---
@@ -481,6 +482,14 @@ If AirMeter saved you a weekend of reverse-engineering (or you just want to see 
 - **YouTube** - retro computing and hardware teardown videos: [youtube.com/@bitsundbolts](https://www.youtube.com/@bitsundbolts)
 - **Buy Me A Coffee** - one-off or ongoing support: [buymeacoffee.com/bitsundbolts](https://buymeacoffee.com/bitsundbolts)
 - **Patreon** - ongoing support: [patreon.com/BitsUndBolts](https://www.patreon.com/BitsUndBolts)
+
+## YouTube Video
+
+<p align="center">
+  <a href="https://youtu.be/6CL78yID9l0">
+    <img src="https://i3.ytimg.com/vi/6CL78yID9l0/maxresdefault.jpg" alt="Watch the video" width="800">
+  </a>
+</p>
 
 ## License
 
